@@ -1,0 +1,123 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Callable
+
+
+ExtractCallback = Callable[[Any], Any]
+FollowCallback = Callable[[Any], Any]
+ErrorCallback = Callable[[Exception, "CrawlRequest"], None]
+
+
+@dataclass(slots=True)
+class RequestOptions:
+    method: str = "GET"
+    headers: dict[str, str] | None = None
+    cookies: dict[str, str] | None = None
+    params: dict[str, Any] | None = None
+    data: Any = None
+    json: Any = None
+    files: Any = None
+    auth: tuple[str, str] | None = None
+    timeout: float | tuple[float, float] | None = None
+    follow_redirects: bool | None = None
+    max_redirects: int | None = None
+    proxy: str | None = None
+    proxies: dict[str, str] | None = None
+    proxy_auth: tuple[str, str] | None = None
+    verify: bool | str | None = None
+    impersonate: str | list[str] | None = None
+    ja3: str | None = None
+    akamai: str | None = None
+    extra_fp: dict[str, Any] | None = None
+    default_headers: bool | None = None
+    http_version: Any = None
+    interface: str | None = None
+    cert: Any = None
+    referer: str | None = None
+    extra_kwargs: dict[str, Any] = field(default_factory=dict)
+
+    def to_request_kwargs(self) -> dict[str, Any]:
+        values = {
+            "headers": self.headers,
+            "cookies": self.cookies,
+            "params": self.params,
+            "data": self.data,
+            "json": self.json,
+            "files": self.files,
+            "auth": self.auth,
+            "timeout": self.timeout,
+            "follow_redirects": self.follow_redirects,
+            "allow_redirects": self.follow_redirects,
+            "max_redirects": self.max_redirects,
+            "proxy": self.proxy,
+            "proxies": self.proxies,
+            "proxy_auth": self.proxy_auth,
+            "verify": self.verify,
+            "impersonate": self.impersonate,
+            "ja3": self.ja3,
+            "akamai": self.akamai,
+            "extra_fp": self.extra_fp,
+            "default_headers": self.default_headers,
+            "http_version": self.http_version,
+            "interface": self.interface,
+            "cert": self.cert,
+            "referer": self.referer,
+        }
+        return {
+            key: value
+            for key, value in {**values, **self.extra_kwargs}.items()
+            if value is not None
+        }
+
+
+@dataclass(slots=True)
+class CrawlRequest:
+    url: str
+    method: str = "GET"
+    options: RequestOptions = field(default_factory=RequestOptions)
+    depth: int = 0
+    parent_url: str | None = None
+    meta: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class FollowRule:
+    css: str | None = None
+    xpath: str | None = None
+    attr: str = "href"
+    include: str | None = None
+    exclude: str | None = None
+    same_domain: bool = False
+    allowed_domains: set[str] | None = None
+    max_depth: int | None = None
+    predicate: Callable[[str, Any], bool] | None = None
+
+
+@dataclass(slots=True)
+class SmartSelectorRecord:
+    key: str
+    prompt: str
+    selectors: list[str] = field(default_factory=list)
+    xpath_selectors: list[str] = field(default_factory=list)
+    hints: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class CrawlStats:
+    queued: int = 0
+    fetched: int = 0
+    extracted_items: int = 0
+    followed_links: int = 0
+    skipped_duplicates: int = 0
+    skipped_rules: int = 0
+    errors: int = 0
+
+
+@dataclass(slots=True)
+class CrawlResult:
+    items: list[Any] = field(default_factory=list)
+    pages: list[Any] = field(default_factory=list)
+    errors: list[dict[str, Any]] = field(default_factory=list)
+    stats: CrawlStats = field(default_factory=CrawlStats)
+    visited: set[str] = field(default_factory=set)

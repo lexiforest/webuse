@@ -1,0 +1,257 @@
+# GetKit
+
+GetKit is a small scraping toolkit built around `curl_cffi`.
+
+It currently includes:
+- sync and async HTTP helpers
+- sync and async clients
+- response parsing with CSS/XPath helpers
+- prompt-based smart selectors with local persistence
+- queue-driven crawling from seed URLs
+- sync and async websocket wrappers
+- a CLI for fetch and crawl workflows
+
+## Install
+
+Install from PyPI:
+
+```bash
+pip install getkit
+```
+
+Install from source:
+
+```bash
+pip install .
+```
+
+For development:
+
+```bash
+python -m pip install -e .[dev]
+```
+
+## Usage
+
+### Quick HTTP request
+
+```python
+import getkit
+
+response = getkit.get("https://example.com", impersonate="chrome")
+print(response.status_code)
+print(response.text)
+```
+
+### Parse HTML
+
+```python
+import getkit
+
+response = getkit.get("https://example.com")
+
+title = response.css_first("title")
+print(title.text() if title else None)
+
+for link in response.css("a"):
+    print(link.attr("href"), link.text())
+```
+
+XPath is also available:
+
+```python
+product = response.xpath_first("//article[@class='product']")
+```
+
+### Smart selectors
+
+Smart selectors store prompt-based matches in `.getkit/selectors.json`.
+
+```python
+import getkit
+
+response = getkit.get("https://example.com/products")
+match = response.smart("primary product link")
+
+print(match.text())
+print(match.attr("href"))
+```
+
+### Persistent clients
+
+Use `Client` or `AsyncClient` when you want connection reuse and shared defaults.
+
+```python
+import getkit
+
+with getkit.Client(impersonate="chrome", timeout=20) as client:
+    page1 = client.get("https://example.com")
+    page2 = client.get("https://example.com/about")
+```
+
+Async:
+
+```python
+import asyncio
+import getkit
+
+
+async def main():
+    async with getkit.AsyncClient(impersonate="chrome") as client:
+        response = await client.get("https://example.com")
+        print(response.status_code)
+
+
+asyncio.run(main())
+```
+
+### Crawl from seed URLs
+
+`getkit.crawl` starts from one or more seed URLs, extracts new URLs, filters them, and pushes them through an internal queue.
+
+```python
+import getkit
+
+result = getkit.crawl(
+    ["https://example.com"],
+    follow=getkit.FollowRule(css="a", same_domain=True),
+    extract={
+        "title": "h1",
+        "next_link": {"css": "a.next", "attr": "href"},
+    },
+    max_depth=1,
+    concurrency=5,
+)
+
+print(result.items)
+print(result.stats)
+```
+
+Async crawling:
+
+```python
+import asyncio
+import getkit
+
+
+async def main():
+    result = await getkit.acrawl(
+        ["https://example.com"],
+        follow=getkit.FollowRule(css="a", same_domain=True),
+        extract={"title": "h1"},
+        max_depth=2,
+        concurrency=10,
+    )
+    print(result.items)
+
+
+asyncio.run(main())
+```
+
+### WebSockets
+
+Sync:
+
+```python
+import getkit
+
+with getkit.ws_connect("wss://echo.websocket.events") as ws:
+    ws.send_text("hello")
+    print(ws.recv_text())
+```
+
+Async:
+
+```python
+import asyncio
+import getkit
+
+
+async def main():
+    ws = await getkit.aws_connect("wss://echo.websocket.events")
+    await ws.send_json({"hello": "world"})
+    print(await ws.recv_text())
+    await ws.close()
+
+
+asyncio.run(main())
+```
+
+## CLI
+
+Installing from PyPI also installs the `getkit` command.
+
+### Fetch a page
+
+```bash
+getkit fetch https://example.com
+```
+
+Extract with CSS:
+
+```bash
+getkit fetch https://example.com --css "a"
+```
+
+Extract with XPath:
+
+```bash
+getkit fetch https://example.com --xpath "//title"
+```
+
+Use a smart selector:
+
+```bash
+getkit fetch https://example.com/products --smart "primary product link"
+```
+
+Print response metadata:
+
+```bash
+getkit fetch https://example.com --meta
+```
+
+### Crawl from the terminal
+
+```bash
+getkit crawl https://example.com \
+  --follow-css "a" \
+  --same-domain \
+  --extract-css "title=h1" \
+  --max-depth 1
+```
+
+Run the async crawl path:
+
+```bash
+getkit crawl https://example.com \
+  --follow-css "a" \
+  --same-domain \
+  --extract-css "title=h1" \
+  --async
+```
+
+### Config file
+
+You can move fetch or crawl settings into a YAML or TOML config file.
+
+Example YAML:
+
+```yaml
+crawl:
+  seeds:
+    - https://example.com
+  follow_css:
+    - a
+  same_domain: true
+  extract:
+    title: h1
+  max_depth: 1
+  concurrency: 5
+```
+
+Run it with:
+
+```bash
+getkit crawl --config getkit.yaml
+```
