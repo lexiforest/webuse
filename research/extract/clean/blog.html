@@ -1,0 +1,92 @@
+<html><head><meta><title>GitHub Actions 的简单使用和调试 - Yifei's Notes</title><meta name="viewport" content="initial-scale=1.0, width=device-width"><meta name="next-head-count" content="3"><link href="/_next/static/css/76724d728a9e09e2.css"></head><body><div class="mx-4"><h1 class="my-6 font-mono text-2xl"><a class="cursor-pointer" href="/"><span class="text-green-400">$</span> <span class="text-blue-400">ls</span> <span class="text-[#e5c07b]">~yifei/notes/</span></a></h1><div class="my-4 border -mx-2 p-4 lg:p-8 shadow"><h1 class="text-2xl my-4 font-semibold">GitHub Actions 的简单使用和调试</h1><div class="text-gray-400 my-4 border-y py-2"><p class="mr-4">Posted on:<time class="mx-2">2023-08-19 12:12</time></p><p>Last modified:<time class="mx-2">2023-03-14 14:35</time></p></div><div class="break-words"><p class="my-4 font-light">GitHub Actions 使用 yaml 配置，必须放置在 <code class="px-1 bg-gray-100 border-2 rounded">.github/workflows</code> 目录。</p><pre class="text-sm bg-gray-100 my-4 p-2 overflow-x-auto"><code><span class="hljs-comment"># 名字</span>
+<span class="hljs-attr">name:</span> <span class="hljs-string">hello-world-example</span>
+<span class="hljs-comment"># 环境变量</span>
+<span class="hljs-attr">env:</span>
+  <span class="hljs-attr">FOO:</span> <span class="hljs-string">bar</span>
+<span class="hljs-comment"># 触发条件</span>
+<span class="hljs-attr">on:</span>
+  <span class="hljs-comment"># 最常用的是 push 条件，如果留空，表示每次 push 都执行。</span>
+  <span class="hljs-comment"># 任意满足这里列出的一个条件即会匹配。也就是 master 或者 v tag 都会执行。</span>
+  <span class="hljs-attr">push:</span>
+    <span class="hljs-comment"># 表示在这些分支推送的时候执行</span>
+    <span class="hljs-attr">branches:</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-string">master</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-string">feature/*</span>
+    <span class="hljs-comment"># 在这些 tag 推送的时候执行</span>
+    <span class="hljs-attr">tags:</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-string">v*</span>
+  <span class="hljs-comment"># 在有人提交 PR 时运行</span>
+  <span class="hljs-attr">pull_request:</span>
+    <span class="hljs-attr">branches:</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-string">master</span>
+  <span class="hljs-comment"># 定时运行</span>
+  <span class="hljs-attr">schedule:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">cron:</span> <span class="hljs-string">'*/15 * * * *'</span>
+<span class="hljs-comment"># 要运行的任务</span>
+<span class="hljs-attr">jobs:</span>
+  <span class="hljs-comment"># 任务名字</span>
+  <span class="hljs-attr">say-hello:</span>
+    <span class="hljs-comment"># 也可以在这里设置环境变量</span>
+    <span class="hljs-attr">env:</span>
+      <span class="hljs-attr">FOO:</span> <span class="hljs-string">bar</span>
+    <span class="hljs-comment"># 运行环境</span>
+    <span class="hljs-attr">runs-on:</span> <span class="hljs-string">ubuntu-latest</span>
+    <span class="hljs-attr">steps:</span>
+      <span class="hljs-comment"># 可以使用一些现成的操作，比如 checkout 当前仓库</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">uses:</span> <span class="hljs-string">actions/checkout@v2</span>
+      <span class="hljs-comment"># 安装 node</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">uses:</span> <span class="hljs-string">actions/setup-node@v1</span>
+        <span class="hljs-comment"># actions 的参数</span>
+        <span class="hljs-attr">with:</span>
+          <span class="hljs-attr">node-version:</span> <span class="hljs-string">'15.8.0'</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Say</span> <span class="hljs-string">Hello</span>
+        <span class="hljs-attr">env:</span>
+          <span class="hljs-attr">FOO:</span> <span class="hljs-string">bar</span>
+        <span class="hljs-attr">run:</span> <span class="hljs-string">echo</span> <span class="hljs-string">"Hello $FOO"</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Do</span> <span class="hljs-string">stuff</span>
+        <span class="hljs-attr">run:</span> <span class="hljs-string">|
+          echo "Step 1..."
+          echo "Step 2..."
+          echo "Step 3..."
+</span>      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Say</span> <span class="hljs-string">Goodbye</span>
+        <span class="hljs-attr">run:</span> <span class="hljs-string">echo</span> <span class="hljs-string">"Goodbye!"</span>
+  <span class="hljs-comment"># 任务之间默认是并发执行的</span>
+  <span class="hljs-attr">another-job:</span>
+    <span class="hljs-comment"># 依赖另一个 job</span>
+    <span class="hljs-attr">needs:</span> <span class="hljs-string">say-hello</span>
+    <span class="hljs-attr">strategy:</span>
+      <span class="hljs-comment"># CI 的常见应用是在不同的环境下测试，使用 matrix 来定义一组环境</span>
+      <span class="hljs-attr">matrix:</span>
+        <span class="hljs-attr">os:</span> [<span class="hljs-string">ubuntu-16.04</span>, <span class="hljs-string">ubuntu-18.04</span>]
+        <span class="hljs-attr">node:</span> [<span class="hljs-number">16</span>, <span class="hljs-number">18</span>, <span class="hljs-number">20</span>]
+        <span class="hljs-comment"># 排除掉某个环境</span>
+        <span class="hljs-attr">exclude:</span>
+          <span class="hljs-bullet">-</span> <span class="hljs-attr">os:</span> <span class="hljs-string">ubuntu-16.04</span>
+            <span class="hljs-attr">node:</span> <span class="hljs-number">16</span>
+        <span class="hljs-comment"># 额外包含某个环境</span>
+        <span class="hljs-attr">include:</span>
+          <span class="hljs-bullet">-</span> <span class="hljs-attr">os:</span> <span class="hljs-string">macos-latest</span>
+            <span class="hljs-attr">node:</span> <span class="hljs-number">16</span>
+    <span class="hljs-comment"># 使用变量</span>
+    <span class="hljs-attr">runs-on:</span> <span class="hljs-string">${{matrix.os}}</span>
+    <span class="hljs-attr">steps:</span>
+      <span class="hljs-comment"># 读取密钥</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">use</span> <span class="hljs-string">secrets</span>
+        <span class="hljs-attr">run:</span> <span class="hljs-string">echo</span> <span class="hljs-string">${{secrets.ACCESS_KEY}}</span>
+      <span class="hljs-comment"># 条件执行</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Run</span> <span class="hljs-string">only</span> <span class="hljs-string">for</span> <span class="hljs-string">pulls</span>
+        <span class="hljs-attr">if:</span> <span class="hljs-string">${{</span> <span class="hljs-string">github.event</span> <span class="hljs-string">==</span> <span class="hljs-string">'pull'</span><span class="hljs-string">}}</span>
+        <span class="hljs-attr">run:</span> <span class="hljs-string">echo</span> <span class="hljs-string">pulling</span></code></pre><h2 class="my-2 font-semibold text-xl">常见问题</h2><h3 class="my-2 font-semibold">如何调试？</h3><p class="my-4 font-light">可以使用 tmate ssh 进机器，查看情况</p><pre class="text-sm bg-gray-100 my-4 p-2 overflow-x-auto"><code><span class="hljs-attribute">name</span><span class="hljs-punctuation">:</span> <span class="hljs-string">CI</span>
+<span class="hljs-attribute">on</span><span class="hljs-punctuation">:</span> <span class="hljs-string">[push]</span>
+<span class="hljs-attribute">jobs</span><span class="hljs-punctuation">:</span>
+  <span class="hljs-attribute">build</span><span class="hljs-punctuation">:</span>
+    <span class="hljs-attribute">runs-on</span><span class="hljs-punctuation">:</span> <span class="hljs-string">ubuntu-latest</span>
+    <span class="hljs-attribute">steps</span><span class="hljs-punctuation">:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">uses: actions/checkout@v3</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">name: Setup tmate session</span>
+      <span class="hljs-attribute">uses</span><span class="hljs-punctuation">:</span> <span class="hljs-string">mxschmitt/action-tmate@v3</span></code></pre><h3 class="my-2 font-semibold">Windows 上遇到 OOM 问题</h3><p class="my-4 font-light">调大虚拟内存（PageFile）就行了</p><pre class="text-sm bg-gray-100 my-4 p-2 overflow-x-auto"><code><span class="hljs-bullet">-</span> <span class="hljs-string">name: configure Pagefile</span>
+  <span class="hljs-attribute">uses</span><span class="hljs-punctuation">:</span> <span class="hljs-string">al-cheb/configure-pagefile-action@v1.2</span>
+  <span class="hljs-attribute">with</span><span class="hljs-punctuation">:</span>
+      <span class="hljs-attribute">minimum-size</span><span class="hljs-punctuation">:</span> <span class="hljs-string">16GB</span>
+      <span class="hljs-attribute">maximum-size</span><span class="hljs-punctuation">:</span> <span class="hljs-string">16GB</span>
+      <span class="hljs-attribute">disk-root</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"C:"</span></code></pre><h2 class="my-2 font-semibold text-xl">References</h2><ol class="my-4 ml-4 font-light list-decimal"><li class=""><a class="underline" href="https://www.actionsbyexample.com">https://www.actionsbyexample.com</a></li><li class=""><a class="underline" href="https://github.com/marketplace/actions/debugging-with-tmate">https://github.com/marketplace/actions/debugging-with-tmate</a></li><li class=""><a class="underline" href="https://github.com/actions/runner-images/issues/2642">https://github.com/actions/runner-images/issues/2642</a></li></ol></div><span><img alt="WeChat Qr Code"></span></div><div class="py-4 px-4 -mx-4 bg-gray-200"><p>© 2016-2022 Yifei Kong. Powered by <a class="underline" href="https://github.com/yifeikong/ynotes">ynotes</a></p><p class="text-gray-500 my-2">All contents are under the <a class="underline" href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC-BY-NC-SA</a> license, if not otherwise specified. </p><p class="text-gray-500 my-2">Opinions expressed here are solely my own and do not express the views or opinions of my employer.</p><p class="text-gray-500 my-2">友情链接: <a class="underline" href="https://mysqljiaocheng.com/">MySQL 教程站</a></p></div></div></body></html>

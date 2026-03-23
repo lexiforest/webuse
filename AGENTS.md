@@ -32,6 +32,10 @@ Out of scope for now:
 - `src/getkit/models.py`: shared dataclasses and public models
 - `tests/`: unit tests
 
+## HTTP Client
+
+Use `curl_cffi` for all HTTP requests in this project, including research scripts. Do not use `httpx` or `requests` unless explicitly requested.
+
 ## Design Rules
 
 - Keep the first-look API simple. Prefer top-level helpers and small examples.
@@ -85,11 +89,21 @@ Defaults:
 - JSONL to stdout
 - config-file support should stay aligned with Python API naming
 
+## Dependency Management
+
+Use `uv` for all dependency management. Do not use `pip install` directly.
+
+- Install project deps: `uv sync`
+- Add a dependency: `uv add <package>`
+- Add a dev dependency: `uv add --dev <package>`
+- Run a script: `uv run python3 <script.py>`
+- Run a tool: `uv run pytest`
+
 ## Testing and Verification
 
 Preferred checks:
-- `python3 -m compileall src tests`
-- `python3 -m pytest -q`
+- `uv run python3 -m compileall src tests`
+- `uv run pytest -q`
 
 Some tests depend on optional runtime packages such as:
 - `pytest`

@@ -1,0 +1,1344 @@
+<html>
+  <head>
+    <meta>
+    <title>Chrome’s WebMCP Early Preview: the end of “AI agents clicking buttons” - DEV Community</title>
+    <link href="/reactions?article_id=3245166">
+    <link href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e">
+    <meta name="description" content="If you’ve ever watched an AI agent “use” a website by guessing which button is “Checkout” and where... Tagged with webdev, ai, news, discuss.">
+    <meta name="keywords" content="webdev, ai, news, discuss, software, coding, development, engineering, inclusive, community">
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e">
+    <meta property="og:title" content="Chrome’s WebMCP Early Preview: the end of “AI agents clicking buttons”">
+    <meta property="og:description" content="If you’ve ever watched an AI agent “use” a website by guessing which button is “Checkout” and where...">
+    <meta property="og:site_name" content="DEV Community">
+    <meta name="twitter:site" content="@thepracticaldev">
+    <meta name="twitter:creator" content="@axrisi">
+    <meta name="twitter:title" content="Chrome’s WebMCP Early Preview: the end of “AI agents clicking buttons”">
+    <meta name="twitter:description" content="If you’ve ever watched an AI agent “use” a website by guessing which button is “Checkout” and where...">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:widgets:new-embed-design" content="on">
+    <meta name="robots" content="max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+      <meta property="og:image" content="https://media2.dev.to/dynamic/image/width=1000,height=500,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2Flp3qyal1tj9uzbligig9.png">
+      <meta name="twitter:image:src" content="https://media2.dev.to/dynamic/image/width=1000,height=500,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2Flp3qyal1tj9uzbligig9.png">
+      <meta name="last-updated" content="2026-03-23 05:00:26 UTC">
+      <meta name="user-signed-in" content="false">
+      <meta name="head-cached-at" content="1774242026">
+      <meta name="environment" content="production">
+        <meta name="search-script" content="https://assets.dev.to/assets/Search-5278b3c105ad3af5b065dfd39f8a2a789042539f58a7c1cba3f2e44c0ac7a92b.js">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+      <link type="image/x-icon" href="https://media2.dev.to/dynamic/image/width=32,height=,fit=scale-down,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F8j7kvp660rqzt99zui8e.png">
+      <link href="https://media2.dev.to/dynamic/image/width=180,height=,fit=scale-down,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F8j7kvp660rqzt99zui8e.png">
+      <link href="https://media2.dev.to/dynamic/image/width=152,height=,fit=scale-down,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F8j7kvp660rqzt99zui8e.png">
+      <link href="https://media2.dev.to/dynamic/image/width=180,height=,fit=scale-down,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F8j7kvp660rqzt99zui8e.png">
+      <link href="https://media2.dev.to/dynamic/image/width=167,height=,fit=scale-down,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F8j7kvp660rqzt99zui8e.png">
+      <link href="https://media2.dev.to/dynamic/image/width=192,height=,fit=scale-down,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F8j7kvp660rqzt99zui8e.png">
+      <link href="https://media2.dev.to/dynamic/image/width=128,height=,fit=scale-down,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F8j7kvp660rqzt99zui8e.png">
+      <meta name="apple-mobile-web-app-title" content="dev.to">
+      <meta name="application-name" content="dev.to">
+      <meta name="theme-color" content="#ffffff">
+      <meta name="theme-color" content="#000000">
+      <link href="https://dev.to/open-search.xml" type="application/opensearchdescription+xml">
+      <meta property="forem:name" content="DEV Community">
+      <meta property="forem:logo" content="https://media2.dev.to/dynamic/image/width=512,height=,fit=scale-down,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F8j7kvp660rqzt99zui8e.png">
+      <meta property="forem:domain" content="dev.to">
+  
+<script type="application/ld+json">{"@context":"http://schema.org","@type":"Article","mainEntityOfPage":{"@type":"WebPage","@id":"https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e"},"url":"https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e","image":["https://media2.dev.to/dynamic/image/width=1080,height=1080,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2Flp3qyal1tj9uzbligig9.png","https://media2.dev.to/dynamic/image/width=1280,height=720,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2Flp3qyal1tj9uzbligig9.png","https://media2.dev.to/dynamic/image/width=1600,height=900,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2Flp3qyal1tj9uzbligig9.png"],"publisher":{"@context":"http://schema.org","@type":"Organization","name":"DEV Community","logo":{"@context":"http://schema.org","@type":"ImageObject","url":"https://media2.dev.to/dynamic/image/width=192,height=,fit=scale-down,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F8j7kvp660rqzt99zui8e.png","width":"192","height":"192"}},"headline":"Chrome’s WebMCP Early Preview: the end of “AI agents clicking buttons”","author":{"@context":"http://schema.org","@type":"Person","url":"https://dev.to/axrisi","name":"Nikoloz Turazashvili (@axrisi)"},"datePublished":"2026-02-10T03:41:42Z","dateModified":"2026-02-11T02:33:33Z","mainEntity":{"@type":"DiscussionForumPosting","@id":"#article-discussion-3245166","headline":"Chrome’s WebMCP Early Preview: the end of “AI agents clicking buttons”","text":"\u003cp\u003eIf you’ve ever watched an AI agent “use” a website by guessing which button is “Checkout” and where the “Passenger Name” goes… you already know the core problem:\u003c/p\u003e\n\n\u003cp\u003e\u003cstrong\u003ethe web UI is for humans, but agents need structure.\u003c/strong\u003e\u003c/p\u003e\n\n\u003cp\u003eThat’s exactly what \u003cstrong\u003e\u003ca href=\"https://github.com/webmachinelearning/webmcp/blob/main/README.md\" target=\"_blank\" rel=\"noopener noreferrer\"\u003eWebMCP\u003c/a\u003e\u003c/strong\u003e is trying to fix.\u003c/p\u003e\n\n\u003cp\u003eWebMCP is a proposed web standard that lets a website expose \u003cem\u003estructured tools\u003c/em\u003e directly to in-browser AI agents—so agents can call \u003cstrong\u003ereal functions\u003c/strong\u003e (with schemas) instead of screen-scraping and hoping the DOM didn’t change.\u003c/p\u003e\n\n\u003cp\u003eThink of it as “MCP, but built into the browser tab.”\u003c/p\u003e\n\n\n\u003chr\u003e\n\n\u003ch2\u003e\n  \u003ca name=\"the-big-idea-publish-tools-not-pixels\" href=\"#the-big-idea-publish-tools-not-pixels\"\u003e\n  \u003c/a\u003e\n  The big idea: publish tools, not pixels\n\u003c/h2\u003e\n\n\u003cp\u003eWebMCP’s promise is simple:\u003c/p\u003e\n\n\u003cp\u003eInstead of an agent guessing what a button does, your site explicitly publishes a \u003cstrong\u003econtract\u003c/strong\u003e:\u003c/p\u003e\n\n\u003cul\u003e\n\u003cli\u003e\n\u003cstrong\u003eDiscovery:\u003c/strong\u003e what tools exist on this page (\u003ccode\u003echeckout\u003c/code\u003e, \u003ccode\u003efilter_results\u003c/code\u003e, etc.)\u003c/li\u003e\n\u003cli\u003e\n\u003cstrong\u003e\u003ca href=\"https://json-schema.org/understanding-json-schema/reference\" target=\"_blank\" rel=\"noopener noreferrer\"\u003eJSON Schemas\u003c/a\u003e:\u003c/strong\u003e exactly what inputs/outputs look like (to reduce hallucinations)\u003c/li\u003e\n\u003cli\u003e\n\u003cstrong\u003eState:\u003c/strong\u003e shared understanding of what’s available \u003cem\u003eright now\u003c/em\u003e on the page\u003c/li\u003e\n\u003c/ul\u003e\n\n\u003cp\u003eThat’s the difference between:\u003c/p\u003e\n\n\u003cul\u003e\n\u003cli\u003e“Click around until something works”\u003c/li\u003e\n\u003cli\u003eand “Call \u003ccode\u003ebook_flight({ origin, destination, outboundDate… })\u003c/code\u003e”\u003c/li\u003e\n\u003c/ul\u003e\n\n\u003cp\u003eThe spec even highlights scenarios like flight booking, complex forms (medical/legal), and hidden “run diagnostics” flows.\u003c/p\u003e\n\n\n\u003chr\u003e\n\n\u003ch2\u003e\n  \u003ca name=\"why-this-matters-even-if-you-dont-care-about-agents\" href=\"#why-this-matters-even-if-you-dont-care-about-agents\"\u003e\n  \u003c/a\u003e\n  Why this matters (even if you don’t care about agents)\n\u003c/h2\u003e\n\n\u003cp\u003eBecause agents are only going to become more common, and today’s integration methods are… messy:\u003c/p\u003e\n\n\u003cul\u003e\n\u003cli\u003ebrittle UI automation\u003c/li\u003e\n\u003cli\u003eDOM scraping\u003c/li\u003e\n\u003cli\u003eweird accessibility hacks\u003c/li\u003e\n\u003cli\u003epage updates breaking flows every week\u003c/li\u003e\n\u003c/ul\u003e\n\n\u003cp\u003eWebMCP is basically saying:\u003c/p\u003e\n\n\u003cblockquote\u003e\n\u003cp\u003e“If agents are going to operate inside browsers, the browser should provide the handshake.”\u003c/p\u003e\n\u003c/blockquote\u003e\n\n\u003cp\u003eAnd from a product perspective, it’s also a shift in control: \u003cstrong\u003ethe site defines what actions are allowed\u003c/strong\u003e and how data should be passed.\u003c/p\u003e\n\n\n\u003chr\u003e\n\n\u003ch2\u003e\n  \u003ca name=\"how-to-try-webmcp-in-5-minutes\" href=\"#how-to-try-webmcp-in-5-minutes\"\u003e\n  \u003c/a\u003e\n  How to try WebMCP in ~5 minutes\n\u003c/h2\u003e\n\n\u003cp\u003eWebMCP is currently an early preview behind a flag in \u003cstrong\u003eChrome 146\u003c/strong\u003e.\u003cbr\u003e\nCurrently, in \u003ca href=\"https://www.google.com/chrome/canary/\" target=\"_blank\" rel=\"noopener noreferrer\"\u003ethe Canary Channel\u003c/a\u003e.\u003c/p\u003e\n\n\u003ch3\u003e\n  \u003ca name=\"1-enable-the-flag\" href=\"#1-enable-the-flag\"\u003e\n  \u003c/a\u003e\n  1) Enable the flag\n\u003c/h3\u003e\n\n\u003cp\u003eGo to \u003ccode\u003echrome://flags\u003c/code\u003e, search for \u003cstrong\u003eWebMCP for testing\u003c/strong\u003e, enable it, relaunch Chrome.\u003c/p\u003e\n\n\u003cp\u003e(If you’ve never used flags before: \u003ca href=\"https://developer.chrome.com/docs/web-platform/chrome-flags\" target=\"_blank\" rel=\"noopener noreferrer\"\u003eChrome flags primer\u003c/a\u003e)\u003c/p\u003e\n\n\u003ch3\u003e\n  \u003ca name=\"2-install-the-inspector-extension\" href=\"#2-install-the-inspector-extension\"\u003e\n  \u003c/a\u003e\n  2) Install the inspector extension\n\u003c/h3\u003e\n\n\u003cp\u003eThere’s a \u003cstrong\u003e\u003ca href=\"https://chromewebstore.google.com/detail/model-context-tool-inspec/gbpdfapgefenggkahomfgkhfehlcenpd\" target=\"_blank\" rel=\"noopener noreferrer\"\u003eModel Context Tool Inspector Extension\u003c/a\u003e\u003c/strong\u003e that lets you:\u003c/p\u003e\n\n\u003cul\u003e\n\u003cli\u003esee registered tools\u003c/li\u003e\n\u003cli\u003eexecute tools manually\u003c/li\u003e\n\u003cli\u003etest with an agent using \u003ca href=\"https://aistudio.google.com/\" target=\"_blank\" rel=\"noopener noreferrer\"\u003eGemini API\u003c/a\u003e integration\u003c/li\u003e\n\u003c/ul\u003e\n\n\u003ch3\u003e\n  \u003ca name=\"3-use-the-live-travel-demo\" href=\"#3-use-the-live-travel-demo\"\u003e\n  \u003c/a\u003e\n  3) Use the live travel demo\n\u003c/h3\u003e\n\n\u003cp\u003eThe doc links a hosted demo and walks you through manually running a \u003ccode\u003esearchFlights\u003c/code\u003e tool (or invoking it via natural language).\u003c/p\u003e\n\n\u003cp\u003e\u003cstrong\u003eLive demo:\u003c/strong\u003e \u003ca href=\"https://travel-demo.bandarra.me/\" target=\"_blank\" rel=\"noopener noreferrer\"\u003ehttps://travel-demo.bandarra.me/\u003c/a\u003e\u003c/p\u003e\n\n\n\u003chr\u003e\n\n\u003ch2\u003e\n  \u003ca name=\"two-ways-to-expose-tools-imperative-vs-declarative\" href=\"#two-ways-to-expose-tools-imperative-vs-declarative\"\u003e\n  \u003c/a\u003e\n  Two ways to expose tools: Imperative vs Declarative\n\u003c/h2\u003e\n\n\u003cp\u003eWebMCP gives you \u003cstrong\u003etwo APIs\u003c/strong\u003e.\u003c/p\u003e\n\n\u003ch3\u003e\n  \u003ca name=\"1-imperative-api-javascript-tools\" href=\"#1-imperative-api-javascript-tools\"\u003e\n  \u003c/a\u003e\n  1) Imperative API (JavaScript tools)\n\u003c/h3\u003e\n\n\u003cp\u003eYou register tools with \u003ccode\u003enavigator.modelContext\u003c/code\u003e:\u003c/p\u003e\n\n\u003cul\u003e\n\u003cli\u003e\n\u003ccode\u003eregisterTool()\u003c/code\u003e adds one tool without removing others\u003c/li\u003e\n\u003cli\u003e\n\u003ccode\u003eunregisterTool()\u003c/code\u003e removes a tool by name\u003c/li\u003e\n\u003cli\u003e\n\u003ccode\u003eprovideContext()\u003c/code\u003e replaces the full toolset (useful when app state changes)\u003c/li\u003e\n\u003cli\u003e\n\u003ccode\u003eclearContext()\u003c/code\u003e removes everything\u003c/li\u003e\n\u003c/ul\u003e\n\n\u003cp\u003eThe key detail: tools include \u003cstrong\u003ename, description, inputSchema, and execute()\u003c/strong\u003e.\u003c/p\u003e\n\n\u003ch3\u003e\n  \u003ca name=\"2-declarative-api-turn-html-forms-into-tools\" href=\"#2-declarative-api-turn-html-forms-into-tools\"\u003e\n  \u003c/a\u003e\n  2) Declarative API (turn HTML forms into tools)\n\u003c/h3\u003e\n\n\u003cp\u003eThis is the spicy part.\u003c/p\u003e\n\n\u003cp\u003eYou can annotate an ordinary \u003ccode\u003e\u0026lt;form\u0026gt;\u003c/code\u003e with:\u003c/p\u003e\n\n\u003cul\u003e\n\u003cli\u003e\u003ccode\u003etoolname\u003c/code\u003e\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003etooldescription\u003c/code\u003e\u003c/li\u003e\n\u003cli\u003eand optionally \u003ccode\u003etoolautosubmit\u003c/code\u003e\n\u003c/li\u003e\n\u003c/ul\u003e\n\n\u003cp\u003e…and the browser will translate the form fields into a structured tool schema that agents can use.\u003c/p\u003e\n\n\u003cp\u003eEven better: when an agent invokes it, the browser can \u003cstrong\u003efocus the form and pre-fill the fields\u003c/strong\u003e. By default, the user still clicks submit—unless you enable autosubmit.\u003c/p\u003e\n\n\n\u003chr\u003e\n\n\u003ch2\u003e\n  \u003ca name=\"the-hidden-gem-raw-agentinvoked-endraw-raw-respondwith-endraw-\" href=\"#the-hidden-gem-raw-agentinvoked-endraw-raw-respondwith-endraw-\"\u003e\n  \u003c/a\u003e\n  The hidden gem: \u003ccode\u003eagentInvoked\u003c/code\u003e + \u003ccode\u003erespondWith()\u003c/code\u003e\n\u003c/h2\u003e\n\n\u003cp\u003eWebMCP adds agent-awareness to form submission.\u003c/p\u003e\n\n\u003cul\u003e\n\u003cli\u003e\n\u003ccode\u003eSubmitEvent.agentInvoked\u003c/code\u003e tells you the submit came from an AI agent.\u003c/li\u003e\n\u003cli\u003e\n\u003ccode\u003eSubmitEvent.respondWith(Promise\u0026lt;any\u0026gt;)\u003c/code\u003e lets your form handler return a value back to the model as tool output (after \u003ccode\u003epreventDefault()\u003c/code\u003e).\u003c/li\u003e\n\u003c/ul\u003e\n\n\u003cp\u003eThis is a big deal because it means your web app can:\u003c/p\u003e\n\n\u003cul\u003e\n\u003cli\u003evalidate normally for humans\u003c/li\u003e\n\u003cli\u003ebut return \u003cstrong\u003estructured errors/results\u003c/strong\u003e for agents (so they can self-correct)\u003c/li\u003e\n\u003c/ul\u003e\n\n\n\u003chr\u003e\n\n\u003ch2\u003e\n  \u003ca name=\"ux-signals-events-css-pseudoclasses\" href=\"#ux-signals-events-css-pseudoclasses\"\u003e\n  \u003c/a\u003e\n  UX signals: events + CSS pseudo-classes\n\u003c/h2\u003e\n\n\u003cp\u003eWhen a tool is invoked via the declarative path:\u003c/p\u003e\n\n\u003cul\u003e\n\u003cli\u003e\n\u003ccode\u003e\"toolactivated\"\u003c/code\u003e event fires when fields are pre-filled\u003c/li\u003e\n\u003cli\u003e\n\u003ccode\u003e\"toolcancel\"\u003c/code\u003e fires if the user cancels or resets the form\u003c/li\u003e\n\u003c/ul\u003e\n\n\u003cp\u003eAnd the browser applies pseudo-classes for visual feedback:\u003c/p\u003e\n\n\u003cul\u003e\n\u003cli\u003e\n\u003ccode\u003e:tool-form-active\u003c/code\u003e on the form\u003c/li\u003e\n\u003cli\u003e\n\u003ccode\u003e:tool-submit-active\u003c/code\u003e on the submit button\u003c/li\u003e\n\u003c/ul\u003e\n\n\u003cp\u003eChrome even defines placeholder styles by default.\u003c/p\u003e\n\n\n\u003chr\u003e\n\n\u003ch2\u003e\n  \u003ca name=\"tool-design-rules-that-will-save-you-weeks-of-pain\" href=\"#tool-design-rules-that-will-save-you-weeks-of-pain\"\u003e\n  \u003c/a\u003e\n  Tool design rules that will save you weeks of pain\n\u003c/h2\u003e\n\n\u003cp\u003eThe doc includes a best-practices section that’s basically a cheat code for making tools agent-friendly:\u003c/p\u003e\n\n\u003ch3\u003e\n  \u003ca name=\"1-name-tools-like-you-mean-it\" href=\"#1-name-tools-like-you-mean-it\"\u003e\n  \u003c/a\u003e\n  1) Name tools like you mean it\n\u003c/h3\u003e\n\n\u003cp\u003eUse verbs that describe the action precisely, and distinguish \u003cstrong\u003eexecuting\u003c/strong\u003e vs \u003cstrong\u003einitiating a UI flow\u003c/strong\u003e (e.g., \u003ccode\u003ecreate-event\u003c/code\u003e vs \u003ccode\u003estart-event-creation-process\u003c/code\u003e).\u003c/p\u003e\n\n\u003ch3\u003e\n  \u003ca name=\"2-design-schemas-that-reduce-model-math\" href=\"#2-design-schemas-that-reduce-model-math\"\u003e\n  \u003c/a\u003e\n  2) Design schemas that reduce “model math”\n\u003c/h3\u003e\n\n\u003cp\u003eIf the user says “11:00 to 15:00”, accept strings—don’t force the model to compute minutes-from-midnight.\u003c/p\u003e\n\n\u003ch3\u003e\n  \u003ca name=\"3-validate-strictly-in-code-loosely-in-schema\" href=\"#3-validate-strictly-in-code-loosely-in-schema\"\u003e\n  \u003c/a\u003e\n  3) Validate strictly in code, loosely in schema\n\u003c/h3\u003e\n\n\u003cp\u003eAssume the schema won’t fully protect you. Return \u003cstrong\u003edescriptive errors\u003c/strong\u003e so the model can retry correctly.\u003c/p\u003e\n\n\u003ch3\u003e\n  \u003ca name=\"4-make-tools-atomic-composable\" href=\"#4-make-tools-atomic-composable\"\u003e\n  \u003c/a\u003e\n  4) Make tools atomic + composable\n\u003c/h3\u003e\n\n\u003cp\u003eAvoid a zoo of overlapping tools. Prefer one tool with parameters over ten near-duplicates.\u003c/p\u003e\n\n\n\u003chr\u003e\n\n\u003ch2\u003e\n  \u003ca name=\"limitations-read-these-before-you-get-too-excited\" href=\"#limitations-read-these-before-you-get-too-excited\"\u003e\n  \u003c/a\u003e\n  Limitations (read these before you get too excited)\n\u003c/h2\u003e\n\n\u003cp\u003eThis is still an early preview, and the doc is clear about what’s missing:\u003c/p\u003e\n\n\u003cul\u003e\n\u003cli\u003e\n\u003cstrong\u003eNo headless mode\u003c/strong\u003e: tool calls require a visible browsing context (tab/webview).\u003c/li\u003e\n\u003cli\u003e\n\u003cstrong\u003eUI must stay in sync\u003c/strong\u003e: your app has to reflect state updates whether they come from a human or an agent.\u003c/li\u003e\n\u003cli\u003e\n\u003cstrong\u003eComplex apps may need refactors\u003c/strong\u003e to make tool-driven UI updates clean.\u003c/li\u003e\n\u003cli\u003e\n\u003cstrong\u003eDiscoverability isn’t solved\u003c/strong\u003e: there’s no built-in way for clients to know which sites support tools without visiting them.\u003c/li\u003e\n\u003c/ul\u003e\n\n\u003cp\u003eTranslation: WebMCP isn’t a magic wand. It’s a contract—\u003cem\u003eyou still have to implement the contract well.\u003c/em\u003e\u003c/p\u003e\n\n\n\u003chr\u003e\n\n\u003ch2\u003e\n  \u003ca name=\"webmcp-vs-mcp-the-10second-explanation\" href=\"#webmcp-vs-mcp-the-10second-explanation\"\u003e\n  \u003c/a\u003e\n  WebMCP vs MCP (the 10-second explanation)\n\u003c/h2\u003e\n\n\u003cul\u003e\n\u003cli\u003e\n\u003cstrong\u003eMCP\u003c/strong\u003e: server-side protocol; you deploy tools on your own server. (\u003ca href=\"https://modelcontextprotocol.io/\" target=\"_blank\" rel=\"noopener noreferrer\"\u003ehttps://modelcontextprotocol.io/\u003c/a\u003e)\u003c/li\u003e\n\u003cli\u003e\n\u003cstrong\u003eWebMCP\u003c/strong\u003e: inspired by MCP, but lets you provide tools to \u003cstrong\u003ein-browser agents\u003c/strong\u003e using client-side functions or annotated forms.\u003c/li\u003e\n\u003c/ul\u003e\n\n\n\u003chr\u003e\n\n\u003ch2\u003e\n  \u003ca name=\"where-this-goes-next-and-why-you-should-care-now\" href=\"#where-this-goes-next-and-why-you-should-care-now\"\u003e\n  \u003c/a\u003e\n  Where this goes next (and why you should care now)\n\u003c/h2\u003e\n\n\u003cp\u003eIf WebMCP lands as a real standard, it nudges the web toward a new baseline expectation:\u003c/p\u003e\n\n\u003cp\u003e\u003cstrong\u003eevery serious web app becomes both:\u003c/strong\u003e\u003c/p\u003e\n\n\u003cul\u003e\n\u003cli\u003ea UI for humans\u003c/li\u003e\n\u003cli\u003ea tool surface for agents\u003c/li\u003e\n\u003c/ul\u003e\n\n\u003cp\u003eAnd the apps that win won’t be the ones with the prettiest interface—they’ll be the ones with the clearest \u003cstrong\u003etool contracts\u003c/strong\u003e.\u003c/p\u003e\n\n\n\u003chr\u003e\n\n\u003ch2\u003e\n  \u003ca name=\"want-to-influence-the-spec\" href=\"#want-to-influence-the-spec\"\u003e\n  \u003c/a\u003e\n  Want to influence the spec?\n\u003c/h2\u003e\n\n\u003cp\u003eThe doc explicitly asks for feedback around use cases, API shape/usability, tooling, and implementation issues.\u003c/p\u003e\n\n\u003cp\u003eThere are links for:\u003c/p\u003e\n\n\u003cul\u003e\n\u003cli\u003e\u003ca href=\"https://groups.google.com/a/chromium.org/g/chrome-ai-dev-preview-discuss/\" target=\"_blank\" rel=\"noopener noreferrer\"\u003ediscussion / questions\u003c/a\u003e\u003c/li\u003e\n\u003cli\u003e\u003ca href=\"https://crbug.com/new?component=2021259\" target=\"_blank\" rel=\"noopener noreferrer\"\u003ebug reports\u003c/a\u003e\u003c/li\u003e\n\u003c/ul\u003e\n\n\n\u003chr\u003e\n\n\u003ch2\u003e\n  \u003ca name=\"your-turn\" href=\"#your-turn\"\u003e\n  \u003c/a\u003e\n  Your turn\n\u003c/h2\u003e\n\n\u003cp\u003eIf you were adding WebMCP to a real product, \u003cstrong\u003ewhat would your first tool be\u003c/strong\u003e?\u003c/p\u003e\n\n\u003cul\u003e\n\u003cli\u003e\u003ccode\u003echeckout\u003c/code\u003e\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003ebook_appointment\u003c/code\u003e\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003eexport_report\u003c/code\u003e\u003c/li\u003e\n\u003cli\u003e\u003ccode\u003ereset_password\u003c/code\u003e\u003c/li\u003e\n\u003cli\u003esomething else entirely?\u003c/li\u003e\n\u003c/ul\u003e\n\n\u003cp\u003eAnd what’s the one UI flow you’d love to delete from your “agent automation” backlog forever?\u003c/p\u003e\n\n\u003cp\u003e\u003ca href=\"https://vexrail.com/resources/blog#:~:text=Subscribe%20to%20our%20newsletter\" target=\"_blank\" rel=\"noopener noreferrer\"\u003eP.S. Check Vexrail's Newsletter to know more about Monetization / Advertising in AI chat apps \u003c/a\u003e\u003c/p\u003e\n\n","author":{"@type":"Person","name":"Nikoloz Turazashvili (@axrisi)","url":"https://dev.to/axrisi"},"datePublished":"2026-02-10T03:41:42Z","dateModified":"2026-02-11T02:33:33Z","url":"https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e","interactionStatistic":[{"@type":"InteractionCounter","interactionType":"https://schema.org/CommentAction","userInteractionCount":13},{"@type":"InteractionCounter","interactionType":"https://schema.org/LikeAction","userInteractionCount":50}],"comment":[{"@type":"Comment","@id":"#comment-1449671","text":"\u003cp\u003eFor those who are searching for the flag,\u003cbr\u003e\nThe flag name is \"Experimental Web Platform features\" \u003cbr\u003e\n\u003ca href=\"https://media2.dev.to/dynamic/image/width=800%2Cheight=%2Cfit=scale-down%2Cgravity=auto%2Cformat=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F3tyqhwykctm3m8fsb1c5.png\" class=\"article-body-image-wrapper\"\u003e\u003cimg src=\"https://media2.dev.to/dynamic/image/width=800%2Cheight=%2Cfit=scale-down%2Cgravity=auto%2Cformat=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F3tyqhwykctm3m8fsb1c5.png\" alt=\" \" loading=\"lazy\"\u003e\u003c/a\u003e\u003c/p\u003e\n\n","author":{"@type":"Person","name":"hari balaji","url":"https://dev.to/haribalaji_b"},"datePublished":"2026-02-10T18:27:22Z","dateModified":"2026-02-10T18:27:22Z","url":"https://dev.to/haribalaji_b/comment/34ccf","interactionStatistic":[{"@type":"InteractionCounter","interactionType":"https://schema.org/LikeAction","userInteractionCount":3}],"comment":[{"@type":"Comment","@id":"#comment-1452826","text":"\u003cp\u003eStrange, in Canary it has its own flag.\u003cbr\u003e\n\u003c/p\u003e\n\n\u003cdiv class=\"highlight js-code-highlight\"\u003e\n\u003cpre class=\"highlight plaintext\"\u003e\u003ccode\u003eWebMCP for testing\n\u003c/code\u003e\u003c/pre\u003e\n\u003cdiv class=\"highlight__panel js-actions-panel\"\u003e\n\u003cdiv class=\"highlight__panel-action js-fullscreen-code-action\"\u003e\n    \u003csvg xmlns=\"http://www.w3.org/2000/svg\" width=\"20px\" height=\"20px\" viewbox=\"0 0 24 24\" class=\"highlight-action crayons-icon highlight-action--fullscreen-on\"\u003e\u003ctitle\u003eEnter fullscreen mode\u003c/title\u003e\n    \u003cpath d=\"M16 3h6v6h-2V5h-4V3zM2 3h6v2H4v4H2V3zm18 16v-4h2v6h-6v-2h4zM4 19h4v2H2v-6h2v4z\"\u003e\u003c/path\u003e\n\u003c/svg\u003e\n\n    \u003csvg xmlns=\"http://www.w3.org/2000/svg\" width=\"20px\" height=\"20px\" viewbox=\"0 0 24 24\" class=\"highlight-action crayons-icon highlight-action--fullscreen-off\"\u003e\u003ctitle\u003eExit fullscreen mode\u003c/title\u003e\n    \u003cpath d=\"M18 7h4v2h-6V3h2v4zM8 9H2V7h4V3h2v6zm10 8v4h-2v-6h6v2h-4zM8 15v6H6v-4H2v-2h6z\"\u003e\u003c/path\u003e\n\u003c/svg\u003e\n\n\u003c/div\u003e\n\u003c/div\u003e\n\u003c/div\u003e\n\n\n\n\u003cp\u003e\u003ca href=\"https://media2.dev.to/dynamic/image/width=800%2Cheight=%2Cfit=scale-down%2Cgravity=auto%2Cformat=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2Fe784c2me6bc8kqdytxee.png\" class=\"article-body-image-wrapper\"\u003e\u003cimg src=\"https://media2.dev.to/dynamic/image/width=800%2Cheight=%2Cfit=scale-down%2Cgravity=auto%2Cformat=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2Fe784c2me6bc8kqdytxee.png\" alt=\" \" loading=\"lazy\"\u003e\u003c/a\u003e\u003c/p\u003e\n\n","author":{"@type":"Person","name":"Dragan Filipović","url":"https://dev.to/draganfill"},"datePublished":"2026-02-15T16:10:53Z","dateModified":"2026-02-15T16:10:53Z","url":"https://dev.to/draganfill/comment/34h3o","interactionStatistic":[{"@type":"InteractionCounter","interactionType":"https://schema.org/LikeAction","userInteractionCount":1}],"parentItem":{"@type":"Comment","@id":"#comment-1449671"}},{"@type":"Comment","@id":"#comment-1449742","text":"\u003cp\u003eI thought it's only on Canary build. Is this in prod chrome version?\u003c/p\u003e\n\n","author":{"@type":"Person","name":"Nikoloz Turazashvili (@axrisi)","url":"https://dev.to/axrisi"},"datePublished":"2026-02-10T21:57:54Z","dateModified":"2026-02-10T21:57:54Z","url":"https://dev.to/axrisi/comment/34cf8","interactionStatistic":[{"@type":"InteractionCounter","interactionType":"https://schema.org/LikeAction","userInteractionCount":1}],"parentItem":{"@type":"Comment","@id":"#comment-1449671"}}]},{"@type":"Comment","@id":"#comment-1449340","text":"\u003cp\u003edidn't know about this. let me dive a little over the weekend. have you tried any agents that run in the browser (using this pattern). I know a couple of frameworks but never tried it.\u003c/p\u003e\n\n","author":{"@type":"Person","name":"Anmol Baranwal","url":"https://dev.to/anmolbaranwal"},"datePublished":"2026-02-10T08:19:23Z","dateModified":"2026-02-10T08:19:23Z","url":"https://dev.to/anmolbaranwal/comment/34bpm","interactionStatistic":[{"@type":"InteractionCounter","interactionType":"https://schema.org/LikeAction","userInteractionCount":2}],"comment":[{"@type":"Comment","@id":"#comment-1449741","text":"\u003cp\u003eI have tried only the demo website for plane tickets that is described in the article. Haven't seen any other demos. Drop here if you find them\u003c/p\u003e\n\n","author":{"@type":"Person","name":"Nikoloz Turazashvili (@axrisi)","url":"https://dev.to/axrisi"},"datePublished":"2026-02-10T21:57:03Z","dateModified":"2026-02-10T21:57:03Z","url":"https://dev.to/axrisi/comment/34cf7","interactionStatistic":[{"@type":"InteractionCounter","interactionType":"https://schema.org/LikeAction","userInteractionCount":2}],"parentItem":{"@type":"Comment","@id":"#comment-1449340"}}]},{"@type":"Comment","@id":"#comment-1451066","text":"\u003cp\u003eThis is really interesting. The \"publish tools, not pixels\" framing nails it.\u003c/p\u003e\n\n\u003cp\u003eThe parallel to how we handle AI coding tools is striking. Right now with Cursor and similar tools, we give the AI context through rules files and documentation instead of letting it guess from the code. WebMCP is basically the same idea applied to browsers - give the agent structured context instead of making it reverse-engineer the UI.\u003c/p\u003e\n\n\u003cp\u003eThe adoption challenge is real though. Getting websites to voluntarily expose structured APIs for agents to use is a chicken-and-egg problem. Sites won't add WebMCP until agents use it, and agents won't prioritize it until sites support it.\u003c/p\u003e\n\n","author":{"@type":"Person","name":"Ned C","url":"https://dev.to/nedcodes"},"datePublished":"2026-02-12T16:42:35Z","dateModified":"2026-02-12T16:42:35Z","url":"https://dev.to/nedcodes/comment/34ee6","interactionStatistic":[{"@type":"InteractionCounter","interactionType":"https://schema.org/LikeAction","userInteractionCount":2}]},{"@type":"Comment","@id":"#comment-1453006","text":"\u003cp\u003eThank you for sharing - I made a demo here: \u003ca href=\"https://www.netsi.dk/experiments/webMCP.html\" rel=\"nofollow noopener noreferrer\" target=\"_blank\"\u003enetsi.dk/experiments/webMCP.html\u003c/a\u003e\u003c/p\u003e\n\n","author":{"@type":"Person","name":"netsi1964 🙏🏻","url":"https://dev.to/netsi1964"},"datePublished":"2026-02-15T23:24:27Z","dateModified":"2026-02-15T23:24:27Z","url":"https://dev.to/netsi1964/comment/34ham","interactionStatistic":[{"@type":"InteractionCounter","interactionType":"https://schema.org/LikeAction","userInteractionCount":2}],"comment":[{"@type":"Comment","@id":"#comment-1453007","text":"\u003cp\u003eWorks like a charm! \u003cbr\u003e\nGood one! Really liked it.\u003c/p\u003e\n\n\u003cp\u003e\u003ca href=\"https://media2.dev.to/dynamic/image/width=800%2Cheight=%2Cfit=scale-down%2Cgravity=auto%2Cformat=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F595v2q8y6d538gn0e451.png\" class=\"article-body-image-wrapper\"\u003e\u003cimg src=\"https://media2.dev.to/dynamic/image/width=800%2Cheight=%2Cfit=scale-down%2Cgravity=auto%2Cformat=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F595v2q8y6d538gn0e451.png\" alt=\" \" loading=\"lazy\"\u003e\u003c/a\u003e\u003c/p\u003e\n\n","author":{"@type":"Person","name":"Nikoloz Turazashvili (@axrisi)","url":"https://dev.to/axrisi"},"datePublished":"2026-02-15T23:31:00Z","dateModified":"2026-02-15T23:31:00Z","url":"https://dev.to/axrisi/comment/34han","interactionStatistic":[{"@type":"InteractionCounter","interactionType":"https://schema.org/LikeAction","userInteractionCount":2}],"parentItem":{"@type":"Comment","@id":"#comment-1453006"}}]}]}}</script>
+</head>
+      <body class="sans-serif-article-body default-header">
+        <div id="page-content-inner">
+    <main id="main-content" class="crayons-layout__content grid gap-4">
+      <div class="article-wrapper">
+        <article class="crayons-card crayons-article mb-4" id="article-show-container">
+          <div class="crayons-article__main">
+            <div class="crayons-article__body text-styles spec__body" id="article-body">
+                <p>If you’ve ever watched an AI agent “use” a website by guessing which button is “Checkout” and where the “Passenger Name” goes… you already know the core problem:</p>
+<p><strong>the web UI is for humans, but agents need structure.</strong></p>
+<p>That’s exactly what <strong><a href="https://github.com/webmachinelearning/webmcp/blob/main/README.md">WebMCP</a></strong> is trying to fix.</p>
+<p>WebMCP is a proposed web standard that lets a website expose <em>structured tools</em> directly to in-browser AI agents—so agents can call <strong>real functions</strong> (with schemas) instead of screen-scraping and hoping the DOM didn’t change.</p>
+<p>Think of it as “MCP, but built into the browser tab.”</p>
+<hr>
+<h2>
+  <a name="the-big-idea-publish-tools-not-pixels" href="#the-big-idea-publish-tools-not-pixels">
+  </a>
+  The big idea: publish tools, not pixels
+</h2>
+<p>WebMCP’s promise is simple:</p>
+<p>Instead of an agent guessing what a button does, your site explicitly publishes a <strong>contract</strong>:</p>
+<ul>
+<li>
+<strong>Discovery:</strong> what tools exist on this page (<code>checkout</code>, <code>filter_results</code>, etc.)</li>
+<li>
+<strong><a href="https://json-schema.org/understanding-json-schema/reference">JSON Schemas</a>:</strong> exactly what inputs/outputs look like (to reduce hallucinations)</li>
+<li>
+<strong>State:</strong> shared understanding of what’s available <em>right now</em> on the page</li>
+</ul>
+<p>That’s the difference between:</p>
+<ul>
+<li>“Click around until something works”</li>
+<li>and “Call <code>book_flight({ origin, destination, outboundDate… })</code>”</li>
+</ul>
+<p>The spec even highlights scenarios like flight booking, complex forms (medical/legal), and hidden “run diagnostics” flows.</p>
+<hr>
+<h2>
+  <a name="why-this-matters-even-if-you-dont-care-about-agents" href="#why-this-matters-even-if-you-dont-care-about-agents">
+  </a>
+  Why this matters (even if you don’t care about agents)
+</h2>
+<p>Because agents are only going to become more common, and today’s integration methods are… messy:</p>
+<ul>
+<li>brittle UI automation</li>
+<li>DOM scraping</li>
+<li>weird accessibility hacks</li>
+<li>page updates breaking flows every week</li>
+</ul>
+<p>WebMCP is basically saying:</p>
+<blockquote>
+<p>“If agents are going to operate inside browsers, the browser should provide the handshake.”</p>
+</blockquote>
+<p>And from a product perspective, it’s also a shift in control: <strong>the site defines what actions are allowed</strong> and how data should be passed.</p>
+<hr>
+<h2>
+  <a name="how-to-try-webmcp-in-5-minutes" href="#how-to-try-webmcp-in-5-minutes">
+  </a>
+  How to try WebMCP in ~5 minutes
+</h2>
+<p>WebMCP is currently an early preview behind a flag in <strong>Chrome 146</strong>.<br>
+Currently, in <a href="https://www.google.com/chrome/canary/">the Canary Channel</a>.</p>
+<h3>
+  <a name="1-enable-the-flag" href="#1-enable-the-flag">
+  </a>
+  1) Enable the flag
+</h3>
+<p>Go to <code>chrome://flags</code>, search for <strong>WebMCP for testing</strong>, enable it, relaunch Chrome.</p>
+<p>(If you’ve never used flags before: <a href="https://developer.chrome.com/docs/web-platform/chrome-flags">Chrome flags primer</a>)</p>
+<h3>
+  <a name="2-install-the-inspector-extension" href="#2-install-the-inspector-extension">
+  </a>
+  2) Install the inspector extension
+</h3>
+<p>There’s a <strong><a href="https://chromewebstore.google.com/detail/model-context-tool-inspec/gbpdfapgefenggkahomfgkhfehlcenpd">Model Context Tool Inspector Extension</a></strong> that lets you:</p>
+<ul>
+<li>see registered tools</li>
+<li>execute tools manually</li>
+<li>test with an agent using <a href="https://aistudio.google.com/">Gemini API</a> integration</li>
+</ul>
+<h3>
+  <a name="3-use-the-live-travel-demo" href="#3-use-the-live-travel-demo">
+  </a>
+  3) Use the live travel demo
+</h3>
+<p>The doc links a hosted demo and walks you through manually running a <code>searchFlights</code> tool (or invoking it via natural language).</p>
+<p><strong>Live demo:</strong> <a href="https://travel-demo.bandarra.me/">https://travel-demo.bandarra.me/</a></p>
+<hr>
+<h2>
+  <a name="two-ways-to-expose-tools-imperative-vs-declarative" href="#two-ways-to-expose-tools-imperative-vs-declarative">
+  </a>
+  Two ways to expose tools: Imperative vs Declarative
+</h2>
+<p>WebMCP gives you <strong>two APIs</strong>.</p>
+<h3>
+  <a name="1-imperative-api-javascript-tools" href="#1-imperative-api-javascript-tools">
+  </a>
+  1) Imperative API (JavaScript tools)
+</h3>
+<p>You register tools with <code>navigator.modelContext</code>:</p>
+<ul>
+<li>
+<code>registerTool()</code> adds one tool without removing others</li>
+<li>
+<code>unregisterTool()</code> removes a tool by name</li>
+<li>
+<code>provideContext()</code> replaces the full toolset (useful when app state changes)</li>
+<li>
+<code>clearContext()</code> removes everything</li>
+</ul>
+<p>The key detail: tools include <strong>name, description, inputSchema, and execute()</strong>.</p>
+<h3>
+  <a name="2-declarative-api-turn-html-forms-into-tools" href="#2-declarative-api-turn-html-forms-into-tools">
+  </a>
+  2) Declarative API (turn HTML forms into tools)
+</h3>
+<p>This is the spicy part.</p>
+<p>You can annotate an ordinary <code>&lt;form&gt;</code> with:</p>
+<ul>
+<li><code>toolname</code></li>
+<li><code>tooldescription</code></li>
+<li>and optionally <code>toolautosubmit</code>
+</li>
+</ul>
+<p>…and the browser will translate the form fields into a structured tool schema that agents can use.</p>
+<p>Even better: when an agent invokes it, the browser can <strong>focus the form and pre-fill the fields</strong>. By default, the user still clicks submit—unless you enable autosubmit.</p>
+<hr>
+<h2>
+  <a name="the-hidden-gem-raw-agentinvoked-endraw-raw-respondwith-endraw-" href="#the-hidden-gem-raw-agentinvoked-endraw-raw-respondwith-endraw-">
+  </a>
+  The hidden gem: <code>agentInvoked</code> + <code>respondWith()</code>
+</h2>
+<p>WebMCP adds agent-awareness to form submission.</p>
+<ul>
+<li>
+<code>SubmitEvent.agentInvoked</code> tells you the submit came from an AI agent.</li>
+<li>
+<code>SubmitEvent.respondWith(Promise&lt;any&gt;)</code> lets your form handler return a value back to the model as tool output (after <code>preventDefault()</code>).</li>
+</ul>
+<p>This is a big deal because it means your web app can:</p>
+<ul>
+<li>validate normally for humans</li>
+<li>but return <strong>structured errors/results</strong> for agents (so they can self-correct)</li>
+</ul>
+<hr>
+<h2>
+  <a name="ux-signals-events-css-pseudoclasses" href="#ux-signals-events-css-pseudoclasses">
+  </a>
+  UX signals: events + CSS pseudo-classes
+</h2>
+<p>When a tool is invoked via the declarative path:</p>
+<ul>
+<li>
+<code>"toolactivated"</code> event fires when fields are pre-filled</li>
+<li>
+<code>"toolcancel"</code> fires if the user cancels or resets the form</li>
+</ul>
+<p>And the browser applies pseudo-classes for visual feedback:</p>
+<ul>
+<li>
+<code>:tool-form-active</code> on the form</li>
+<li>
+<code>:tool-submit-active</code> on the submit button</li>
+</ul>
+<p>Chrome even defines placeholder styles by default.</p>
+<hr>
+<h2>
+  <a name="tool-design-rules-that-will-save-you-weeks-of-pain" href="#tool-design-rules-that-will-save-you-weeks-of-pain">
+  </a>
+  Tool design rules that will save you weeks of pain
+</h2>
+<p>The doc includes a best-practices section that’s basically a cheat code for making tools agent-friendly:</p>
+<h3>
+  <a name="1-name-tools-like-you-mean-it" href="#1-name-tools-like-you-mean-it">
+  </a>
+  1) Name tools like you mean it
+</h3>
+<p>Use verbs that describe the action precisely, and distinguish <strong>executing</strong> vs <strong>initiating a UI flow</strong> (e.g., <code>create-event</code> vs <code>start-event-creation-process</code>).</p>
+<h3>
+  <a name="2-design-schemas-that-reduce-model-math" href="#2-design-schemas-that-reduce-model-math">
+  </a>
+  2) Design schemas that reduce “model math”
+</h3>
+<p>If the user says “11:00 to 15:00”, accept strings—don’t force the model to compute minutes-from-midnight.</p>
+<h3>
+  <a name="3-validate-strictly-in-code-loosely-in-schema" href="#3-validate-strictly-in-code-loosely-in-schema">
+  </a>
+  3) Validate strictly in code, loosely in schema
+</h3>
+<p>Assume the schema won’t fully protect you. Return <strong>descriptive errors</strong> so the model can retry correctly.</p>
+<h3>
+  <a name="4-make-tools-atomic-composable" href="#4-make-tools-atomic-composable">
+  </a>
+  4) Make tools atomic + composable
+</h3>
+<p>Avoid a zoo of overlapping tools. Prefer one tool with parameters over ten near-duplicates.</p>
+<hr>
+<h2>
+  <a name="limitations-read-these-before-you-get-too-excited" href="#limitations-read-these-before-you-get-too-excited">
+  </a>
+  Limitations (read these before you get too excited)
+</h2>
+<p>This is still an early preview, and the doc is clear about what’s missing:</p>
+<ul>
+<li>
+<strong>No headless mode</strong>: tool calls require a visible browsing context (tab/webview).</li>
+<li>
+<strong>UI must stay in sync</strong>: your app has to reflect state updates whether they come from a human or an agent.</li>
+<li>
+<strong>Complex apps may need refactors</strong> to make tool-driven UI updates clean.</li>
+<li>
+<strong>Discoverability isn’t solved</strong>: there’s no built-in way for clients to know which sites support tools without visiting them.</li>
+</ul>
+<p>Translation: WebMCP isn’t a magic wand. It’s a contract—<em>you still have to implement the contract well.</em></p>
+<hr>
+<h2>
+  <a name="webmcp-vs-mcp-the-10second-explanation" href="#webmcp-vs-mcp-the-10second-explanation">
+  </a>
+  WebMCP vs MCP (the 10-second explanation)
+</h2>
+<ul>
+<li>
+<strong>MCP</strong>: server-side protocol; you deploy tools on your own server. (<a href="https://modelcontextprotocol.io/">https://modelcontextprotocol.io/</a>)</li>
+<li>
+<strong>WebMCP</strong>: inspired by MCP, but lets you provide tools to <strong>in-browser agents</strong> using client-side functions or annotated forms.</li>
+</ul>
+<hr>
+<h2>
+  <a name="where-this-goes-next-and-why-you-should-care-now" href="#where-this-goes-next-and-why-you-should-care-now">
+  </a>
+  Where this goes next (and why you should care now)
+</h2>
+<p>If WebMCP lands as a real standard, it nudges the web toward a new baseline expectation:</p>
+<p><strong>every serious web app becomes both:</strong></p>
+<ul>
+<li>a UI for humans</li>
+<li>a tool surface for agents</li>
+</ul>
+<p>And the apps that win won’t be the ones with the prettiest interface—they’ll be the ones with the clearest <strong>tool contracts</strong>.</p>
+<hr>
+<h2>
+  <a name="want-to-influence-the-spec" href="#want-to-influence-the-spec">
+  </a>
+  Want to influence the spec?
+</h2>
+<p>The doc explicitly asks for feedback around use cases, API shape/usability, tooling, and implementation issues.</p>
+<p>There are links for:</p>
+<ul>
+<li><a href="https://groups.google.com/a/chromium.org/g/chrome-ai-dev-preview-discuss/">discussion / questions</a></li>
+<li><a href="https://crbug.com/new?component=2021259">bug reports</a></li>
+</ul>
+<hr>
+<h2>
+  <a name="your-turn" href="#your-turn">
+  </a>
+  Your turn
+</h2>
+<p>If you were adding WebMCP to a real product, <strong>what would your first tool be</strong>?</p>
+<ul>
+<li><code>checkout</code></li>
+<li><code>book_appointment</code></li>
+<li><code>export_report</code></li>
+<li><code>reset_password</code></li>
+<li>something else entirely?</li>
+</ul>
+<p>And what’s the one UI flow you’d love to delete from your “agent automation” backlog forever?</p>
+<p><a href="https://vexrail.com/resources/blog#:~:text=Subscribe%20to%20our%20newsletter">P.S. Check Vexrail's Newsletter to know more about Monetization / Advertising in AI chat apps </a></p>
+            </div>
+              </div>
+          <section id="comments" class="text-padding mb-4 border-t-1 border-0 border-solid border-base-10">
+    <div id="comments-container">
+        <form class="comment-form print-hidden" id="new_comment"><input name="utf8" type="hidden">
+  <input type="hidden" name="authenticity_token" id="new_comment_authenticity_token">
+    <input type="hidden" name="comment[commentable_id]" id="comment_commentable_id">
+    <input type="hidden" name="comment[commentable_type]" id="comment_commentable_type">
+  <img src="https://media2.dev.to/dynamic/image/width=256,height=,fit=scale-down,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F8j7kvp660rqzt99zui8e.png" alt="pic" class="crayons-avatar__image overflow-hidden" id="comment-primary-user-profile--avatar">
+  <div class="comment-form__inner">
+    <div class="response-templates-container crayons-card crayons-card--secondary p-4 mb-4 comment-form__templates fs-base hidden">
+      <a href="/settings/response-templates">
+        Create template
+      </a>
+      <p>Templates let you quickly answer FAQs or store snippets for re-use.</p>
+    </div>
+    <div class="comment-form__buttons mb-4">
+      <button type="submit" class="crayons-btn mr-2 js-btn-enable">Submit</button>
+      <button type="button" class="preview-toggle crayons-btn crayons-btn--secondary comment-action-preview js-btn-enable mr-2">Preview</button>
+      <a href="/404.html" class="dismiss-edit-comment crayons-btn crayons-btn--ghost js-btn-dismiss hidden">Dismiss</a>
+    </div>
+  </div>
+  </form>
+      <div class="comments" id="comment-trees-container">
+              <details class="comment-wrapper js-comment-wrapper comment-wrapper--deep-0 root">
+      <div id="comment-node-1449671" class="comment single-comment-node root comment--deep-0">
+    <div class="comment__inner">
+    <a href="https://dev.to/haribalaji_b" class="shrink-0 crayons-avatar m:crayons-avatar--l mt-4 m:mt-3">
+    <img class="crayons-avatar__image" src="https://media2.dev.to/dynamic/image/width=50,height=50,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Fuser%2Fprofile_image%2F829424%2Fd0f425fe-b5a7-4c2f-9f9e-9a82c14392c1.png" alt="haribalaji_b profile image">
+  </a>
+  <div class="comment__content crayons-card">
+        <div class="comment__header">
+  <a href="https://dev.to/haribalaji_b" class="crayons-link crayons-link--secondary flex items-center fw-medium m:hidden">
+    <span class="js-comment-username">
+      hari balaji
+    </span>
+  </a>
+  <div class="profile-preview-card relative mb-4 s:mb-0 fw-medium hidden m:block">
+    <button id="comment-profile-preview-trigger-1449671" class="profile-preview-card__trigger p-1 -my-1 -ml-1 crayons-btn crayons-btn--ghost">
+      hari balaji
+    </button>
+    <div class="gap-4 grid">
+        <a href="/haribalaji_b" class="flex">
+    <img src="https://media2.dev.to/dynamic/image/width=90,height=90,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Fuser%2Fprofile_image%2F829424%2Fd0f425fe-b5a7-4c2f-9f9e-9a82c14392c1.png" class="crayons-avatar__image" alt="">
+    <span class="crayons-link crayons-subtitle-2 mt-5">
+      hari balaji
+    </span>
+  </a>
+<button name="button" type="button" class="crayons-btn follow-action-button whitespace-nowrap w-100 follow-user">Follow</button>
+  <ul class="user-metadata-details-inner">
+          <li>
+            <div class="key">
+              Work
+            </div>
+            <div class="value">
+              Freshworks
+            </div>
+          </li>
+      <li>
+        <div class="key">
+          Joined
+        </div>
+        <time datetime="2022-03-12T02:57:29Z" class="date">Mar 12, 2022</time>
+      </li>
+    </ul>
+    </div>
+  </div>
+  <span class="color-base-30 px-2 m:pl-0">•</span>
+<a href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e#comment-34ccf" class="comment-date crayons-link crayons-link--secondary fs-s">
+  <time datetime="2026-02-10T18:27:22Z" class="date-no-year">
+    Feb 10
+  </time>
+</a>
+  <div class="comment__dropdown">
+    <ul class="m-0">
+        <li><a href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e#comment-34ccf" class="crayons-link crayons-link--block permalink-copybtn">Copy link</a></li>
+        <li class="comment-actions hidden">
+              <button class="flex justify-between crayons-link crayons-link--block w-100 bg-transparent border-0 hide-comment">
+                Hide
+              </button>
+          </li>
+        </ul>
+  </div>
+</div>
+        <p>For those who are searching for the flag,<br>
+The flag name is "Experimental Web Platform features" <br>
+<a href="https://media2.dev.to/dynamic/image/width=800%2Cheight=%2Cfit=scale-down%2Cgravity=auto%2Cformat=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F3tyqhwykctm3m8fsb1c5.png" class="article-body-image-wrapper"><img src="https://media2.dev.to/dynamic/image/width=800%2Cheight=%2Cfit=scale-down%2Cgravity=auto%2Cformat=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F3tyqhwykctm3m8fsb1c5.png" alt=" "></a></p>
+    </div>
+</div>
+    <details class="comment-wrapper js-comment-wrapper comment-wrapper--deep-1 child">
+      <div id="comment-node-1452826" class="comment single-comment-node child comment--deep-1">
+    <div class="comment__inner">
+    <a href="https://dev.to/draganfill" class="shrink-0 crayons-avatar mt-4">
+    <img class="crayons-avatar__image" src="https://media2.dev.to/dynamic/image/width=50,height=50,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Fuser%2Fprofile_image%2F30756%2F92497349-c9c2-41cd-941c-1e48dbde4c09.png" alt="draganfill profile image">
+  </a>
+  <div class="comment__content crayons-card">
+        <div class="comment__header">
+  <a href="https://dev.to/draganfill" class="crayons-link crayons-link--secondary flex items-center fw-medium m:hidden">
+    <span class="js-comment-username">
+      Dragan Filipović
+    </span>
+  </a>
+  <div class="profile-preview-card relative mb-4 s:mb-0 fw-medium hidden m:block">
+    <button id="comment-profile-preview-trigger-1452826" class="profile-preview-card__trigger p-1 -my-1 -ml-1 crayons-btn crayons-btn--ghost">
+      Dragan Filipović
+    </button>
+    <div class="gap-4 grid">
+        <a href="/draganfill" class="flex">
+    <img src="https://media2.dev.to/dynamic/image/width=90,height=90,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Fuser%2Fprofile_image%2F30756%2F92497349-c9c2-41cd-941c-1e48dbde4c09.png" class="crayons-avatar__image" alt="">
+    <span class="crayons-link crayons-subtitle-2 mt-5">
+      Dragan Filipović
+    </span>
+  </a>
+<button name="button" type="button" class="crayons-btn follow-action-button whitespace-nowrap w-100 follow-user">Follow</button>
+  <ul class="user-metadata-details-inner">
+      <li>
+        <div class="key">
+          Joined
+        </div>
+        <time datetime="2017-08-22T23:01:20Z" class="date">Aug 22, 2017</time>
+      </li>
+    </ul>
+    </div>
+  </div>
+  <span class="color-base-30 px-2 m:pl-0">•</span>
+<a href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e#comment-34h3o" class="comment-date crayons-link crayons-link--secondary fs-s">
+  <time datetime="2026-02-15T16:10:53Z" class="date-no-year">
+    Feb 15
+  </time>
+</a>
+  <div class="comment__dropdown">
+    <ul class="m-0">
+        <li><a href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e#comment-34h3o" class="crayons-link crayons-link--block permalink-copybtn">Copy link</a></li>
+        <li class="comment-actions hidden">
+              <button class="flex justify-between crayons-link crayons-link--block w-100 bg-transparent border-0 hide-comment">
+                Hide
+              </button>
+          </li>
+        </ul>
+  </div>
+</div>
+        <div class="comment__body text-styles text-styles--secondary body">
+          <p>Strange, in Canary it has its own flag.<br>
+</p>
+<div class="highlight js-code-highlight">
+<pre class="highlight plaintext"><code>WebMCP for testing
+</code></pre>
+</div>
+<p><a href="https://media2.dev.to/dynamic/image/width=800%2Cheight=%2Cfit=scale-down%2Cgravity=auto%2Cformat=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2Fe784c2me6bc8kqdytxee.png" class="article-body-image-wrapper"><img src="https://media2.dev.to/dynamic/image/width=800%2Cheight=%2Cfit=scale-down%2Cgravity=auto%2Cformat=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2Fe784c2me6bc8kqdytxee.png" alt=" "></a></p>
+        </div>
+    </div>
+</div>
+  </div>
+    </details>
+    <details class="comment-wrapper js-comment-wrapper comment-wrapper--deep-1 child">
+      <div id="comment-node-1449742" class="comment single-comment-node child comment--deep-1">
+    <div class="comment__inner">
+    <a href="https://dev.to/axrisi" class="shrink-0 crayons-avatar mt-4">
+    <img class="crayons-avatar__image" src="https://media2.dev.to/dynamic/image/width=50,height=50,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Fuser%2Fprofile_image%2F3226798%2F0c0a8594-658c-4146-a639-8068ede85f67.jpg" alt="axrisi profile image">
+  </a>
+  <div class="comment__content crayons-card">
+        <div class="comment__header">
+  <a href="https://dev.to/axrisi" class="crayons-link crayons-link--secondary flex items-center fw-medium m:hidden">
+    <span class="js-comment-username">
+      Nikoloz Turazashvili (@axrisi)
+    </span>
+      </a>
+  <div class="profile-preview-card relative mb-4 s:mb-0 fw-medium hidden m:block">
+    <button id="comment-profile-preview-trigger-1449742" class="profile-preview-card__trigger p-1 -my-1 -ml-1 crayons-btn crayons-btn--ghost">
+      Nikoloz Turazashvili (@axrisi)
+      <a href="/++"><img alt="Subscriber" class="subscription-icon" src="https://assets.dev.to/assets/subscription-icon-805dfa7ac7dd660f07ed8d654877270825b07a92a03841aa99a1093bd00431b2.png"></a>
+    </button>
+    <div class="gap-4 grid">
+        <a href="/axrisi" class="flex">
+    <img src="https://media2.dev.to/dynamic/image/width=90,height=90,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Fuser%2Fprofile_image%2F3226798%2F0c0a8594-658c-4146-a639-8068ede85f67.jpg" class="crayons-avatar__image" alt="">
+    <span class="crayons-link crayons-subtitle-2 mt-5">
+      Nikoloz Turazashvili (@axrisi)
+      <img class="subscription-icon" src="https://assets.dev.to/assets/subscription-icon-805dfa7ac7dd660f07ed8d654877270825b07a92a03841aa99a1093bd00431b2.png">
+    </span>
+  </a>
+<button name="button" type="button" class="crayons-btn follow-action-button whitespace-nowrap w-100 follow-user">Follow</button>
+  <div class="color-base-70">
+    Founder &amp; CTO at Vexrail (www. vexrail.com), Axrisi (www.axrisi.com). Opened Chicos restaurant in Tbilisi, Georgia.
+  </div>
+  <ul class="user-metadata-details-inner">
+        <li>
+          <div class="key">
+            Email
+          </div>
+          <a href="mailto:turazashvili@gmail.com">turazashvili@gmail.com</a>
+        </li>
+        <li>
+          <div class="key">
+            Location
+          </div>
+          <div class="value">
+            Tbilisi, Georgia
+          </div>
+        </li>
+          <li>
+            <div class="key">
+              Education
+            </div>
+            <div class="value">
+              EXCELIA La Rochelle
+            </div>
+          </li>
+          <li>
+            <div class="key">
+              Pronouns
+            </div>
+            <div class="value">
+              He/Him
+            </div>
+          </li>
+          <li>
+            <div class="key">
+              Work
+            </div>
+            <div class="value">
+              Founder &amp; CTO at Vexrail, Axrisi and NikoLabs LLC
+            </div>
+          </li>
+      <li>
+        <div class="key">
+          Joined
+        </div>
+        <time datetime="2025-05-30T15:22:00Z" class="date">May 30, 2025</time>
+      </li>
+    </ul>
+    </div>
+      </div>
+  <span class="color-base-30 px-2 m:pl-0">•</span>
+<a href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e#comment-34cf8" class="comment-date crayons-link crayons-link--secondary fs-s">
+  <time datetime="2026-02-10T21:57:54Z" class="date-no-year">
+    Feb 10
+  </time>
+</a>
+  <div class="comment__dropdown">
+    <ul class="m-0">
+        <li><a href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e#comment-34cf8" class="crayons-link crayons-link--block permalink-copybtn">Copy link</a></li>
+        <li class="comment-actions hidden">
+              <button class="flex justify-between crayons-link crayons-link--block w-100 bg-transparent border-0 hide-comment">
+                Hide
+              </button>
+          </li>
+        </ul>
+  </div>
+</div>
+        <p>I thought it's only on Canary build. Is this in prod chrome version?</p>
+    </div>
+</div>
+    <details class="comment-wrapper js-comment-wrapper comment-wrapper--deep-2 child">
+      <div id="comment-node-1453593" class="comment single-comment-node child comment--deep-2">
+    <div class="comment__inner">
+    <a href="https://dev.to/haribalaji_b" class="shrink-0 crayons-avatar mt-4">
+    <img class="crayons-avatar__image" src="https://media2.dev.to/dynamic/image/width=50,height=50,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Fuser%2Fprofile_image%2F829424%2Fd0f425fe-b5a7-4c2f-9f9e-9a82c14392c1.png" alt="haribalaji_b profile image">
+  </a>
+  <div class="comment__content crayons-card">
+        <div class="comment__header">
+  <a href="https://dev.to/haribalaji_b" class="crayons-link crayons-link--secondary flex items-center fw-medium m:hidden">
+    <span class="js-comment-username">
+      hari balaji
+    </span>
+  </a>
+  <div class="profile-preview-card relative mb-4 s:mb-0 fw-medium hidden m:block">
+    <button id="comment-profile-preview-trigger-1453593" class="profile-preview-card__trigger p-1 -my-1 -ml-1 crayons-btn crayons-btn--ghost">
+      hari balaji
+    </button>
+    <div class="gap-4 grid">
+        <a href="/haribalaji_b" class="flex">
+    <img src="https://media2.dev.to/dynamic/image/width=90,height=90,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Fuser%2Fprofile_image%2F829424%2Fd0f425fe-b5a7-4c2f-9f9e-9a82c14392c1.png" class="crayons-avatar__image" alt="">
+    <span class="crayons-link crayons-subtitle-2 mt-5">
+      hari balaji
+    </span>
+  </a>
+<button name="button" type="button" class="crayons-btn follow-action-button whitespace-nowrap w-100 follow-user">Follow</button>
+  <ul class="user-metadata-details-inner">
+          <li>
+            <div class="key">
+              Work
+            </div>
+            <div class="value">
+              Freshworks
+            </div>
+          </li>
+      <li>
+        <div class="key">
+          Joined
+        </div>
+        <time datetime="2022-03-12T02:57:29Z" class="date">Mar 12, 2022</time>
+      </li>
+    </ul>
+    </div>
+  </div>
+  <span class="color-base-30 px-2 m:pl-0">•</span>
+<a href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e#comment-34i7b" class="comment-date crayons-link crayons-link--secondary fs-s">
+  <time datetime="2026-02-16T18:21:09Z" class="date-no-year">
+    Feb 16
+  </time>
+</a>
+  <div class="comment__dropdown">
+    <ul class="m-0">
+        <li><a href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e#comment-34i7b" class="crayons-link crayons-link--block permalink-copybtn">Copy link</a></li>
+        <li class="comment-actions hidden">
+              <button class="flex justify-between crayons-link crayons-link--block w-100 bg-transparent border-0 hide-comment">
+                Hide
+              </button>
+          </li>
+        </ul>
+  </div>
+</div>
+        <p>The screenshot i shared is from canary.</p>
+    </div>
+</div>
+  </div>
+    </details>
+  </div>
+    </details>
+  </div>
+    </details>
+    <details class="comment-wrapper js-comment-wrapper comment-wrapper--deep-0 root">
+      <div id="comment-node-1449340" class="comment single-comment-node root comment--deep-0">
+    <div class="comment__inner">
+    <a href="https://dev.to/anmolbaranwal" class="shrink-0 crayons-avatar m:crayons-avatar--l mt-4 m:mt-3">
+    <img class="crayons-avatar__image" src="https://media2.dev.to/dynamic/image/width=50,height=50,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Fuser%2Fprofile_image%2F950976%2F69363f37-b7c5-4f1e-a2fe-29b4e4e33e92.png" alt="anmolbaranwal profile image">
+  </a>
+  <div class="comment__content crayons-card">
+        <div class="comment__header">
+  <a href="https://dev.to/anmolbaranwal" class="crayons-link crayons-link--secondary flex items-center fw-medium m:hidden">
+    <span class="js-comment-username">
+      Anmol Baranwal
+    </span>
+  </a>
+  <div class="profile-preview-card relative mb-4 s:mb-0 fw-medium hidden m:block">
+    <button id="comment-profile-preview-trigger-1449340" class="profile-preview-card__trigger p-1 -my-1 -ml-1 crayons-btn crayons-btn--ghost">
+      Anmol Baranwal
+      <a href="/++"><img alt="Subscriber" class="subscription-icon" src="https://assets.dev.to/assets/subscription-icon-805dfa7ac7dd660f07ed8d654877270825b07a92a03841aa99a1093bd00431b2.png"></a>
+    </button>
+    <div class="gap-4 grid">
+        <a href="/anmolbaranwal" class="flex">
+    <img src="https://media2.dev.to/dynamic/image/width=90,height=90,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Fuser%2Fprofile_image%2F950976%2F69363f37-b7c5-4f1e-a2fe-29b4e4e33e92.png" class="crayons-avatar__image" alt="">
+    <span class="crayons-link crayons-subtitle-2 mt-5">
+      Anmol Baranwal
+      <img class="subscription-icon" src="https://assets.dev.to/assets/subscription-icon-805dfa7ac7dd660f07ed8d654877270825b07a92a03841aa99a1093bd00431b2.png">
+    </span>
+  </a>
+<button name="button" type="button" class="crayons-btn follow-action-button whitespace-nowrap w-100 follow-user">Follow</button>
+  <div class="color-base-70">
+    Just a tech guy who loves writing about technical stuff (1.5M+ reads) 
+Open Source developer • Email for collab
+  </div>
+  <ul class="user-metadata-details-inner">
+        <li>
+          <div class="key">
+            Email
+          </div>
+          <a href="mailto:hi@anmolbaranwal.com">hi@anmolbaranwal.com</a>
+        </li>
+        <li>
+          <div class="key">
+            Location
+          </div>
+          <div class="value">
+            India
+          </div>
+        </li>
+          <li>
+            <div class="key">
+              Education
+            </div>
+            <div class="value">
+              Computer Science
+            </div>
+          </li>
+          <li>
+            <div class="key">
+              Work
+            </div>
+            <div class="value">
+              Technical Writer - open to opportunities
+            </div>
+          </li>
+      <li>
+        <div class="key">
+          Joined
+        </div>
+        <time datetime="2022-10-21T08:05:40Z" class="date">Oct 21, 2022</time>
+      </li>
+    </ul>
+    </div>
+  </div>
+  <span class="color-base-30 px-2 m:pl-0">•</span>
+<a href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e#comment-34bpm" class="comment-date crayons-link crayons-link--secondary fs-s">
+  <time datetime="2026-02-10T08:19:23Z" class="date-no-year">
+    Feb 10
+  </time>
+</a>
+  <div class="comment__dropdown">
+    <ul class="m-0">
+        <li><a href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e#comment-34bpm" class="crayons-link crayons-link--block permalink-copybtn">Copy link</a></li>
+        <li class="comment-actions hidden">
+              <button class="flex justify-between crayons-link crayons-link--block w-100 bg-transparent border-0 hide-comment">
+                Hide
+              </button>
+          </li>
+        </ul>
+  </div>
+</div>
+        <p>didn't know about this. let me dive a little over the weekend. have you tried any agents that run in the browser (using this pattern). I know a couple of frameworks but never tried it.</p>
+    </div>
+</div>
+    <details class="comment-wrapper js-comment-wrapper comment-wrapper--deep-1 child">
+      <div id="comment-node-1449741" class="comment single-comment-node child comment--deep-1">
+    <div class="comment__inner">
+    <a href="https://dev.to/axrisi" class="shrink-0 crayons-avatar mt-4">
+    <img class="crayons-avatar__image" src="https://media2.dev.to/dynamic/image/width=50,height=50,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Fuser%2Fprofile_image%2F3226798%2F0c0a8594-658c-4146-a639-8068ede85f67.jpg" alt="axrisi profile image">
+  </a>
+  <div class="comment__content crayons-card">
+        <div class="comment__header">
+  <a href="https://dev.to/axrisi" class="crayons-link crayons-link--secondary flex items-center fw-medium m:hidden">
+    <span class="js-comment-username">
+      Nikoloz Turazashvili (@axrisi)
+    </span>
+      </a>
+  <div class="profile-preview-card relative mb-4 s:mb-0 fw-medium hidden m:block">
+    <button id="comment-profile-preview-trigger-1449741" class="profile-preview-card__trigger p-1 -my-1 -ml-1 crayons-btn crayons-btn--ghost">
+      Nikoloz Turazashvili (@axrisi)
+      <a href="/++"><img alt="Subscriber" class="subscription-icon" src="https://assets.dev.to/assets/subscription-icon-805dfa7ac7dd660f07ed8d654877270825b07a92a03841aa99a1093bd00431b2.png"></a>
+    </button>
+    <div class="gap-4 grid">
+        <a href="/axrisi" class="flex">
+    <img src="https://media2.dev.to/dynamic/image/width=90,height=90,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Fuser%2Fprofile_image%2F3226798%2F0c0a8594-658c-4146-a639-8068ede85f67.jpg" class="crayons-avatar__image" alt="">
+    <span class="crayons-link crayons-subtitle-2 mt-5">
+      Nikoloz Turazashvili (@axrisi)
+      <img class="subscription-icon" src="https://assets.dev.to/assets/subscription-icon-805dfa7ac7dd660f07ed8d654877270825b07a92a03841aa99a1093bd00431b2.png">
+    </span>
+  </a>
+<button name="button" type="button" class="crayons-btn follow-action-button whitespace-nowrap w-100 follow-user">Follow</button>
+  <div class="color-base-70">
+    Founder &amp; CTO at Vexrail (www. vexrail.com), Axrisi (www.axrisi.com). Opened Chicos restaurant in Tbilisi, Georgia.
+  </div>
+  <ul class="user-metadata-details-inner">
+        <li>
+          <div class="key">
+            Email
+          </div>
+          <a href="mailto:turazashvili@gmail.com">turazashvili@gmail.com</a>
+        </li>
+        <li>
+          <div class="key">
+            Location
+          </div>
+          <div class="value">
+            Tbilisi, Georgia
+          </div>
+        </li>
+          <li>
+            <div class="key">
+              Education
+            </div>
+            <div class="value">
+              EXCELIA La Rochelle
+            </div>
+          </li>
+          <li>
+            <div class="key">
+              Pronouns
+            </div>
+            <div class="value">
+              He/Him
+            </div>
+          </li>
+          <li>
+            <div class="key">
+              Work
+            </div>
+            <div class="value">
+              Founder &amp; CTO at Vexrail, Axrisi and NikoLabs LLC
+            </div>
+          </li>
+      <li>
+        <div class="key">
+          Joined
+        </div>
+        <time datetime="2025-05-30T15:22:00Z" class="date">May 30, 2025</time>
+      </li>
+    </ul>
+    </div>
+      </div>
+  <span class="color-base-30 px-2 m:pl-0">•</span>
+<a href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e#comment-34cf7" class="comment-date crayons-link crayons-link--secondary fs-s">
+  <time datetime="2026-02-10T21:57:03Z" class="date-no-year">
+    Feb 10
+  </time>
+</a>
+  <div class="comment__dropdown">
+    <ul class="m-0">
+        <li><a href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e#comment-34cf7" class="crayons-link crayons-link--block permalink-copybtn">Copy link</a></li>
+        <li class="comment-actions hidden">
+              <button class="flex justify-between crayons-link crayons-link--block w-100 bg-transparent border-0 hide-comment">
+                Hide
+              </button>
+          </li>
+        </ul>
+  </div>
+</div>
+        <p>I have tried only the demo website for plane tickets that is described in the article. Haven't seen any other demos. Drop here if you find them</p>
+    </div>
+</div>
+    <details class="comment-wrapper js-comment-wrapper comment-wrapper--deep-2 child">
+      <div id="comment-node-1450023" class="comment single-comment-node child comment--deep-2">
+    <div class="comment__inner">
+    <a href="https://dev.to/anmolbaranwal" class="shrink-0 crayons-avatar mt-4">
+    <img class="crayons-avatar__image" src="https://media2.dev.to/dynamic/image/width=50,height=50,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Fuser%2Fprofile_image%2F950976%2F69363f37-b7c5-4f1e-a2fe-29b4e4e33e92.png" alt="anmolbaranwal profile image">
+  </a>
+  <div class="comment__content crayons-card">
+        <div class="comment__header">
+  <a href="https://dev.to/anmolbaranwal" class="crayons-link crayons-link--secondary flex items-center fw-medium m:hidden">
+    <span class="js-comment-username">
+      Anmol Baranwal
+    </span>
+  </a>
+  <div class="profile-preview-card relative mb-4 s:mb-0 fw-medium hidden m:block">
+    <button id="comment-profile-preview-trigger-1450023" class="profile-preview-card__trigger p-1 -my-1 -ml-1 crayons-btn crayons-btn--ghost">
+      Anmol Baranwal
+      <a href="/++"><img alt="Subscriber" class="subscription-icon" src="https://assets.dev.to/assets/subscription-icon-805dfa7ac7dd660f07ed8d654877270825b07a92a03841aa99a1093bd00431b2.png"></a>
+    </button>
+    <div class="gap-4 grid">
+        <a href="/anmolbaranwal" class="flex">
+    <img src="https://media2.dev.to/dynamic/image/width=90,height=90,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Fuser%2Fprofile_image%2F950976%2F69363f37-b7c5-4f1e-a2fe-29b4e4e33e92.png" class="crayons-avatar__image" alt="">
+    <span class="crayons-link crayons-subtitle-2 mt-5">
+      Anmol Baranwal
+      <img class="subscription-icon" src="https://assets.dev.to/assets/subscription-icon-805dfa7ac7dd660f07ed8d654877270825b07a92a03841aa99a1093bd00431b2.png">
+    </span>
+  </a>
+<button name="button" type="button" class="crayons-btn follow-action-button whitespace-nowrap w-100 follow-user">Follow</button>
+  <div class="color-base-70">
+    Just a tech guy who loves writing about technical stuff (1.5M+ reads) 
+Open Source developer • Email for collab
+  </div>
+  <ul class="user-metadata-details-inner">
+        <li>
+          <div class="key">
+            Email
+          </div>
+          <a href="mailto:hi@anmolbaranwal.com">hi@anmolbaranwal.com</a>
+        </li>
+        <li>
+          <div class="key">
+            Location
+          </div>
+          <div class="value">
+            India
+          </div>
+        </li>
+          <li>
+            <div class="key">
+              Education
+            </div>
+            <div class="value">
+              Computer Science
+            </div>
+          </li>
+          <li>
+            <div class="key">
+              Work
+            </div>
+            <div class="value">
+              Technical Writer - open to opportunities
+            </div>
+          </li>
+      <li>
+        <div class="key">
+          Joined
+        </div>
+        <time datetime="2022-10-21T08:05:40Z" class="date">Oct 21, 2022</time>
+      </li>
+    </ul>
+    </div>
+  </div>
+  <span class="color-base-30 px-2 m:pl-0">•</span>
+<a href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e#comment-34d03" class="comment-date crayons-link crayons-link--secondary fs-s">
+  <time datetime="2026-02-11T09:43:15Z" class="date-no-year">
+    Feb 11
+  </time>
+</a>
+  <div class="comment__dropdown">
+    <ul class="m-0">
+        <li><a href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e#comment-34d03" class="crayons-link crayons-link--block permalink-copybtn">Copy link</a></li>
+        <li class="comment-actions hidden">
+              <button class="flex justify-between crayons-link crayons-link--block w-100 bg-transparent border-0 hide-comment">
+                Hide
+              </button>
+          </li>
+        </ul>
+  </div>
+</div>
+        <p>the values on the demo is hardcoded (which you only see after trying a random query) and still it doesn't work for me somehow. Maybe it's happening because I didn't enable the flag.</p>
+    </div>
+</div>
+  <div id="comment-node-1450027" class="comment single-comment-node child comment--deep-3">
+    <div class="comment__inner">
+    <a href="https://dev.to/axrisi" class="shrink-0 crayons-avatar mt-4">
+    <img class="crayons-avatar__image" src="https://media2.dev.to/dynamic/image/width=50,height=50,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Fuser%2Fprofile_image%2F3226798%2F0c0a8594-658c-4146-a639-8068ede85f67.jpg" alt="axrisi profile image">
+  </a>
+  <div class="comment__content crayons-card">
+        <div class="comment__header">
+  <a href="https://dev.to/axrisi" class="crayons-link crayons-link--secondary flex items-center fw-medium m:hidden">
+    <span class="js-comment-username">
+      Nikoloz Turazashvili (@axrisi)
+    </span>
+      </a>
+  <div class="profile-preview-card relative mb-4 s:mb-0 fw-medium hidden m:block">
+    <button id="comment-profile-preview-trigger-1450027" class="profile-preview-card__trigger p-1 -my-1 -ml-1 crayons-btn crayons-btn--ghost">
+      Nikoloz Turazashvili (@axrisi)
+      <a href="/++"><img alt="Subscriber" class="subscription-icon" src="https://assets.dev.to/assets/subscription-icon-805dfa7ac7dd660f07ed8d654877270825b07a92a03841aa99a1093bd00431b2.png"></a>
+    </button>
+    <div class="gap-4 grid">
+        <a href="/axrisi" class="flex">
+    <img src="https://media2.dev.to/dynamic/image/width=90,height=90,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Fuser%2Fprofile_image%2F3226798%2F0c0a8594-658c-4146-a639-8068ede85f67.jpg" class="crayons-avatar__image" alt="">
+    <span class="crayons-link crayons-subtitle-2 mt-5">
+      Nikoloz Turazashvili (@axrisi)
+      <img class="subscription-icon" src="https://assets.dev.to/assets/subscription-icon-805dfa7ac7dd660f07ed8d654877270825b07a92a03841aa99a1093bd00431b2.png">
+    </span>
+  </a>
+<button name="button" type="button" class="crayons-btn follow-action-button whitespace-nowrap w-100 follow-user">Follow</button>
+  <div class="color-base-70">
+    Founder &amp; CTO at Vexrail (www. vexrail.com), Axrisi (www.axrisi.com). Opened Chicos restaurant in Tbilisi, Georgia.
+  </div>
+  <ul class="user-metadata-details-inner">
+        <li>
+          <div class="key">
+            Email
+          </div>
+          <a href="mailto:turazashvili@gmail.com">turazashvili@gmail.com</a>
+        </li>
+        <li>
+          <div class="key">
+            Location
+          </div>
+          <div class="value">
+            Tbilisi, Georgia
+          </div>
+        </li>
+          <li>
+            <div class="key">
+              Education
+            </div>
+            <div class="value">
+              EXCELIA La Rochelle
+            </div>
+          </li>
+          <li>
+            <div class="key">
+              Pronouns
+            </div>
+            <div class="value">
+              He/Him
+            </div>
+          </li>
+          <li>
+            <div class="key">
+              Work
+            </div>
+            <div class="value">
+              Founder &amp; CTO at Vexrail, Axrisi and NikoLabs LLC
+            </div>
+          </li>
+      <li>
+        <div class="key">
+          Joined
+        </div>
+        <time datetime="2025-05-30T15:22:00Z" class="date">May 30, 2025</time>
+      </li>
+    </ul>
+    </div>
+      </div>
+  <span class="color-base-30 px-2 m:pl-0">•</span>
+<a href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e#comment-34d07" class="comment-date crayons-link crayons-link--secondary fs-s">
+  <time datetime="2026-02-11T09:47:12Z" class="date-no-year">
+    Feb 11
+  </time>
+</a>
+  <div class="comment__dropdown">
+    <ul class="m-0">
+        <li><a href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e#comment-34d07" class="crayons-link crayons-link--block permalink-copybtn">Copy link</a></li>
+        <li class="comment-actions hidden">
+              <button class="flex justify-between crayons-link crayons-link--block w-100 bg-transparent border-0 hide-comment">
+                Hide
+              </button>
+          </li>
+        </ul>
+  </div>
+</div>
+        <div class="comment__body text-styles text-styles--secondary body">
+          <p>They are hardcoded, but it doesn't really matter. AI agent called the Tool. it doesn't matter if it didn't find actual tickets. </p>
+<p>But for sure you need to enable the flag. for me hardest was to find the right channel that has the right chrome version. I installed all of them, Beta, Dev, Canary. haha. worked on Canary!</p>
+        </div>
+    </div>
+</div>
+  </div>
+  </div>
+    </details>
+  </div>
+    </details>
+  </div>
+    </details>
+    <details class="comment-wrapper js-comment-wrapper comment-wrapper--deep-0 root">
+      <div id="comment-node-1451066" class="comment single-comment-node root comment--deep-0">
+    <div class="comment__inner">
+    <a href="https://dev.to/nedcodes" class="shrink-0 crayons-avatar m:crayons-avatar--l mt-4 m:mt-3">
+    <img class="crayons-avatar__image" src="https://media2.dev.to/dynamic/image/width=50,height=50,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Fuser%2Fprofile_image%2F3765244%2F0d6184b8-d8bb-4f0d-a0ae-2190f562f9f6.png" alt="nedcodes profile image">
+  </a>
+  <div class="comment__content crayons-card">
+        <div class="comment__header">
+  <a href="https://dev.to/nedcodes" class="crayons-link crayons-link--secondary flex items-center fw-medium m:hidden">
+    <span class="js-comment-username">
+      Ned C
+    </span>
+  </a>
+  <div class="profile-preview-card relative mb-4 s:mb-0 fw-medium hidden m:block">
+    <button id="comment-profile-preview-trigger-1451066" class="profile-preview-card__trigger p-1 -my-1 -ml-1 crayons-btn crayons-btn--ghost">
+      Ned C
+    </button>
+    <div class="gap-4 grid">
+        <a href="/nedcodes" class="flex">
+    <img src="https://media2.dev.to/dynamic/image/width=90,height=90,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Fuser%2Fprofile_image%2F3765244%2F0d6184b8-d8bb-4f0d-a0ae-2190f562f9f6.png" class="crayons-avatar__image" alt="">
+    <span class="crayons-link crayons-subtitle-2 mt-5">
+      Ned C
+    </span>
+  </a>
+<button name="button" type="button" class="crayons-btn follow-action-button whitespace-nowrap w-100 follow-user">Follow</button>
+  <div class="color-base-70">
+    Building open-source tools for Cursor AI developers: cursor-doctor, rule-gen, rule-porter. I test how Cursor handles rules and publish the results.
+  </div>
+  <ul class="user-metadata-details-inner">
+        <li>
+          <div class="key">
+            Email
+          </div>
+          <a href="mailto:hello@nedcodes.dev">hello@nedcodes.dev</a>
+        </li>
+        <li>
+          <div class="key">
+            Location
+          </div>
+          <div class="value">
+            Denver, CO
+          </div>
+        </li>
+          <li>
+            <div class="key">
+              Pronouns
+            </div>
+            <div class="value">
+              He/him
+            </div>
+          </li>
+          <li>
+            <div class="key">
+              Work
+            </div>
+            <div class="value">
+              Freelance fullstack developer
+            </div>
+          </li>
+      <li>
+        <div class="key">
+          Joined
+        </div>
+        <time datetime="2026-02-11T01:18:07Z" class="date">Feb 11, 2026</time>
+      </li>
+    </ul>
+    </div>
+  </div>
+  <span class="color-base-30 px-2 m:pl-0">•</span>
+<a href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e#comment-34ee6" class="comment-date crayons-link crayons-link--secondary fs-s">
+  <time datetime="2026-02-12T16:42:35Z" class="date-no-year">
+    Feb 12
+  </time>
+</a>
+  <div class="comment__dropdown">
+    <ul class="m-0">
+        <li><a href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e#comment-34ee6" class="crayons-link crayons-link--block permalink-copybtn">Copy link</a></li>
+        <li class="comment-actions hidden">
+              <button class="flex justify-between crayons-link crayons-link--block w-100 bg-transparent border-0 hide-comment">
+                Hide
+              </button>
+          </li>
+        </ul>
+  </div>
+</div>
+        <div class="comment__body text-styles text-styles--secondary body">
+          <p>This is really interesting. The "publish tools, not pixels" framing nails it.</p>
+<p>The parallel to how we handle AI coding tools is striking. Right now with Cursor and similar tools, we give the AI context through rules files and documentation instead of letting it guess from the code. WebMCP is basically the same idea applied to browsers - give the agent structured context instead of making it reverse-engineer the UI.</p>
+<p>The adoption challenge is real though. Getting websites to voluntarily expose structured APIs for agents to use is a chicken-and-egg problem. Sites won't add WebMCP until agents use it, and agents won't prioritize it until sites support it.</p>
+        </div>
+    </div>
+</div>
+  </div>
+    </details>
+    <details class="comment-wrapper js-comment-wrapper comment-wrapper--deep-0 root">
+      <div id="comment-node-1453006" class="comment single-comment-node root comment--deep-0">
+    <div class="comment__inner">
+    <a href="https://dev.to/netsi1964" class="shrink-0 crayons-avatar m:crayons-avatar--l mt-4 m:mt-3">
+    <img class="crayons-avatar__image" src="https://media2.dev.to/dynamic/image/width=50,height=50,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Fuser%2Fprofile_image%2F137308%2F2e48a9bb-5c27-47f7-b80d-3c4b9af09d6e.jpg" alt="netsi1964 profile image">
+  </a>
+  <div class="comment__content crayons-card">
+        <div class="comment__header">
+  <a href="https://dev.to/netsi1964" class="crayons-link crayons-link--secondary flex items-center fw-medium m:hidden">
+    <span class="js-comment-username">
+      netsi1964 🙏🏻
+    </span>
+  </a>
+  <div class="profile-preview-card relative mb-4 s:mb-0 fw-medium hidden m:block">
+    <button id="comment-profile-preview-trigger-1453006" class="profile-preview-card__trigger p-1 -my-1 -ml-1 crayons-btn crayons-btn--ghost">
+      netsi1964 🙏🏻
+    </button>
+    <div class="gap-4 grid">
+        <a href="/netsi1964" class="flex">
+    <img src="https://media2.dev.to/dynamic/image/width=90,height=90,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Fuser%2Fprofile_image%2F137308%2F2e48a9bb-5c27-47f7-b80d-3c4b9af09d6e.jpg" class="crayons-avatar__image" alt="">
+    <span class="crayons-link crayons-subtitle-2 mt-5">
+      netsi1964 🙏🏻
+    </span>
+  </a>
+<button name="button" type="button" class="crayons-btn follow-action-button whitespace-nowrap w-100 follow-user">Follow</button>
+  <div class="color-base-70">
+    I am a front-end developer
+  </div>
+  <ul class="user-metadata-details-inner">
+        <li>
+          <div class="key">
+            Location
+          </div>
+          <div class="value">
+            Aarhus, Denmark
+          </div>
+        </li>
+          <li>
+            <div class="key">
+              Work
+            </div>
+            <div class="value">
+              Front-end developer at Trifork A/S
+            </div>
+          </li>
+      <li>
+        <div class="key">
+          Joined
+        </div>
+        <time datetime="2019-02-17T19:51:27Z" class="date">Feb 17, 2019</time>
+      </li>
+    </ul>
+    </div>
+  </div>
+  <span class="color-base-30 px-2 m:pl-0">•</span>
+<a href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e#comment-34ham" class="comment-date crayons-link crayons-link--secondary fs-s">
+  <time datetime="2026-02-15T23:24:27Z" class="date-no-year">
+    Feb 15
+  </time>
+</a>
+  <div class="comment__dropdown">
+    <ul class="m-0">
+        <li><a href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e#comment-34ham" class="crayons-link crayons-link--block permalink-copybtn">Copy link</a></li>
+        <li class="comment-actions hidden">
+              <button class="flex justify-between crayons-link crayons-link--block w-100 bg-transparent border-0 hide-comment">
+                Hide
+              </button>
+          </li>
+        </ul>
+  </div>
+</div>
+        <p>Thank you for sharing - I made a demo here: <a href="https://www.netsi.dk/experiments/webMCP.html">netsi.dk/experiments/webMCP.html</a></p>
+    </div>
+</div>
+    <details class="comment-wrapper js-comment-wrapper comment-wrapper--deep-1 child">
+      <div id="comment-node-1453007" class="comment single-comment-node child comment--deep-1">
+    <div class="comment__inner">
+    <a href="https://dev.to/axrisi" class="shrink-0 crayons-avatar mt-4">
+    <img class="crayons-avatar__image" src="https://media2.dev.to/dynamic/image/width=50,height=50,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Fuser%2Fprofile_image%2F3226798%2F0c0a8594-658c-4146-a639-8068ede85f67.jpg" alt="axrisi profile image">
+  </a>
+  <div class="comment__content crayons-card">
+        <div class="comment__header">
+  <a href="https://dev.to/axrisi" class="crayons-link crayons-link--secondary flex items-center fw-medium m:hidden">
+    <span class="js-comment-username">
+      Nikoloz Turazashvili (@axrisi)
+    </span>
+      </a>
+  <div class="profile-preview-card relative mb-4 s:mb-0 fw-medium hidden m:block">
+    <button id="comment-profile-preview-trigger-1453007" class="profile-preview-card__trigger p-1 -my-1 -ml-1 crayons-btn crayons-btn--ghost">
+      Nikoloz Turazashvili (@axrisi)
+      <a href="/++"><img alt="Subscriber" class="subscription-icon" src="https://assets.dev.to/assets/subscription-icon-805dfa7ac7dd660f07ed8d654877270825b07a92a03841aa99a1093bd00431b2.png"></a>
+    </button>
+    <div class="gap-4 grid">
+        <a href="/axrisi" class="flex">
+    <img src="https://media2.dev.to/dynamic/image/width=90,height=90,fit=cover,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Fuser%2Fprofile_image%2F3226798%2F0c0a8594-658c-4146-a639-8068ede85f67.jpg" class="crayons-avatar__image" alt="">
+    <span class="crayons-link crayons-subtitle-2 mt-5">
+      Nikoloz Turazashvili (@axrisi)
+      <img class="subscription-icon" src="https://assets.dev.to/assets/subscription-icon-805dfa7ac7dd660f07ed8d654877270825b07a92a03841aa99a1093bd00431b2.png">
+    </span>
+  </a>
+<button name="button" type="button" class="crayons-btn follow-action-button whitespace-nowrap w-100 follow-user">Follow</button>
+  <div class="color-base-70">
+    Founder &amp; CTO at Vexrail (www. vexrail.com), Axrisi (www.axrisi.com). Opened Chicos restaurant in Tbilisi, Georgia.
+  </div>
+  <ul class="user-metadata-details-inner">
+        <li>
+          <div class="key">
+            Email
+          </div>
+          <a href="mailto:turazashvili@gmail.com">turazashvili@gmail.com</a>
+        </li>
+        <li>
+          <div class="key">
+            Location
+          </div>
+          <div class="value">
+            Tbilisi, Georgia
+          </div>
+        </li>
+          <li>
+            <div class="key">
+              Education
+            </div>
+            <div class="value">
+              EXCELIA La Rochelle
+            </div>
+          </li>
+          <li>
+            <div class="key">
+              Pronouns
+            </div>
+            <div class="value">
+              He/Him
+            </div>
+          </li>
+          <li>
+            <div class="key">
+              Work
+            </div>
+            <div class="value">
+              Founder &amp; CTO at Vexrail, Axrisi and NikoLabs LLC
+            </div>
+          </li>
+      <li>
+        <div class="key">
+          Joined
+        </div>
+        <time datetime="2025-05-30T15:22:00Z" class="date">May 30, 2025</time>
+      </li>
+    </ul>
+    </div>
+      </div>
+  <span class="color-base-30 px-2 m:pl-0">•</span>
+<a href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e#comment-34han" class="comment-date crayons-link crayons-link--secondary fs-s">
+  <time datetime="2026-02-15T23:31:00Z" class="date-no-year">
+    Feb 15
+  </time>
+</a>
+  <div class="comment__dropdown">
+    <ul class="m-0">
+        <li><a href="https://dev.to/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e#comment-34han" class="crayons-link crayons-link--block permalink-copybtn">Copy link</a></li>
+        <li class="comment-actions hidden">
+              <button class="flex justify-between crayons-link crayons-link--block w-100 bg-transparent border-0 hide-comment">
+                Hide
+              </button>
+          </li>
+        </ul>
+  </div>
+</div>
+        <div class="comment__body text-styles text-styles--secondary body">
+          <p>Works like a charm! <br>
+Good one! Really liked it.</p>
+<p><a href="https://media2.dev.to/dynamic/image/width=800%2Cheight=%2Cfit=scale-down%2Cgravity=auto%2Cformat=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F595v2q8y6d538gn0e451.png" class="article-body-image-wrapper"><img src="https://media2.dev.to/dynamic/image/width=800%2Cheight=%2Cfit=scale-down%2Cgravity=auto%2Cformat=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F595v2q8y6d538gn0e451.png" alt=" "></a></p>
+        </div>
+    </div>
+</div>
+  </div>
+    </details>
+  </div>
+    </details>
+      </div>
+    </div>
+    <div class="align-center">
+    <a class="crayons-btn crayons-btn--secondary w-100" href="/axrisi/chromes-webmcp-early-preview-the-end-of-ai-agents-clicking-buttons-b6e/comments">
+        View full discussion (11 comments)
+      </a>
+    <p class="fs-s color-base-60 mb-4">
+      Some comments may only be visible to logged-in visitors. <a href="/enter">Sign in</a> to view all comments.
+    </p>
+</div>
+</section>
+<div id="hide-comments-modal" class="hidden">
+  <form id="hide-comments-modal__form" class="hide-comments-modal__form"><input name="utf8" type="hidden"><input type="hidden" name="_method"><input type="hidden" name="authenticity_token">
+    <div class="hide-comments-modal__content">
+      <p class="pb-2">
+        Are you sure you want to hide this comment? It will become hidden in your post, but will still be visible via the comment's <a id="hide-comments-modal__comment-permalink" href="#">permalink</a>.
+      </p>
+      <label class="crayons-field crayons-field--checkbox my-2">
+        <input name="hide_children" type="hidden"><input class="hide_children crayons-checkbox" type="checkbox" name="hide_children" id="hide_children">
+        <p class="crayons-field__label">Hide child comments as well</p>
+      </label>
+      <p class="pb-4 pt-2">
+        <button type="submit" class="crayons-btn">
+          Confirm
+        </button>
+      </p>
+    </div>
+</form>  <p class="fs-s color-base-60">For further actions, you may consider blocking this person and/or <a id="hide-comments-modal__report-link" href="/report-abuse">reporting abuse</a></p>
+</div>
+        </article>
+        </div>
+    </main>
+  </div>
+<div class="authentication-modal__container">
+    <figure class="authentication-modal__image-container">
+      <img class="authentication-modal__image" src="https://media2.dev.to/dynamic/image/width=190,height=,fit=scale-down,gravity=auto,format=auto/https%3A%2F%2Fdev-to-uploads.s3.amazonaws.com%2Fuploads%2Farticles%2F8j7kvp660rqzt99zui8e.png" alt="DEV Community">
+    </figure>
+    <p class="authentication-modal__description">
+          We're a place where coders share, stay up-to-date and grow their careers.
+      </p>
+    <div class="authentication-modal__actions">
+      <a href="https://dev.to/enter?signup_subforem=1" class="crayons-btn">
+        Log in
+      </a>
+      <a href="https://dev.to/enter?signup_subforem=1&amp;state=new-user" class="crayons-btn crayons-btn--ghost-brand js-global-signup-modal__create-account">
+        Create account
+      </a>
+    </div>
+  </div>
+    </body>
+  </html>

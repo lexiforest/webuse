@@ -2,14 +2,46 @@
 
 GetKit is a small scraping toolkit built around `curl_cffi`.
 
-It currently includes:
-- sync and async HTTP helpers
-- sync and async clients
-- response parsing with CSS/XPath helpers
-- prompt-based smart selectors with local persistence
-- queue-driven crawling from seed URLs
-- sync and async websocket wrappers
-- a CLI for fetch and crawl workflows
+
+`getkit` is part of the impersonate suite:
+
+- `curl_cffi`
+- `curl-impersonate`
+- `impers`
+- `seekit`, 
+- [`getkit`](https://github.com/riverside-ai/getkit), this one
+- [impersonate.pro](https://impersonate.pro), commercial support and getkit cloud hosting.
+
+## Features
+
+Why yet another scraping library?
+
+- We need to build tools for both human and agents.
+- A comprehensive CLI is crucial for agents like OpenClaw, so we offer it.
+- You can define most of your tasks with yaml, instead of code, which is another great thing for agents and non-technical users.
+- Even better, there is an simple GUI for you to generate crawling tasks.
+- Writing and maintaining XPath/CSS is fragile and frustrating, these tedious work should be handed over to AI.
+- `getkit` is created by the author of `curl_cffi`, the integration and support is much better.
+- Last but not least, Claude just offered 6 months of free Claude Code Max for me as an open source contributor, I thought I should make full use of it. Kudos to Claude.
+
+Here is a comparison in tables:
+
+||scrapy|aiohttp|httpx|pycurl|getkit|
+|---|---|---|---|---|---|
+|http/2|❌|❌|✅|✅|✅|
+|http/3|❌|❌|❌|☑️<sup>1</sup>|✅<sup>2</sup>|
+|sync|✅|❌|✅|✅|✅|
+|async|❌|✅|✅|❌|✅|
+|LLM selectors|❌|✅|❌|❌|✅|
+|native cli|❌|❌|❌|❌|✅|
+|tls/h2/h3 fingerprints|❌|❌|❌|❌|✅|
+|speed|🐇|🐇🐇|🐇|🐇🐇|🐇🐇|
+
+What about dynamic websites?
+
+Well, that's what we are building next. Playwright and puppeteer is real solution, and
+headless real browsers are just too heavy to be agents. We are building a new lightweight
+browser-ish executor, stay tuned.
 
 ## Install
 
