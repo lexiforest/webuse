@@ -147,7 +147,7 @@ wheels = [
 ]
 
 [[package]]
-name = "getkit"
+name = "webuse"
 version = "0.0.1"
 source = { editable = "." }
 dependencies = [

@@ -117,7 +117,7 @@ def chat(model: str, messages: list[dict], temperature: float = 0) -> dict:
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://github.com/nicegui/getkit",
+        "HTTP-Referer": "https://github.com/nicegui/webuse",
     }
     body = {
         "model": model,

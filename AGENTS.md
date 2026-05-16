@@ -2,7 +2,7 @@
 
 ## Project Summary
 
-`getkit` is a small scraping toolkit built around `curl_cffi`.
+`webuse` is a small scraping toolkit built around `curl_cffi`.
 
 Current v1 scope:
 - sync and async HTTP helpers
@@ -10,7 +10,7 @@ Current v1 scope:
 - sync and async websocket wrappers
 - a light HTML parsing layer
 - prompt-based smart selectors with local persistence
-- queue-driven crawling via `getkit.crawl` / `getkit.acrawl`
+- queue-driven crawling via `webuse.crawl` / `webuse.acrawl`
 - a CLI with `fetch` and `crawl`
 
 Out of scope for now:
@@ -21,15 +21,15 @@ Out of scope for now:
 
 ## Repo Layout
 
-- `src/getkit/__init__.py`: public exports
-- `src/getkit/client.py`: sync/async HTTP clients and top-level helpers
-- `src/getkit/response.py`: response wrapper and lazy parsing entrypoint
-- `src/getkit/parser.py`: lightweight document/element selector layer
-- `src/getkit/smart.py`: smart selector persistence and resolution
-- `src/getkit/websocket.py`: sync/async websocket wrappers
-- `src/getkit/crawl.py`: queue-based crawl engine
-- `src/getkit/cli.py`: CLI entrypoint
-- `src/getkit/models.py`: shared dataclasses and public models
+- `src/webuse/__init__.py`: public exports
+- `src/webuse/client.py`: sync/async HTTP clients and top-level helpers
+- `src/webuse/response.py`: response wrapper and lazy parsing entrypoint
+- `src/webuse/parser.py`: lightweight document/element selector layer
+- `src/webuse/smart.py`: smart selector persistence and resolution
+- `src/webuse/websocket.py`: sync/async websocket wrappers
+- `src/webuse/crawl.py`: queue-based crawl engine
+- `src/webuse/cli.py`: CLI entrypoint
+- `src/webuse/models.py`: shared dataclasses and public models
 - `tests/`: unit tests
 
 ## HTTP Client
@@ -57,7 +57,7 @@ Use `curl_cffi` for all HTTP requests in this project, including research script
 
 ## Crawl Expectations
 
-`getkit.crawl` and `getkit.acrawl` should continue to support:
+`webuse.crawl` and `webuse.acrawl` should continue to support:
 - one or many seed URLs
 - queue-based discovery of new URLs
 - depth tracking
@@ -71,7 +71,7 @@ Do not turn crawl into a full spider framework unless explicitly requested.
 ## Smart Selector Expectations
 
 Default smart selector storage is local:
-- `.getkit/selectors.json`
+- `.webuse/selectors.json`
 
 Agents should:
 - keep this path configurable in code
@@ -81,8 +81,8 @@ Agents should:
 ## CLI Expectations
 
 The CLI should remain usable for no-code workflows:
-- `getkit fetch ...`
-- `getkit crawl ...`
+- `webuse fetch ...`
+- `webuse crawl ...`
 
 Defaults:
 - machine-friendly output

@@ -166,7 +166,7 @@ async def _acrawl_command(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="getkit")
+    parser = argparse.ArgumentParser(prog="webuse")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     fetch = subparsers.add_parser("fetch")

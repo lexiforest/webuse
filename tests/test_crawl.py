@@ -1,6 +1,6 @@
-from getkit.crawl import crawl
-from getkit.models import FollowRule
-from getkit.response import Response
+from webuse.crawl import crawl
+from webuse.models import FollowRule
+from webuse.response import Response
 
 
 PAGES = {
@@ -46,5 +46,6 @@ def test_crawl_follows_links_and_enforces_depth():
         "https://example.com/page-1",
     }
     assert result.items == [{"title": "Home"}, {"title": "Page One"}]
-    assert result.stats.followed_links == 2
+    assert result.stats.followed_links == 1
+    assert result.stats.skipped_rules == 1
     assert "https://example.com/page-2" not in result.visited

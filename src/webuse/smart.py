@@ -18,7 +18,7 @@ class SmartResolver(Protocol):
 
 class SmartSelectorStore:
     def __init__(self, path: str | Path | None = None):
-        self.path = Path(path or ".getkit/selectors.json")
+        self.path = Path(path or ".webuse/selectors.json")
         self._records: dict[str, SmartSelectorRecord] | None = None
 
     def _load(self) -> dict[str, SmartSelectorRecord]:

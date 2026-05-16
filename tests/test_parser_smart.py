@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from getkit.response import Response
-from getkit.smart import SmartSelectorStore
+from webuse.response import Response
+from webuse.smart import SmartSelectorStore
 
 
 HTML = b"""

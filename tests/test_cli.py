@@ -1,4 +1,4 @@
-from getkit import cli
+from webuse import cli
 
 
 def test_fetch_command_with_selector(monkeypatch, capsys):
