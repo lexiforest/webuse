@@ -2,13 +2,11 @@
 
 Webuse is a small scraping toolkit built around `curl_cffi`.
 
-
 `webuse` is part of the impersonate suite:
 
-- `curl_cffi`
-- `curl-impersonate`
-- `impers`
-- `seekit`, 
+- [`curl-impersonate`], make curl impersonates browsers' tls/ja3 fingerprints.
+- [`curl_cffi`](https://github.com/lexiforest/curl_cffi), Python binding for curl-impersonate.
+- [`impers`](https://github.com/lexiforest/impers), Nodejs binding to curl-impersonate.
 - [`webuse`](https://github.com/riverside-ai/webuse), this one
 - [impersonate.pro](https://impersonate.pro), commercial support and webuse cloud hosting.
 
@@ -19,10 +17,10 @@ Why yet another scraping library?
 - We need to build tools for both human and agents.
 - A comprehensive CLI is crucial for agents like OpenClaw, so we offer it.
 - You can define most of your tasks with yaml, instead of code, which is another great thing for agents and non-technical users.
-- Even better, there is an simple GUI for you to generate crawling tasks.
+- Even better, there is an simple GUI for you to generate scraping tasks.
 - Writing and maintaining XPath/CSS is fragile and frustrating, these tedious work should be handed over to AI.
 - `webuse` is created by the author of `curl_cffi`, the integration and support is much better.
-- Last but not least, Claude just offered 6 months of free Claude Code Max for me as an open source contributor, I thought I should make full use of it. Kudos to Claude.
+- Last but not least, I have some extra Codex tokens, why not utilizing it?
 
 Here is a comparison in tables:
 

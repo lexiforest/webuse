@@ -24,10 +24,11 @@ classifiers = [
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-  "curl_cffi>=0.14.0",
+  "curl_cffi>=0.15.0",
   "lxml>=5.0.0",
   "cssselect>=1.2.0",
   "PyYAML>=6.0.0",
+  "openai>=2.40.0",
 ]
 
 [project.optional-dependencies]

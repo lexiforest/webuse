@@ -33,3 +33,5 @@ htmlcov/
 .vscode/
 *.swp
 *.swo
+
+internal/

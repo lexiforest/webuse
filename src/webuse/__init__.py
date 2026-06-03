@@ -15,6 +15,7 @@ from .client import (
 from .crawl import acrawl, crawl
 from .models import CrawlRequest, FollowRule, RequestOptions
 from .response import Response
+from .smart import LlmSmartResolver, SmartResolver, SmartSelectorStore
 from .websocket import AsyncWebSocketClient, WebSocketClient, aws_connect, ws_connect
 
 __version__ = "0.0.1"
@@ -27,6 +28,9 @@ __all__ = [
     "FollowRule",
     "RequestOptions",
     "Response",
+    "LlmSmartResolver",
+    "SmartResolver",
+    "SmartSelectorStore",
     "WebSocketClient",
     "__version__",
     "acrawl",

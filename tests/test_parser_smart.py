@@ -1,7 +1,9 @@
+import json
 from pathlib import Path
+from types import SimpleNamespace
 
 from webuse.response import Response
-from webuse.smart import SmartSelectorStore
+from webuse.smart import LlmSmartResolver, SmartSelectorStore
 
 
 HTML = b"""
@@ -48,3 +50,122 @@ def test_smart_selector_persists_record(tmp_path: Path):
     persisted = store.get("alpha-gadget-product-link")
     assert persisted is not None
     assert persisted.selectors
+    assert persisted.tag == "a"
+    assert persisted.attrs["href"] == "https://example.com/products/alpha"
+    assert persisted.text == "Open"
+    assert "alpha" in persisted.text_tokens
+
+
+def test_smart_selector_uses_deterministic_match_before_resolver(tmp_path: Path):
+    class FailingResolver:
+        def resolve(self, prompt, document, candidates):
+            raise AssertionError("resolver should not be called")
+
+    store = SmartSelectorStore(tmp_path / "selectors.json")
+    response = Response(url="https://example.com/catalog", status_code=200, content=HTML)
+
+    match = response.smart(
+        "alpha gadget product link",
+        store=store,
+        use_llm=True,
+        resolver=FailingResolver(),
+    )
+
+    assert match.attr("href") == "https://example.com/products/alpha"
+
+
+def test_smart_selector_uses_resolver_fallback(tmp_path: Path):
+    class FakeResolver:
+        called = False
+
+        def resolve(self, prompt, document, candidates):
+            self.called = True
+            for candidate in candidates:
+                if candidate.attr("data-answer") == "yes":
+                    return candidate
+            return None
+
+    html = b"""
+    <html>
+      <body>
+        <button data-answer="yes">Choose</button>
+      </body>
+    </html>
+    """
+    resolver = FakeResolver()
+    store = SmartSelectorStore(tmp_path / "selectors.json")
+    response = Response(url="https://example.com/actions", status_code=200, content=html)
+
+    match = response.smart("unmatched prompt", store=store, use_llm=True, resolver=resolver)
+
+    assert resolver.called
+    assert match.attr("data-answer") == "yes"
+
+
+def test_smart_selector_recovers_when_saved_selectors_are_stale(tmp_path: Path):
+    store = SmartSelectorStore(tmp_path / "selectors.json")
+    response = Response(url="https://example.com/catalog", status_code=200, content=HTML)
+    response.smart("alpha gadget product link", store=store)
+
+    changed_html = b"""
+    <html>
+      <body>
+        <a href="/help">Open</a>
+        <a class="renamed-link" href="/products/alpha">Open</a>
+      </body>
+    </html>
+    """
+    changed = Response(url="https://example.com/catalog", status_code=200, content=changed_html)
+
+    match = changed.smart("alpha gadget product link", store=store)
+
+    assert match.attr("href") == "https://example.com/products/alpha"
+    refreshed = store.get("alpha-gadget-product-link")
+    assert refreshed is not None
+    assert refreshed.selectors == ["a.renamed-link"]
+
+
+def test_smart_selector_store_loads_older_records(tmp_path: Path):
+    path = tmp_path / "selectors.json"
+    path.write_text(
+        json.dumps(
+            {
+                "legacy": {
+                    "key": "legacy",
+                    "prompt": "legacy prompt",
+                    "selectors": ["a.missing"],
+                    "xpath_selectors": [],
+                    "hints": {"tag": "a", "attrs": {"href": "https://example.com/products/alpha"}},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    store = SmartSelectorStore(path)
+
+    assert store.get("legacy") is not None
+
+
+def test_llm_smart_resolver_accepts_compatible_client():
+    captured = {}
+
+    class FakeCompletions:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content='{"index": 1}'))]
+            )
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions()))
+    resolver = LlmSmartResolver(model="test-model", client=client)
+    response = Response(
+        url="https://example.com/actions",
+        status_code=200,
+        content=b"<button>First</button><button>Second</button>",
+    )
+
+    match = resolver.resolve("second button", response, response.css("button"))
+
+    assert match is not None
+    assert match.text() == "Second"
+    assert captured["model"] == "test-model"

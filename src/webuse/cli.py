@@ -11,6 +11,7 @@ from typing import Any
 from .client import request
 from .crawl import acrawl, crawl
 from .models import FollowRule
+from .smart import SmartSelectorStore
 
 
 def _load_config(path: str | None) -> dict[str, Any]:
@@ -83,7 +84,10 @@ def _fetch_command(args: argparse.Namespace) -> int:
         _print_jsonl([{"url": response.url, "matches": matches}])
         return 0
     if args.smart:
-        match = response.smart(args.smart)
+        smart_store = args.smart_store or config.get("smart_store")
+        smart_key = args.smart_key or config.get("smart_key")
+        store = SmartSelectorStore(smart_store) if smart_store else None
+        match = response.smart(args.smart, key=smart_key, store=store)
         _print_jsonl([{"url": response.url, "match": match.text(), "selector": args.smart}])
         return 0
     if args.meta:
@@ -181,6 +185,8 @@ def build_parser() -> argparse.ArgumentParser:
     fetch.add_argument("--css")
     fetch.add_argument("--xpath")
     fetch.add_argument("--smart")
+    fetch.add_argument("--smart-store")
+    fetch.add_argument("--smart-key")
     fetch.add_argument("--meta", action="store_true")
     fetch.add_argument("--json-output", action="store_true")
     fetch.set_defaults(func=_fetch_command)

@@ -100,6 +100,11 @@ class SmartSelectorRecord:
     prompt: str
     selectors: list[str] = field(default_factory=list)
     xpath_selectors: list[str] = field(default_factory=list)
+    tag: str | None = None
+    attrs: dict[str, str] = field(default_factory=dict)
+    text: str = ""
+    text_tokens: list[str] = field(default_factory=list)
+    url: str | None = None
     hints: dict[str, Any] = field(default_factory=dict)
 
 
