@@ -90,6 +90,29 @@ def _coerce_requests(seeds: str | list[str] | list[CrawlRequest]) -> list[CrawlR
     return items
 
 
+def _element_value(element: Any, attr: str | None) -> Any:
+    if attr:
+        return element.attr(attr)
+    return element.text()
+
+
+def _extract_by_selector(response: Any, rule: dict[str, Any], selector_type: str) -> Any:
+    selector = rule[selector_type]
+    attr = rule.get("attr")
+    if rule.get("all"):
+        matches = response.css(selector) if selector_type == "css" else response.xpath(selector)
+        return [_element_value(match, attr) for match in matches]
+    match = response.css_first(selector) if selector_type == "css" else response.xpath_first(selector)
+    return _element_value(match, attr) if match else None
+
+
+def _extract_by_smart(response: Any, rule: dict[str, Any]) -> Any:
+    match = response.smart(rule["smart"], key=rule.get("key"))
+    if not match:
+        return None
+    return _element_value(match, rule.get("attr"))
+
+
 def _extract_items(response: Any, extract: Any) -> list[Any]:
     if extract is None:
         return []
@@ -101,20 +124,11 @@ def _extract_items(response: Any, extract: Any) -> list[Any]:
                 item[key] = match.text() if match else None
             elif isinstance(rule, dict):
                 if "css" in rule:
-                    match = response.css_first(rule["css"])
-                    if rule.get("attr"):
-                        item[key] = match.attr(rule["attr"]) if match else None
-                    else:
-                        item[key] = match.text() if match else None
+                    item[key] = _extract_by_selector(response, rule, "css")
                 elif "xpath" in rule:
-                    match = response.xpath_first(rule["xpath"])
-                    if rule.get("attr"):
-                        item[key] = match.attr(rule["attr"]) if match else None
-                    else:
-                        item[key] = match.text() if match else None
+                    item[key] = _extract_by_selector(response, rule, "xpath")
                 elif "smart" in rule:
-                    match = response.smart(rule["smart"])
-                    item[key] = match.text()
+                    item[key] = _extract_by_smart(response, rule)
         return [item]
     return []
 
