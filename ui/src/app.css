@@ -15,7 +15,7 @@
 body {
   margin: 0;
   min-width: 320px;
-  background: #f8fafc;
+  background: #111827;
 }
 
 button,
@@ -46,6 +46,32 @@ textarea {
   color: #020617;
   padding: 0.625rem 0.75rem;
   outline: none;
+}
+
+.dark-field {
+  color: #9ca3af;
+}
+
+.dark-field input,
+.dark-field select,
+.dark-field textarea,
+.dark-select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #374151;
+  border-radius: 0.375rem;
+  background: #111827;
+  color: #f9fafb;
+  padding: 0.625rem 0.75rem;
+  outline: none;
+}
+
+.dark-field input:focus,
+.dark-field select:focus,
+.dark-field textarea:focus,
+.dark-select:focus {
+  border-color: #0ea5e9;
+  box-shadow: 0 0 0 2px rgb(14 165 233 / 0.18);
 }
 
 .field textarea {
@@ -87,6 +113,104 @@ textarea {
   color: #b91c1c;
 }
 
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.data-table th {
+  border-bottom: 1px solid #374151;
+  color: #9ca3af;
+  font-weight: 500;
+  padding: 0.75rem;
+  text-align: left;
+}
+
+.data-table td {
+  border-bottom: 1px solid #1f2937;
+  color: #d1d5db;
+  padding: 0.75rem;
+  vertical-align: top;
+}
+
+.data-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.yaml-editor {
+  position: relative;
+  min-height: 22rem;
+  overflow: hidden;
+  border: 1px solid #374151;
+  border-radius: 0.375rem;
+  background: #111827;
+}
+
+.yaml-editor textarea,
+.yaml-highlight {
+  min-height: 22rem;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  tab-size: 2;
+  white-space: pre;
+}
+
+.yaml-editor textarea {
+  position: relative;
+  z-index: 1;
+  display: block;
+  resize: vertical;
+  background: transparent;
+  color: transparent;
+  caret-color: #f9fafb;
+  overflow: auto;
+  outline: none;
+  -webkit-text-fill-color: transparent;
+}
+
+.yaml-editor textarea::selection {
+  background: rgb(14 165 233 / 0.32);
+}
+
+.yaml-highlight {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  color: #d1d5db;
+  pointer-events: none;
+}
+
+.yaml-key {
+  color: #7dd3fc;
+}
+
+.yaml-string {
+  color: #86efac;
+}
+
+.yaml-number,
+.yaml-boolean {
+  color: #fbbf24;
+}
+
+.yaml-marker,
+.yaml-punctuation {
+  color: #c4b5fd;
+}
+
+.yaml-comment {
+  color: #6b7280;
+}
+
 .rule-grid {
   display: grid;
   grid-template-columns: minmax(90px, 0.5fr) minmax(180px, 1.3fr) minmax(80px, 0.5fr);
@@ -109,6 +233,11 @@ textarea {
   padding: 1rem;
   font-size: 0.8125rem;
   line-height: 1.55;
+}
+
+.output.compact {
+  min-height: 0;
+  max-height: 18rem;
 }
 
 @media (max-width: 820px) {

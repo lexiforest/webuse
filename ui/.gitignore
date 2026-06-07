@@ -22,6 +22,8 @@ app.config.timestamp_*.js
 
 # Temp
 gitignore
+webuse.sqlite
+webuse.sqlite-*
 
 # System Files
 .DS_Store

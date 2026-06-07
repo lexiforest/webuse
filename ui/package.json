@@ -1,21 +1,30 @@
 {
-  "name": "example-with-tailwindcss",
+  "name": "webuse-ui",
   "type": "module",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
     "start": "vite start",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push"
   },
   "dependencies": {
     "@solidjs/router": "^0.15.0",
     "@solidjs/start": "2.0.0-alpha.2",
+    "@solidjs/vite-plugin-nitro-2": "^0.1.0",
+    "better-sqlite3": "^12.10.0",
+    "drizzle-orm": "^0.45.2",
+    "solid-icons": "^1.2.0",
     "solid-js": "^1.9.5",
     "vite": "^7.0.0",
-    "@solidjs/vite-plugin-nitro-2": "^0.1.0"
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.7",
+    "@types/better-sqlite3": "^7.6.13",
+    "drizzle-kit": "^0.31.10",
     "tailwindcss": "^4.0.7"
   },
   "engines": {
