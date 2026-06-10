@@ -1,0 +1,90 @@
+from types import SimpleNamespace
+
+from webuse import cli
+from webuse import llm
+
+
+def _reset(monkeypatch):
+    monkeypatch.setattr(llm, "_DEFAULT_SETTINGS", None)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+
+
+def test_openai_defaults_use_configured_environment_without_local_probe(monkeypatch):
+    _reset(monkeypatch)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://api.example.com/v1")
+    monkeypatch.setenv("OPENAI_MODEL", "test-model")
+
+    def fail_get(*args, **kwargs):
+        raise AssertionError("local endpoints should not be probed")
+
+    monkeypatch.setattr(llm.requests, "get", fail_get)
+
+    settings = llm.configure_openai_defaults()
+
+    assert settings.provider == "openai"
+    assert settings.api_key == "test-key"
+    assert settings.base_url == "https://api.example.com/v1"
+    assert settings.model == "test-model"
+
+
+def test_openai_defaults_detect_local_lmstudio(monkeypatch):
+    _reset(monkeypatch)
+    seen_urls = []
+
+    def fake_get(url, **kwargs):
+        seen_urls.append(url)
+        return SimpleNamespace(
+            status_code=200,
+            json=lambda: {"data": [{"id": "local-model"}]},
+        )
+
+    monkeypatch.setattr(llm.requests, "get", fake_get)
+
+    settings = llm.configure_openai_defaults()
+
+    assert seen_urls == ["http://127.0.0.1:1234/v1/models"]
+    assert settings.provider == "lmstudio"
+    assert settings.api_key == "lm-studio"
+    assert settings.base_url == "http://127.0.0.1:1234/v1"
+    assert settings.model == "local-model"
+
+
+def test_cli_startup_detects_local_openai_defaults_for_llm(monkeypatch, capsys):
+    _reset(monkeypatch)
+    captured = {}
+
+    def fake_get(url, **kwargs):
+        return SimpleNamespace(
+            status_code=200,
+            json=lambda: {"data": [{"id": "local-model"}]},
+        )
+
+    class FakeResponse:
+        url = "https://example.com"
+
+        def llm(self, prompt, **kwargs):
+            captured["prompt"] = prompt
+            captured["kwargs"] = kwargs
+            return "Local answer"
+
+    monkeypatch.setattr(llm.requests, "get", fake_get)
+    monkeypatch.setattr(cli, "request", lambda *args, **kwargs: FakeResponse())
+
+    code = cli.main(["fetch", "https://example.com", "--llm", "Extract title"])
+    out = capsys.readouterr().out.strip()
+
+    assert code == 0
+    assert out == (
+        "{\n"
+        '  "url": "https://example.com",\n'
+        '  "match": "Local answer",\n'
+        '  "selector": "Extract title"\n'
+        "}"
+    )
+    assert captured["prompt"] == "Extract title"
+    assert captured["kwargs"]["model"] == "local-model"
+    assert captured["kwargs"]["api_key"] == "lm-studio"
+    assert captured["kwargs"]["base_url"] == "http://127.0.0.1:1234/v1"

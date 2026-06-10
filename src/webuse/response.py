@@ -1,8 +1,8 @@
-from __future__ import annotations
-
 import json as json_module
 from typing import Any
+from urllib.parse import urljoin
 
+from .models import CrawlRequest, RequestOptions
 from .parser import Document
 from .smart import SmartResolver, SmartSelectorStore, resolve_smart
 
@@ -44,6 +44,39 @@ class Response(Document):
 
     def json(self) -> Any:
         return json_module.loads(self.text)
+
+    def follow(
+        self,
+        url: str,
+        *,
+        method: str = "GET",
+        options: RequestOptions | None = None,
+        category: str | None = None,
+        meta: dict[str, Any] | None = None,
+        **request_options: Any,
+    ) -> CrawlRequest:
+        merged_options = options or RequestOptions()
+        if request_options:
+            values = {
+                name: getattr(merged_options, name)
+                for name in RequestOptions.model_fields
+                if name != "extra_kwargs"
+            }
+            extra_kwargs = dict(merged_options.extra_kwargs)
+            for key, value in request_options.items():
+                if key in values:
+                    values[key] = value
+                else:
+                    extra_kwargs[key] = value
+            values["extra_kwargs"] = extra_kwargs
+            merged_options = RequestOptions.model_validate(values)
+        return CrawlRequest(
+            url=urljoin(self.url, url),
+            method=method,
+            options=merged_options,
+            category=category,
+            meta=meta or {},
+        )
 
     def smart(
         self,

@@ -1,46 +1,92 @@
-from __future__ import annotations
-
-from dataclasses import dataclass
-from typing import Iterable
+from html.parser import HTMLParser
+from typing import Any, Iterable
 from urllib.parse import urljoin
 
 from lxml import etree
 from lxml import html as lxml_html
+from pydantic import BaseModel, ConfigDict
+
+from .llm import openai_defaults
 
 
-@dataclass(slots=True)
-class Element:
-    _element: object
+class _TextExtractor(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        _ = attrs
+        if tag.lower() in {"script", "style", "noscript"}:
+            self._skip_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in {"script", "style", "noscript"} and self._skip_depth:
+            self._skip_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth == 0:
+            self.parts.append(data)
+
+
+def _text_without_tree(content: str, separator: str = " ", strip: bool = True) -> str:
+    parser = _TextExtractor()
+    parser.feed(content)
+    text = " ".join(part.strip() if strip else part for part in parser.parts)
+    return (
+        separator.join(filter(None, text.split()))
+        if strip and separator == " "
+        else text
+    )
+
+
+class Element(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    element: Any
     base_url: str | None = None
+
+    def __init__(self, element: object, base_url: str | None = None):
+        super().__init__(element=element, base_url=base_url)
 
     @property
     def tag(self) -> str:
-        return getattr(self._element, "tag", "")
+        return getattr(self.element, "tag", "")
 
     @property
     def attrs(self) -> dict[str, str]:
-        return dict(getattr(self._element, "attrib", {}) or {})
+        return dict(getattr(self.element, "attrib", {}) or {})
 
     def attr(self, name: str, default: str | None = None) -> str | None:
         return self.attrs.get(name, default)
 
     def html(self) -> str:
-        return etree.tostring(self._element, encoding="unicode")
+        return etree.tostring(self.element, encoding="unicode")
 
     def text(self, separator: str = " ", strip: bool = True) -> str:
-        text = " ".join(part.strip() if strip else part for part in self._element.itertext())
-        return separator.join(filter(None, text.split())) if strip and separator == " " else text
+        text = " ".join(
+            part.strip() if strip else part for part in self.element.itertext()
+        )
+        return (
+            separator.join(filter(None, text.split()))
+            if strip and separator == " "
+            else text
+        )
 
     def css(self, selector: str) -> list["Element"]:
-        return [Element(node, self.base_url) for node in self._element.cssselect(selector)]
+        return [
+            Element(node, self.base_url) for node in self.element.cssselect(selector)
+        ]
 
     def css_first(self, selector: str) -> "Element | None":
         results = self.css(selector)
         return results[0] if results else None
 
     def xpath(self, selector: str) -> list["Element"]:
-        results = self._element.xpath(selector)
-        return [Element(node, self.base_url) for node in results if hasattr(node, "tag")]
+        results = self.element.xpath(selector)
+        return [
+            Element(node, self.base_url) for node in results if hasattr(node, "tag")
+        ]
 
     def xpath_first(self, selector: str) -> "Element | None":
         results = self.xpath(selector)
@@ -75,7 +121,10 @@ class Document:
         return self._tree
 
     def css(self, selector: str) -> list[Element]:
-        return [Element(node, self.base_url) for node in self._get_tree().cssselect(selector)]
+        return [
+            Element(node, self.base_url)
+            for node in self._get_tree().cssselect(selector)
+        ]
 
     def css_first(self, selector: str) -> Element | None:
         results = self.css(selector)
@@ -83,15 +132,23 @@ class Document:
 
     def xpath(self, selector: str) -> list[Element]:
         results = self._get_tree().xpath(selector)
-        return [Element(node, self.base_url) for node in results if hasattr(node, "tag")]
+        return [
+            Element(node, self.base_url) for node in results if hasattr(node, "tag")
+        ]
 
     def xpath_first(self, selector: str) -> Element | None:
         results = self.xpath(selector)
         return results[0] if results else None
 
     def text_content(self, separator: str = " ", strip: bool = True) -> str:
-        text = " ".join(part.strip() if strip else part for part in self._get_tree().itertext())
-        return separator.join(filter(None, text.split())) if strip and separator == " " else text
+        text = " ".join(
+            part.strip() if strip else part for part in self._get_tree().itertext()
+        )
+        return (
+            separator.join(filter(None, text.split()))
+            if strip and separator == " "
+            else text
+        )
 
     def links(self, selector: str = "a[href]", attr: str = "href") -> list[str]:
         links: list[str] = []
@@ -100,6 +157,64 @@ class Document:
             if value:
                 links.append(urljoin(self.base_url or "", value))
         return links
+
+    def llm(
+        self,
+        prompt: str,
+        *,
+        model: str | None = None,
+        client: Any = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        system_prompt: str | None = None,
+        max_chars: int | None = 12000,
+        temperature: float = 0,
+        **kwargs: Any,
+    ) -> str:
+        defaults = openai_defaults()
+        model = model or defaults.model or "gpt-4.1-mini"
+        api_key = api_key or defaults.api_key
+        base_url = base_url or defaults.base_url
+        html = self.raw_text
+        text = _text_without_tree(self.raw_text)
+        if max_chars is not None:
+            html = html[:max_chars]
+            text = text[:max_chars]
+        if client is None:
+            from openai import OpenAI
+
+            client_kwargs = {
+                key: value
+                for key, value in {"api_key": api_key, "base_url": base_url}.items()
+                if value
+            }
+            client = OpenAI(**client_kwargs)
+
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_prompt
+                    or (
+                        "Answer the user's prompt using only the provided document "
+                        "text and HTML. Preserve exact values from attributes when "
+                        "the prompt asks for an HTML field or attribute."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Prompt:\n{prompt}\n\n"
+                        f"Document text:\n{text}\n\n"
+                        f"Document HTML:\n{html}"
+                    ),
+                },
+            ],
+            temperature=temperature,
+            **kwargs,
+        )
+        return response.choices[0].message.content or ""
 
     def iter_elements(self) -> Iterable[Element]:
         for node in self._get_tree().iter():

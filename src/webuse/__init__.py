@@ -12,25 +12,104 @@ from .client import (
     put,
     request,
 )
-from .crawl import acrawl, crawl
+from .crawl import (
+    DefaultRequestHasher,
+    FileRequestQueue,
+    FileRequestSeen,
+    MemoryRequestQueue,
+    MemoryRequestSeen,
+    RedisRequestQueue,
+    RedisRequestSeen,
+    RequestHasher,
+    RequestQueue,
+    RequestSeen,
+    acrawl,
+    canonical_request_url,
+    crawl,
+)
+from .exceptions import (
+    CloseSpider,
+    ConfigError,
+    DropItem,
+    IgnoreRequest,
+    NotConfigured,
+    NotSupported,
+    PipelineError,
+    PipelineStateError,
+    SignalError,
+    SmartSelectorError,
+    SpiderError,
+    WebuseError,
+)
+from .llm import (
+    OpenAISettings,
+    configure_openai_defaults,
+    detect_local_openai_settings,
+    openai_defaults,
+)
+from .log import configure_logger, logger
 from .models import CrawlRequest, FollowRule, RequestOptions
+from .metrics import UStatsMetrics, attach_metrics
+from .pipelines import (
+    AssetDownloadPipeline,
+    CsvPipeline,
+    JsonlPipeline,
+    Pipeline,
+    SQLitePipeline,
+    WebhookPipeline,
+)
 from .response import Response
+from .signals import SignalBus
 from .smart import LlmSmartResolver, SmartResolver, SmartSelectorStore
+from .spider import AsyncSpider, Spider
 from .websocket import AsyncWebSocketClient, WebSocketClient, aws_connect, ws_connect
 
 __version__ = "0.0.1"
 
 __all__ = [
     "AsyncClient",
+    "AsyncSpider",
     "AsyncWebSocketClient",
+    "AssetDownloadPipeline",
     "Client",
+    "CloseSpider",
+    "ConfigError",
+    "CsvPipeline",
     "CrawlRequest",
+    "DefaultRequestHasher",
+    "DropItem",
+    "FileRequestQueue",
+    "FileRequestSeen",
     "FollowRule",
+    "IgnoreRequest",
+    "JsonlPipeline",
+    "MemoryRequestQueue",
+    "MemoryRequestSeen",
+    "NotConfigured",
+    "NotSupported",
+    "OpenAISettings",
+    "Pipeline",
+    "PipelineError",
+    "PipelineStateError",
+    "RedisRequestQueue",
+    "RedisRequestSeen",
     "RequestOptions",
+    "RequestHasher",
+    "RequestQueue",
+    "RequestSeen",
     "Response",
+    "SignalBus",
+    "SignalError",
+    "SQLitePipeline",
+    "Spider",
+    "SpiderError",
+    "UStatsMetrics",
+    "WebhookPipeline",
     "LlmSmartResolver",
     "SmartResolver",
+    "SmartSelectorError",
     "SmartSelectorStore",
+    "WebuseError",
     "WebSocketClient",
     "__version__",
     "acrawl",
@@ -40,9 +119,16 @@ __all__ = [
     "aput",
     "arequest",
     "aws_connect",
+    "attach_metrics",
+    "canonical_request_url",
+    "configure_logger",
+    "configure_openai_defaults",
     "crawl",
     "delete",
+    "detect_local_openai_settings",
     "get",
+    "logger",
+    "openai_defaults",
     "post",
     "put",
     "request",

@@ -1,17 +1,21 @@
-from __future__ import annotations
+"""
+Thin curl_cffi client wrappers for webuse.
 
-from dataclasses import fields, replace
+- Returns webuse.Response, not raw curl_cffi response.
+    Giving lazy .html, .css(), .xpath(), .smart(), etc.
+- Shared option model via RequestOptions.
+    keeping CLI config, crawl requests, and direct client usage using the same request fields.
+"""
+
 from typing import Any
 
-from curl_cffi.requests import AsyncSession, Session
+from curl_cffi import AsyncSession, Session
 
 from .models import RequestOptions
 from .response import Response, from_curl_response
 
 
 class BaseClient:
-    session_class_name = "Session"
-
     def __init__(self, **defaults: Any):
         self.default_options = RequestOptions(extra_kwargs={})
         self._apply_defaults(defaults)
@@ -28,28 +32,24 @@ class BaseClient:
             for key, value in defaults.items()
             if hasattr(self.default_options, key)
         }
-        self.default_options = replace(self.default_options, **known)
+        self.default_options = self.default_options.model_copy(update=known)
         self.default_options.extra_kwargs.update(extra)
 
-    def _build_request_kwargs(self, options: RequestOptions | None, extra_kwargs: dict[str, Any]) -> dict[str, Any]:
-        combined = replace(self.default_options)
+    def _build_request_kwargs(
+        self, options: RequestOptions | None, extra_kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
+        combined = self.default_options.model_copy(deep=True)
         combined.extra_kwargs = dict(self.default_options.extra_kwargs)
         if options is not None:
             option_values = {
-                field.name: getattr(options, field.name)
-                for field in fields(RequestOptions)
-                if field.name != "extra_kwargs" and getattr(options, field.name) is not None
+                name: getattr(options, name)
+                for name in RequestOptions.model_fields
+                if name != "extra_kwargs" and getattr(options, name) is not None
             }
-            combined = replace(combined, **option_values)
+            combined = combined.model_copy(update=option_values)
             combined.extra_kwargs.update(options.extra_kwargs)
         combined.extra_kwargs.update(extra_kwargs)
         return combined.to_request_kwargs()
-
-    def _ensure_session(self):
-        if self._session is None:
-            session_class = Session if self.session_class_name == "Session" else AsyncSession
-            self._session = session_class()
-        return self._session
 
     def close(self) -> None:
         if self._session is not None and hasattr(self._session, "close"):
@@ -66,15 +66,32 @@ class BaseClient:
 
 
 class Client(BaseClient):
-    session_class_name = "Session"
+    def _ensure_session(self):
+        if self._session is None:
+            self._session = Session()
+        return self._session
 
-    def request(self, method: str, url: str, *, options: RequestOptions | None = None, **kwargs: Any) -> Response:
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        options: RequestOptions | None = None,
+        **kwargs: Any,
+    ) -> Response:
         session = self._ensure_session()
         request_kwargs = self._build_request_kwargs(options, kwargs)
         response = session.request(method.upper(), url, **request_kwargs)
         return from_curl_response(response)
 
-    def stream(self, method: str, url: str, *, options: RequestOptions | None = None, **kwargs: Any):
+    def stream(
+        self,
+        method: str,
+        url: str,
+        *,
+        options: RequestOptions | None = None,
+        **kwargs: Any,
+    ):
         session = self._ensure_session()
         request_kwargs = self._build_request_kwargs(options, kwargs)
         return session.stream(method.upper(), url, **request_kwargs)
@@ -93,20 +110,32 @@ class Client(BaseClient):
 
 
 class AsyncClient(BaseClient):
-    session_class_name = "AsyncSession"
-
     async def _ensure_async_session(self):
         if self._session is None:
             self._session = AsyncSession()
         return self._session
 
-    async def request(self, method: str, url: str, *, options: RequestOptions | None = None, **kwargs: Any) -> Response:
+    async def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        options: RequestOptions | None = None,
+        **kwargs: Any,
+    ) -> Response:
         session = await self._ensure_async_session()
         request_kwargs = self._build_request_kwargs(options, kwargs)
         response = await session.request(method.upper(), url, **request_kwargs)
         return from_curl_response(response)
 
-    async def astream(self, method: str, url: str, *, options: RequestOptions | None = None, **kwargs: Any):
+    async def astream(
+        self,
+        method: str,
+        url: str,
+        *,
+        options: RequestOptions | None = None,
+        **kwargs: Any,
+    ):
         session = await self._ensure_async_session()
         request_kwargs = self._build_request_kwargs(options, kwargs)
         stream = session.stream(method.upper(), url, **request_kwargs)

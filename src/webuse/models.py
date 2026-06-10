@@ -1,7 +1,7 @@
-from __future__ import annotations
-
-from dataclasses import dataclass, field
+import warnings
 from typing import Any, Callable
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 ExtractCallback = Callable[[Any], Any]
@@ -9,8 +9,18 @@ FollowCallback = Callable[[Any], Any]
 ErrorCallback = Callable[[Exception, "CrawlRequest"], None]
 
 
-@dataclass(slots=True)
-class RequestOptions:
+class WebuseModel(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+warnings.filterwarnings(
+    "ignore",
+    message='Field name "json" in "RequestOptions" shadows an attribute in parent "WebuseModel"',
+    category=UserWarning,
+)
+
+
+class RequestOptions(WebuseModel):
     method: str = "GET"
     headers: dict[str, str] | None = None
     cookies: dict[str, str] | None = None
@@ -26,7 +36,7 @@ class RequestOptions:
     proxies: dict[str, str] | None = None
     proxy_auth: tuple[str, str] | None = None
     verify: bool | str | None = None
-    impersonate: str | list[str] | None = None
+    impersonate: str | list[str] | None = "chrome"
     ja3: str | None = None
     akamai: str | None = None
     extra_fp: dict[str, Any] | None = None
@@ -35,7 +45,7 @@ class RequestOptions:
     interface: str | None = None
     cert: Any = None
     referer: str | None = None
-    extra_kwargs: dict[str, Any] = field(default_factory=dict)
+    extra_kwargs: dict[str, Any] = Field(default_factory=dict)
 
     def to_request_kwargs(self) -> dict[str, Any]:
         values = {
@@ -71,18 +81,17 @@ class RequestOptions:
         }
 
 
-@dataclass(slots=True)
-class CrawlRequest:
+class CrawlRequest(WebuseModel):
     url: str
     method: str = "GET"
-    options: RequestOptions = field(default_factory=RequestOptions)
+    options: RequestOptions = Field(default_factory=RequestOptions)
+    category: str | None = None
     depth: int = 0
     parent_url: str | None = None
-    meta: dict[str, Any] = field(default_factory=dict)
+    meta: dict[str, Any] = Field(default_factory=dict)
 
 
-@dataclass(slots=True)
-class FollowRule:
+class FollowRule(WebuseModel):
     css: str | None = None
     xpath: str | None = None
     attr: str = "href"
@@ -94,35 +103,35 @@ class FollowRule:
     predicate: Callable[[str, Any], bool] | None = None
 
 
-@dataclass(slots=True)
-class SmartSelectorRecord:
+class SmartSelectorRecord(WebuseModel):
     key: str
     prompt: str
-    selectors: list[str] = field(default_factory=list)
-    xpath_selectors: list[str] = field(default_factory=list)
+    selectors: list[str] = Field(default_factory=list)
+    xpath_selectors: list[str] = Field(default_factory=list)
     tag: str | None = None
-    attrs: dict[str, str] = field(default_factory=dict)
+    attrs: dict[str, str] = Field(default_factory=dict)
     text: str = ""
-    text_tokens: list[str] = field(default_factory=list)
+    text_tokens: list[str] = Field(default_factory=list)
     url: str | None = None
-    hints: dict[str, Any] = field(default_factory=dict)
+    hints: dict[str, Any] = Field(default_factory=dict)
 
 
-@dataclass(slots=True)
-class CrawlStats:
+class CrawlStats(WebuseModel):
     queued: int = 0
     fetched: int = 0
     extracted_items: int = 0
     followed_links: int = 0
     skipped_duplicates: int = 0
     skipped_rules: int = 0
+    skipped_robots: int = 0
+    skipped_ignored: int = 0
     errors: int = 0
 
 
-@dataclass(slots=True)
-class CrawlResult:
-    items: list[Any] = field(default_factory=list)
-    pages: list[Any] = field(default_factory=list)
-    errors: list[dict[str, Any]] = field(default_factory=list)
-    stats: CrawlStats = field(default_factory=CrawlStats)
-    visited: set[str] = field(default_factory=set)
+class CrawlResult(WebuseModel):
+    items: list[Any] = Field(default_factory=list)
+    pages: list[Any] = Field(default_factory=list)
+    errors: list[dict[str, Any]] = Field(default_factory=list)
+    stats: CrawlStats = Field(default_factory=CrawlStats)
+    visited: set[str] = Field(default_factory=set)
+    close_reason: str | None = None

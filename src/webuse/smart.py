@@ -1,19 +1,18 @@
-from __future__ import annotations
-
 import json
 import re
-from dataclasses import asdict, fields
 from pathlib import Path
 from typing import Any, Protocol
 
 from .exceptions import SmartSelectorError
+from .llm import openai_defaults
 from .models import SmartSelectorRecord
 from .parser import Document, Element
 
 
 class SmartResolver(Protocol):
-    def resolve(self, prompt: str, document: Document, candidates: list[Element]) -> Element | None:
-        ...
+    def resolve(
+        self, prompt: str, document: Document, candidates: list[Element]
+    ) -> Element | None: ...
 
 
 class SmartSelectorStore:
@@ -27,8 +26,7 @@ class SmartSelectorStore:
         if self.path.exists():
             payload = json.loads(self.path.read_text(encoding="utf-8"))
             self._records = {
-                key: _record_from_payload(key, value)
-                for key, value in payload.items()
+                key: _record_from_payload(key, value) for key, value in payload.items()
             }
         else:
             self._records = {}
@@ -42,13 +40,16 @@ class SmartSelectorStore:
         records[record.key] = record
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(
-            json.dumps({key: asdict(value) for key, value in records.items()}, indent=2),
+            json.dumps(
+                {key: value.model_dump(mode="json") for key, value in records.items()},
+                indent=2,
+            ),
             encoding="utf-8",
         )
 
 
 def _record_from_payload(key: str, payload: dict[str, Any]) -> SmartSelectorRecord:
-    valid_fields = {field.name for field in fields(SmartSelectorRecord)}
+    valid_fields = set(SmartSelectorRecord.model_fields)
     values = {name: value for name, value in payload.items() if name in valid_fields}
     values.setdefault("key", key)
     values.setdefault("prompt", "")
@@ -92,7 +93,9 @@ def generate_xpath(element: Element) -> str:
 
 
 def _tokenize(prompt: str) -> set[str]:
-    return {token for token in re.findall(r"[a-z0-9]+", prompt.lower()) if len(token) > 1}
+    return {
+        token for token in re.findall(r"[a-z0-9]+", prompt.lower()) if len(token) > 1
+    }
 
 
 def _normalize_text(value: str) -> str:
@@ -199,7 +202,9 @@ def _recover_from_record(
     record: SmartSelectorRecord,
     candidates: list[Element],
 ) -> Element | None:
-    ranked = sorted(candidates, key=lambda item: _score_against_record(record, item), reverse=True)
+    ranked = sorted(
+        candidates, key=lambda item: _score_against_record(record, item), reverse=True
+    )
     if not ranked:
         return None
     score = _score_against_record(record, ranked[0])
@@ -224,27 +229,39 @@ class LlmSmartResolver:
     def __init__(
         self,
         *,
-        model: str = "gpt-4.1-mini",
+        model: str | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
         client: Any = None,
     ):
-        self.model = model
+        defaults = openai_defaults()
+        self.model = model or defaults.model or "gpt-4.1-mini"
+        api_key = api_key or defaults.api_key
+        base_url = base_url or defaults.base_url
         if client is not None:
             self.client = client
         else:
             from openai import OpenAI
 
-            kwargs = {key: value for key, value in {"api_key": api_key, "base_url": base_url}.items() if value}
+            kwargs = {
+                key: value
+                for key, value in {"api_key": api_key, "base_url": base_url}.items()
+                if value
+            }
             self.client = OpenAI(**kwargs)
 
-    def resolve(self, prompt: str, document: Document, candidates: list[Element]) -> Element | None:
+    def resolve(
+        self, prompt: str, document: Document, candidates: list[Element]
+    ) -> Element | None:
         if not candidates:
             return None
         payload = {
             "prompt": prompt,
             "url": document.base_url,
-            "candidates": [_candidate_summary(element, index) for index, element in enumerate(candidates)],
+            "candidates": [
+                _candidate_summary(element, index)
+                for index, element in enumerate(candidates)
+            ],
         }
         response = self.client.chat.completions.create(
             model=self.model,
@@ -273,7 +290,9 @@ def _parse_llm_index(content: str) -> int | None:
     if not text:
         return None
     if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.IGNORECASE | re.DOTALL).strip()
+        text = re.sub(
+            r"^```(?:json)?\s*|\s*```$", "", text, flags=re.IGNORECASE | re.DOTALL
+        ).strip()
     try:
         payload = json.loads(text)
     except json.JSONDecodeError:
@@ -285,7 +304,11 @@ def _parse_llm_index(content: str) -> int | None:
         return payload
     if isinstance(payload, dict):
         value = payload.get("index")
-        return int(value) if isinstance(value, int | str) and str(value).lstrip("-").isdigit() else None
+        return (
+            int(value)
+            if isinstance(value, int | str) and str(value).lstrip("-").isdigit()
+            else None
+        )
     return None
 
 
@@ -317,7 +340,9 @@ def resolve_smart(
             return match
 
     prompt_tokens = _tokenize(prompt)
-    ranked = sorted(candidates, key=lambda item: _score(prompt_tokens, item), reverse=True)
+    ranked = sorted(
+        candidates, key=lambda item: _score(prompt_tokens, item), reverse=True
+    )
     match = ranked[0] if ranked and _score(prompt_tokens, ranked[0]) > 0 else None
 
     if match is None and use_llm:
@@ -325,13 +350,17 @@ def resolve_smart(
         match = resolver.resolve(prompt, document, ranked[:20])
 
     if match is None:
-        raise SmartSelectorError(f"Unable to resolve smart selector for prompt: {prompt!r}")
+        raise SmartSelectorError(
+            f"Unable to resolve smart selector for prompt: {prompt!r}"
+        )
 
     store.save(_record_for_match(record_key, prompt, match))
     return match
 
 
-def _record_for_match(record_key: str, prompt: str, match: Element) -> SmartSelectorRecord:
+def _record_for_match(
+    record_key: str, prompt: str, match: Element
+) -> SmartSelectorRecord:
     metadata = _metadata_for(match, prompt)
     return SmartSelectorRecord(
         key=record_key,
