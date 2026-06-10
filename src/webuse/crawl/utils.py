@@ -255,7 +255,7 @@ def extract_by_smart(scope: Any, rule: dict[str, Any]) -> Any:
     smart = getattr(scope, "smart", None)
     if smart is None:
         return None
-    match = smart(rule["smart"], key=rule.get("key"))
+    match = smart(rule["smart"], key=rule.get("key"), translate_xpath=True)
     if not match:
         return None
     return element_value(match, rule.get("attr"))

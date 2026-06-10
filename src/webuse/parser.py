@@ -6,8 +6,6 @@ from lxml import etree
 from lxml import html as lxml_html
 from pydantic import BaseModel, ConfigDict
 
-from .llm import openai_defaults
-
 
 class _TextExtractor(HTMLParser):
     def __init__(self) -> None:
@@ -157,64 +155,6 @@ class Document:
             if value:
                 links.append(urljoin(self.base_url or "", value))
         return links
-
-    def llm(
-        self,
-        prompt: str,
-        *,
-        model: str | None = None,
-        client: Any = None,
-        api_key: str | None = None,
-        base_url: str | None = None,
-        system_prompt: str | None = None,
-        max_chars: int | None = 12000,
-        temperature: float = 0,
-        **kwargs: Any,
-    ) -> str:
-        defaults = openai_defaults()
-        model = model or defaults.model or "gpt-4.1-mini"
-        api_key = api_key or defaults.api_key
-        base_url = base_url or defaults.base_url
-        html = self.raw_text
-        text = _text_without_tree(self.raw_text)
-        if max_chars is not None:
-            html = html[:max_chars]
-            text = text[:max_chars]
-        if client is None:
-            from openai import OpenAI
-
-            client_kwargs = {
-                key: value
-                for key, value in {"api_key": api_key, "base_url": base_url}.items()
-                if value
-            }
-            client = OpenAI(**client_kwargs)
-
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {
-                    "role": "system",
-                    "content": system_prompt
-                    or (
-                        "Answer the user's prompt using only the provided document "
-                        "text and HTML. Preserve exact values from attributes when "
-                        "the prompt asks for an HTML field or attribute."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        f"Prompt:\n{prompt}\n\n"
-                        f"Document text:\n{text}\n\n"
-                        f"Document HTML:\n{html}"
-                    ),
-                },
-            ],
-            temperature=temperature,
-            **kwargs,
-        )
-        return response.choices[0].message.content or ""
 
     def iter_elements(self) -> Iterable[Element]:
         for node in self._get_tree().iter():

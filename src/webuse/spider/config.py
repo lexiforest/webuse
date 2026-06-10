@@ -10,6 +10,7 @@ class ProjectConfig(WebuseModel):
 
     name: str | None = None
     user_agent: str | None = None
+    llm: dict[str, Any] = Field(default_factory=dict)
     robots_txt: bool | None = None
     items: dict[str, Any] = Field(default_factory=dict)
 

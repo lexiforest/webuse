@@ -22,6 +22,11 @@ def project_config_toml(
 user_agent = "webuse/{project_name}"
 robots_txt = false
 
+[llm]
+# model = "gpt-4.1-mini"
+# api_key = "sk-..."
+# base_url = "https://api.openai.com/v1"
+
 [concurrency]
 limit = 5
 per_domain = 1
@@ -49,6 +54,11 @@ def project_config_yaml(
     return f"""name: {project_name}
 user_agent: webuse/{project_name}
 robots_txt: false
+llm: {{}}
+# llm:
+#   model: gpt-4.1-mini
+#   api_key: sk-...
+#   base_url: https://api.openai.com/v1
 concurrency:
   limit: 5
   per_domain: 1
@@ -93,7 +103,7 @@ webuse fetch https://books.toscrape.com/ --css "article.product_pod h3 a" --attr
 `items.py` contains Pydantic models for scraped records.
 `pipelines.py` contains item cleanup and storage hooks.
 """,
-        ".gitignore": """.webuse/selectors.json
+        ".gitignore": """selectors.json
 output.jsonl
 *.sqlite
 *.sqlite-*

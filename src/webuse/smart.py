@@ -4,9 +4,17 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from .exceptions import SmartSelectorError
-from .llm import openai_defaults
+from .llm import create_openai_client, openai_defaults
 from .models import SmartSelectorRecord
-from .parser import Document, Element
+from .parser import Document, Element, _text_without_tree
+
+
+SMART_EXTRACTION_SYSTEM_PROMPT = (
+    "Extract data from the provided document text and HTML. Return only one JSON "
+    "value and no prose. If the prompt asks for multiple values, return a JSON "
+    "array. Preserve exact HTML attribute values when the prompt asks for an "
+    "attribute or field such as title, href, src, alt, or aria-label."
+)
 
 
 class SmartResolver(Protocol):
@@ -17,7 +25,7 @@ class SmartResolver(Protocol):
 
 class SmartSelectorStore:
     def __init__(self, path: str | Path | None = None):
-        self.path = Path(path or ".webuse/selectors.json")
+        self.path = Path(path or "selectors.json")
         self._records: dict[str, SmartSelectorRecord] | None = None
 
     def _load(self) -> dict[str, SmartSelectorRecord]:
@@ -241,14 +249,7 @@ class LlmSmartResolver:
         if client is not None:
             self.client = client
         else:
-            from openai import OpenAI
-
-            kwargs = {
-                key: value
-                for key, value in {"api_key": api_key, "base_url": base_url}.items()
-                if value
-            }
-            self.client = OpenAI(**kwargs)
+            self.client = create_openai_client(api_key=api_key, base_url=base_url)
 
     def resolve(
         self, prompt: str, document: Document, candidates: list[Element]
@@ -310,6 +311,72 @@ def _parse_llm_index(content: str) -> int | None:
             else None
         )
     return None
+
+
+def _parse_json_maybe(value: str) -> Any:
+    text = value.strip()
+    if text.startswith("```"):
+        text = text.removeprefix("```json").removeprefix("```").strip()
+        text = text.removesuffix("```").strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return value
+
+
+def coerce_smart_output(value: str) -> Any:
+    parsed = _parse_json_maybe(value)
+    if parsed is not value:
+        return parsed
+    lines = [line.strip() for line in value.splitlines() if line.strip()]
+    return lines if len(lines) > 1 else value
+
+
+def extract_smart(
+    document: Document,
+    prompt: str,
+    *,
+    model: str | None = None,
+    client: Any = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    system_prompt: str | None = None,
+    max_chars: int | None = 12000,
+    temperature: float = 0,
+    **kwargs: Any,
+) -> Any:
+    defaults = openai_defaults()
+    model = model or defaults.model or "gpt-4.1-mini"
+    api_key = api_key or defaults.api_key
+    base_url = base_url or defaults.base_url
+    html = document.raw_text
+    text = _text_without_tree(document.raw_text)
+    if max_chars is not None:
+        html = html[:max_chars]
+        text = text[:max_chars]
+    if client is None:
+        client = create_openai_client(api_key=api_key, base_url=base_url)
+
+    response = client.chat.completions.create(
+        model=model,
+        messages=[
+            {
+                "role": "system",
+                "content": system_prompt or SMART_EXTRACTION_SYSTEM_PROMPT,
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Prompt:\n{prompt}\n\n"
+                    f"Document text:\n{text}\n\n"
+                    f"Document HTML:\n{html}"
+                ),
+            },
+        ],
+        temperature=temperature,
+        **kwargs,
+    )
+    return coerce_smart_output(response.choices[0].message.content or "")
 
 
 def resolve_smart(

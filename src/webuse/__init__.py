@@ -44,7 +44,9 @@ from .exceptions import (
 from .llm import (
     OpenAISettings,
     configure_openai_defaults,
+    create_openai_client,
     detect_local_openai_settings,
+    openai_settings_from_config,
     openai_defaults,
 )
 from .log import configure_logger, logger
@@ -123,11 +125,13 @@ __all__ = [
     "canonical_request_url",
     "configure_logger",
     "configure_openai_defaults",
+    "create_openai_client",
     "crawl",
     "delete",
     "detect_local_openai_settings",
     "get",
     "logger",
+    "openai_settings_from_config",
     "openai_defaults",
     "post",
     "put",

@@ -4,7 +4,7 @@ from urllib.parse import urljoin
 
 from .models import CrawlRequest, RequestOptions
 from .parser import Document
-from .smart import SmartResolver, SmartSelectorStore, resolve_smart
+from .smart import SmartResolver, SmartSelectorStore, extract_smart, resolve_smart
 
 
 class Response(Document):
@@ -82,11 +82,33 @@ class Response(Document):
         self,
         prompt: str,
         *,
+        translate_xpath: bool = False,
         key: str | None = None,
         use_llm: bool = False,
         resolver: SmartResolver | None = None,
         store: SmartSelectorStore | None = None,
+        model: str | None = None,
+        client: Any = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        system_prompt: str | None = None,
+        max_chars: int | None = 12000,
+        temperature: float = 0,
+        **kwargs: Any,
     ):
+        if not translate_xpath:
+            return extract_smart(
+                self,
+                prompt,
+                model=model,
+                client=client,
+                api_key=api_key,
+                base_url=base_url,
+                system_prompt=system_prompt,
+                max_chars=max_chars,
+                temperature=temperature,
+                **kwargs,
+            )
         return resolve_smart(
             self,
             prompt,
@@ -100,12 +122,21 @@ class Response(Document):
         self,
         prompts: list[str],
         *,
+        translate_xpath: bool = False,
         use_llm: bool = False,
         resolver: SmartResolver | None = None,
         store: SmartSelectorStore | None = None,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         return {
-            prompt: self.smart(prompt, use_llm=use_llm, resolver=resolver, store=store)
+            prompt: self.smart(
+                prompt,
+                translate_xpath=translate_xpath,
+                use_llm=use_llm,
+                resolver=resolver,
+                store=store,
+                **kwargs,
+            )
             for prompt in prompts
         }
 

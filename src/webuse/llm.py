@@ -37,6 +37,45 @@ def configured_openai_settings() -> OpenAISettings:
     )
 
 
+def openai_settings_from_config(config: dict[str, Any] | None) -> OpenAISettings:
+    config = config or {}
+    defaults: OpenAISettings | None = None
+
+    def default_value(name: str) -> Any:
+        nonlocal defaults
+        if defaults is None:
+            defaults = openai_defaults()
+        return getattr(defaults, name)
+
+    settings = OpenAISettings(
+        model=config.get("model") or default_value("model"),
+        api_key=config.get("api_key") or default_value("api_key"),
+        base_url=config.get("base_url") or default_value("base_url"),
+        provider=config.get("provider")
+        or (defaults.provider if defaults is not None else "config"),
+    )
+    return settings
+
+
+def create_openai_client(
+    *,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    settings: OpenAISettings | None = None,
+) -> Any:
+    settings = settings or openai_defaults()
+    api_key = api_key or settings.api_key
+    base_url = base_url or settings.base_url
+    from openai import OpenAI
+
+    kwargs = {
+        key: value
+        for key, value in {"api_key": api_key, "base_url": base_url}.items()
+        if value
+    }
+    return OpenAI(**kwargs)
+
+
 def _model_id(payload: Any) -> str | None:
     data = payload.get("data") if isinstance(payload, dict) else None
     if not isinstance(data, list):
