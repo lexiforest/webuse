@@ -19,12 +19,12 @@ import json
 import os
 import time
 import traceback
-from dataclasses import dataclass, field, asdict
 from pathlib import Path
 from typing import Any
 
 from curl_cffi import requests as curl_requests
 from lxml import html as lxml_html
+from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
 # Config
@@ -87,12 +87,11 @@ TEST_CASES: dict[str, dict[str, Any]] = {
 }
 
 # ---------------------------------------------------------------------------
-# Data classes
+# Models
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class ExtractionResult:
+class ExtractionResult(BaseModel):
     model: str
     strategy: str
     test_case: str
@@ -103,7 +102,7 @@ class ExtractionResult:
     raw_output: str = ""
     parsed: Any = None
     error: str = ""
-    scores: dict[str, float] = field(default_factory=dict)
+    scores: dict[str, float] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -167,11 +166,16 @@ def parse_json_from_text(text: str) -> Any:
 # ---------------------------------------------------------------------------
 
 
-def run_direct(model: str, case_name: str, case_cfg: dict, html: str) -> ExtractionResult:
+def run_direct(
+    model: str, case_name: str, case_cfg: dict, html: str
+) -> ExtractionResult:
     """Strategy 1: ask the model to extract structured data directly."""
     cfg = case_cfg["direct"]
     messages = [
-        {"role": "system", "content": "You are an expert HTML data extractor. Return ONLY valid JSON."},
+        {
+            "role": "system",
+            "content": "You are an expert HTML data extractor. Return ONLY valid JSON.",
+        },
         {"role": "user", "content": f"{cfg['prompt']}\n\n<html>\n{html}\n</html>"},
     ]
 
@@ -186,9 +190,15 @@ def run_direct(model: str, case_name: str, case_cfg: dict, html: str) -> Extract
         # ---- scoring ----
         scores: dict[str, float] = {}
         if isinstance(parsed, list):
-            scores["count_match"] = 1.0 if len(parsed) >= cfg.get("expected_count", 1) else len(parsed) / cfg["expected_count"]
+            scores["count_match"] = (
+                1.0
+                if len(parsed) >= cfg.get("expected_count", 1)
+                else len(parsed) / cfg["expected_count"]
+            )
             if cfg.get("expected_fields"):
-                present = sum(1 for item in parsed for f in cfg["expected_fields"] if f in item)
+                present = sum(
+                    1 for item in parsed for f in cfg["expected_fields"] if f in item
+                )
                 total = len(parsed) * len(cfg["expected_fields"])
                 scores["field_presence"] = present / total if total else 0
         elif isinstance(parsed, dict) and cfg.get("expected_fields"):
@@ -196,20 +206,31 @@ def run_direct(model: str, case_name: str, case_cfg: dict, html: str) -> Extract
             scores["field_presence"] = present / len(cfg["expected_fields"])
 
         return ExtractionResult(
-            model=model, strategy="direct", test_case=case_name,
-            success=True, latency_s=latency,
-            input_tokens=inp, output_tokens=out,
-            raw_output=content, parsed=parsed, scores=scores,
+            model=model,
+            strategy="direct",
+            test_case=case_name,
+            success=True,
+            latency_s=latency,
+            input_tokens=inp,
+            output_tokens=out,
+            raw_output=content,
+            parsed=parsed,
+            scores=scores,
         )
     except Exception as e:
         return ExtractionResult(
-            model=model, strategy="direct", test_case=case_name,
-            success=False, latency_s=time.monotonic() - t0,
+            model=model,
+            strategy="direct",
+            test_case=case_name,
+            success=False,
+            latency_s=time.monotonic() - t0,
             error=f"{type(e).__name__}: {e}",
         )
 
 
-def run_selector(model: str, case_name: str, case_cfg: dict, html: str) -> ExtractionResult:
+def run_selector(
+    model: str, case_name: str, case_cfg: dict, html: str
+) -> ExtractionResult:
     """Strategy 2: ask the model to produce a CSS/XPath selector, then apply it."""
     cfg = case_cfg["selector"]
     messages = [
@@ -235,6 +256,7 @@ def run_selector(model: str, case_name: str, case_cfg: dict, html: str) -> Extra
         tree = lxml_html.fromstring(html)
         if "css" in parsed:
             from lxml.cssselect import CSSSelector
+
             sel = CSSSelector(parsed["css"])
             matches = sel(tree)
         elif "xpath" in parsed:
@@ -250,22 +272,31 @@ def run_selector(model: str, case_name: str, case_cfg: dict, html: str) -> Extra
         }
 
         return ExtractionResult(
-            model=model, strategy="selector", test_case=case_name,
-            success=True, latency_s=latency,
-            input_tokens=inp, output_tokens=out,
+            model=model,
+            strategy="selector",
+            test_case=case_name,
+            success=True,
+            latency_s=latency,
+            input_tokens=inp,
+            output_tokens=out,
             raw_output=content,
             parsed={"selector": parsed, "match_count": n},
             scores=scores,
         )
     except Exception as e:
         return ExtractionResult(
-            model=model, strategy="selector", test_case=case_name,
-            success=False, latency_s=time.monotonic() - t0,
+            model=model,
+            strategy="selector",
+            test_case=case_name,
+            success=False,
+            latency_s=time.monotonic() - t0,
             error=f"{type(e).__name__}: {e}\n{traceback.format_exc()}",
         )
 
 
-def run_markdown(model: str, case_name: str, case_cfg: dict, html: str) -> ExtractionResult:
+def run_markdown(
+    model: str, case_name: str, case_cfg: dict, html: str
+) -> ExtractionResult:
     """Strategy 3: convert HTML to a clean markdown article."""
     cfg = case_cfg["markdown"]
     messages = [
@@ -293,19 +324,31 @@ def run_markdown(model: str, case_name: str, case_cfg: dict, html: str) -> Extra
             hits = sum(1 for s in cfg["must_contain"] if s.lower() in content.lower())
             scores["must_contain"] = hits / len(cfg["must_contain"])
         # basic quality heuristics
-        scores["has_markdown_links"] = 1.0 if "](http" in content or "](" in content else 0.0
-        scores["length_ratio"] = min(len(content) / (len(html) * 0.1), 1.0)  # expect ~10% of HTML size
+        scores["has_markdown_links"] = (
+            1.0 if "](http" in content or "](" in content else 0.0
+        )
+        scores["length_ratio"] = min(
+            len(content) / (len(html) * 0.1), 1.0
+        )  # expect ~10% of HTML size
 
         return ExtractionResult(
-            model=model, strategy="markdown", test_case=case_name,
-            success=True, latency_s=latency,
-            input_tokens=inp, output_tokens=out,
-            raw_output=content, scores=scores,
+            model=model,
+            strategy="markdown",
+            test_case=case_name,
+            success=True,
+            latency_s=latency,
+            input_tokens=inp,
+            output_tokens=out,
+            raw_output=content,
+            scores=scores,
         )
     except Exception as e:
         return ExtractionResult(
-            model=model, strategy="markdown", test_case=case_name,
-            success=False, latency_s=time.monotonic() - t0,
+            model=model,
+            strategy="markdown",
+            test_case=case_name,
+            success=False,
+            latency_s=time.monotonic() - t0,
             error=f"{type(e).__name__}: {e}",
         )
 
@@ -328,10 +371,13 @@ def load_html(case_name: str, *, clean: bool = True, target_kb: int = 80) -> str
     raw = path.read_text(encoding="utf-8")
     if clean:
         from clean import clean_html
+
         cleaned = clean_html(raw, target_kb=target_kb)
         orig_kb = len(raw) / 1024
         clean_kb = len(cleaned) / 1024
-        print(f"  Cleaned {orig_kb:,.0f} KB → {clean_kb:,.0f} KB ({(1 - clean_kb/orig_kb)*100:.0f}% reduction)")
+        print(
+            f"  Cleaned {orig_kb:,.0f} KB → {clean_kb:,.0f} KB ({(1 - clean_kb / orig_kb) * 100:.0f}% reduction)"
+        )
         return cleaned
     return raw
 
@@ -350,10 +396,10 @@ def run_benchmark(
     for case_name in cases:
         case_cfg = TEST_CASES[case_name]
         html = load_html(case_name)
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"Test case: {case_name} — {case_cfg['description']}")
         print(f"HTML size: {len(html):,} chars")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
 
         for strategy in strategies:
             if strategy not in case_cfg:
@@ -367,8 +413,12 @@ def run_benchmark(
                 results.append(result)
 
                 if result.success:
-                    score_str = ", ".join(f"{k}={v:.2f}" for k, v in result.scores.items())
-                    print(f"OK  {result.latency_s:.1f}s  tokens={result.input_tokens}+{result.output_tokens}  {score_str}")
+                    score_str = ", ".join(
+                        f"{k}={v:.2f}" for k, v in result.scores.items()
+                    )
+                    print(
+                        f"OK  {result.latency_s:.1f}s  tokens={result.input_tokens}+{result.output_tokens}  {score_str}"
+                    )
                 else:
                     print(f"FAIL  {result.error[:80]}")
 
@@ -379,22 +429,30 @@ def save_results(results: list[ExtractionResult]) -> Path:
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     ts = time.strftime("%Y%m%d_%H%M%S")
     path = RESULTS_DIR / f"benchmark_{ts}.json"
-    data = [asdict(r) for r in results]
+    data = [result.model_dump(mode="json") for result in results]
     path.write_text(json.dumps(data, indent=2, default=str), encoding="utf-8")
     print(f"\nResults saved to {path}")
     return path
 
 
 def print_summary(results: list[ExtractionResult]) -> None:
-    print(f"\n{'='*80}")
+    print(f"\n{'=' * 80}")
     print("SUMMARY")
-    print(f"{'='*80}")
-    print(f"{'Model':<45} {'Strategy':<12} {'Case':<20} {'OK':<5} {'Time':>6} {'Scores'}")
+    print(f"{'=' * 80}")
+    print(
+        f"{'Model':<45} {'Strategy':<12} {'Case':<20} {'OK':<5} {'Time':>6} {'Scores'}"
+    )
     print("-" * 120)
     for r in results:
         status = "Y" if r.success else "N"
-        score_str = ", ".join(f"{k}={v:.2f}" for k, v in r.scores.items()) if r.scores else r.error[:40]
-        print(f"{r.model:<45} {r.strategy:<12} {r.test_case:<20} {status:<5} {r.latency_s:>5.1f}s {score_str}")
+        score_str = (
+            ", ".join(f"{k}={v:.2f}" for k, v in r.scores.items())
+            if r.scores
+            else r.error[:40]
+        )
+        print(
+            f"{r.model:<45} {r.strategy:<12} {r.test_case:<20} {status:<5} {r.latency_s:>5.1f}s {score_str}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -403,13 +461,32 @@ def print_summary(results: list[ExtractionResult]) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="HTML extraction benchmark across LLM models")
-    parser.add_argument("--model", "-m", action="append", help="Model(s) to test (can repeat)")
-    parser.add_argument("--strategy", "-s", action="append", choices=list(STRATEGIES), help="Strategy(ies) to test")
+    parser = argparse.ArgumentParser(
+        description="HTML extraction benchmark across LLM models"
+    )
+    parser.add_argument(
+        "--model", "-m", action="append", help="Model(s) to test (can repeat)"
+    )
+    parser.add_argument(
+        "--strategy",
+        "-s",
+        action="append",
+        choices=list(STRATEGIES),
+        help="Strategy(ies) to test",
+    )
     parser.add_argument("--case", "-c", action="append", help="Test case name(s)")
-    parser.add_argument("--no-clean", action="store_true", help="Skip HTML cleaning (send raw HTML)")
-    parser.add_argument("--target-kb", type=int, default=80, help="Target size in KB after cleaning (default: 80)")
-    parser.add_argument("--list", action="store_true", help="List available test cases and exit")
+    parser.add_argument(
+        "--no-clean", action="store_true", help="Skip HTML cleaning (send raw HTML)"
+    )
+    parser.add_argument(
+        "--target-kb",
+        type=int,
+        default=80,
+        help="Target size in KB after cleaning (default: 80)",
+    )
+    parser.add_argument(
+        "--list", action="store_true", help="List available test cases and exit"
+    )
     args = parser.parse_args()
 
     if args.list:

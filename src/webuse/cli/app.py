@@ -12,6 +12,7 @@ _COMMAND_MODULES = [
     "webuse.cli.fetch",
     "webuse.cli.crawl",
     "webuse.cli.websocket",
+    "webuse.cli.ui",
 ]
 
 

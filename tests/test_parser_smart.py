@@ -1,8 +1,8 @@
+import re as re_module
 from pathlib import Path
 from types import SimpleNamespace
 
 from webuse.response import Response
-from webuse.models import RequestOptions
 from webuse.smart import LlmSmartResolver, SmartSelectorStore
 
 
@@ -24,10 +24,6 @@ HTML = b"""
 """
 
 
-def test_request_options_default_to_chrome_impersonation():
-    assert RequestOptions().to_request_kwargs()["impersonate"] == "chrome"
-
-
 def test_response_css_xpath_and_links():
     response = Response(
         url="https://example.com/catalog", status_code=200, content=HTML
@@ -46,7 +42,46 @@ def test_response_css_xpath_and_links():
     ]
 
 
-def test_document_llm_passes_prompt_and_text_to_model():
+def test_response_re_and_re_first_do_not_build_tree():
+    response = Response(
+        url="https://example.com/catalog", status_code=200, content=HTML
+    )
+
+    assert response.re(r"/products/([a-z]+)") == ["alpha", "beta"]
+    assert response.re_first(r"/products/([a-z]+)") == "alpha"
+    assert response.re_first(r"missing", default="fallback") == "fallback"
+    assert response.re_first(r"alpha gadget", flags=re_module.IGNORECASE) == (
+        "Alpha Gadget"
+    )
+    assert response._tree is None
+
+
+def test_response_re_returns_tuples_for_multiple_capture_groups():
+    response = Response(
+        url="https://example.com/catalog",
+        status_code=200,
+        content=b"<a href='/products/alpha'>Alpha</a>",
+    )
+
+    assert response.re(r"href='([^']+)'>([^<]+)") == [("/products/alpha", "Alpha")]
+    assert response.re_first(r"href='([^']+)'>([^<]+)") == (
+        "/products/alpha",
+        "Alpha",
+    )
+
+
+def test_element_re_matches_element_html():
+    response = Response(
+        url="https://example.com/catalog", status_code=200, content=HTML
+    )
+    card = response.css_first(".product-card")
+    assert card is not None
+
+    assert card.re(r"/products/([a-z]+)") == ["alpha"]
+    assert card.re_first(r"<h2>([^<]+)</h2>") == "Alpha Gadget"
+
+
+def test_smart_passes_prompt_and_text_to_model():
     captured = {}
 
     class FakeCompletions:
@@ -54,7 +89,9 @@ def test_document_llm_passes_prompt_and_text_to_model():
             captured.update(kwargs)
             return SimpleNamespace(
                 choices=[
-                    SimpleNamespace(message=SimpleNamespace(content="Alpha Gadget"))
+                    SimpleNamespace(
+                        message=SimpleNamespace(content='["Alpha Gadget"]')
+                    )
                 ]
             )
 
@@ -63,12 +100,15 @@ def test_document_llm_passes_prompt_and_text_to_model():
         url="https://example.com/catalog", status_code=200, content=HTML
     )
 
-    result = response.llm("Which product is first?", model="test-model", client=client)
+    result = response.smart(
+        "Which product is first?", model="test-model", client=client
+    )
 
-    assert result == "Alpha Gadget"
+    assert result == ["Alpha Gadget"]
     assert response._tree is None
     assert captured["model"] == "test-model"
     assert captured["temperature"] == 0
+    assert "array containing all matches" in captured["messages"][0]["content"]
     assert captured["messages"][1]["content"].startswith(
         "Prompt:\nWhich product is first?"
     )
@@ -76,7 +116,26 @@ def test_document_llm_passes_prompt_and_text_to_model():
     assert "<article" in captured["messages"][1]["content"]
 
 
-def test_document_llm_includes_html_attributes_without_building_tree():
+def test_smart_first_returns_first_model_match():
+    class FakeCompletions:
+        def create(self, **kwargs):
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(content='["Alpha", "Beta"]')
+                    )
+                ]
+            )
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions()))
+    response = Response(
+        url="https://example.com/catalog", status_code=200, content=HTML
+    )
+
+    assert response.smart_first("First title", client=client) == "Alpha"
+
+
+def test_smart_includes_html_attributes_without_building_tree():
     captured = {}
 
     class FakeCompletions:
@@ -95,14 +154,15 @@ def test_document_llm_includes_html_attributes_without_building_tree():
         content=b'<a title="Alpha Full Title">Alpha...</a>',
     )
 
-    result = response.llm("Extract title attribute", client=client)
+    result = response.smart_first("Extract title attribute", client=client)
 
     assert result == "Alpha Full Title"
     assert response._tree is None
+    assert "first matching JSON value" in captured["messages"][0]["content"]
     assert 'title="Alpha Full Title"' in captured["messages"][1]["content"]
 
 
-def test_document_llm_can_limit_text_length():
+def test_smart_can_limit_text_length():
     captured = {}
 
     class FakeCompletions:
@@ -117,7 +177,7 @@ def test_document_llm_can_limit_text_length():
         url="https://example.com/catalog", status_code=200, content=b"<p>abcdef</p>"
     )
 
-    response.llm("Read text", client=client, max_chars=3)
+    response.smart("Read text", client=client, max_chars=3)
 
     assert (
         "Document text:\nabc\n\nDocument HTML:\n<p>"
@@ -141,16 +201,15 @@ def test_smart_selector_persists_record(tmp_path: Path):
         url="https://example.com/catalog", status_code=200, content=HTML
     )
 
-    match = response.smart("alpha gadget product link", store=store)
+    match = response.smart_first(
+        "alpha gadget product link", translate_xpath=True, store=store
+    )
     assert match.attr("href") == "https://example.com/products/alpha"
 
     persisted = store.get("alpha-gadget-product-link")
     assert persisted is not None
     assert persisted.selectors
-    assert persisted.tag == "a"
-    assert persisted.attrs["href"] == "https://example.com/products/alpha"
-    assert persisted.text == "Open"
-    assert "alpha" in persisted.text_tokens
+    assert persisted.xpath_selectors
 
 
 def test_smart_selector_uses_deterministic_match_before_resolver(tmp_path: Path):
@@ -163,8 +222,14 @@ def test_smart_selector_uses_deterministic_match_before_resolver(tmp_path: Path)
         url="https://example.com/catalog", status_code=200, content=HTML
     )
 
-    match = response.smart(
+    matches = response.smart(
+        "alpha gadget product link", translate_xpath=True, store=store
+    )
+    assert len(matches) == 1
+
+    match = response.smart_first(
         "alpha gadget product link",
+        translate_xpath=True,
         store=store,
         use_llm=True,
         resolver=FailingResolver(),
@@ -197,39 +262,16 @@ def test_smart_selector_uses_resolver_fallback(tmp_path: Path):
         url="https://example.com/actions", status_code=200, content=html
     )
 
-    match = response.smart(
-        "unmatched prompt", store=store, use_llm=True, resolver=resolver
+    match = response.smart_first(
+        "unmatched prompt",
+        translate_xpath=True,
+        store=store,
+        use_llm=True,
+        resolver=resolver,
     )
 
     assert resolver.called
     assert match.attr("data-answer") == "yes"
-
-
-def test_smart_selector_recovers_when_saved_selectors_are_stale(tmp_path: Path):
-    store = SmartSelectorStore(tmp_path / "selectors.json")
-    response = Response(
-        url="https://example.com/catalog", status_code=200, content=HTML
-    )
-    response.smart("alpha gadget product link", store=store)
-
-    changed_html = b"""
-    <html>
-      <body>
-        <a href="/help">Open</a>
-        <a class="renamed-link" href="/products/alpha">Open</a>
-      </body>
-    </html>
-    """
-    changed = Response(
-        url="https://example.com/catalog", status_code=200, content=changed_html
-    )
-
-    match = changed.smart("alpha gadget product link", store=store)
-
-    assert match.attr("href") == "https://example.com/products/alpha"
-    refreshed = store.get("alpha-gadget-product-link")
-    assert refreshed is not None
-    assert refreshed.selectors == ["a.renamed-link"]
 
 
 def test_llm_smart_resolver_accepts_compatible_client():

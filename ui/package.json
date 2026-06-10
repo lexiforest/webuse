@@ -5,6 +5,8 @@
     "dev": "vite dev",
     "build": "vite build",
     "start": "vite start",
+    "worker": "uv run --project .. webuse ui",
+    "worker:node": "node worker/server.js",
     "preview": "vite preview",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",

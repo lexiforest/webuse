@@ -20,7 +20,18 @@ from lxml import html as lxml_html
 from lxml_html_clean import Cleaner
 
 # Attributes worth keeping
-KEEP_ATTRS = {"href", "src", "alt", "id", "class", "type", "datetime", "content", "name", "property"}
+KEEP_ATTRS = {
+    "href",
+    "src",
+    "alt",
+    "id",
+    "class",
+    "type",
+    "datetime",
+    "content",
+    "name",
+    "property",
+}
 
 # Regex for CSS-hash class names like "sc-1a2b3c" or "css-xyz123"
 CSS_HASH_RE = re.compile(r"^(?:sc|css|styled|emotion|_)-?[a-zA-Z0-9]{4,}$")
@@ -33,21 +44,20 @@ def _make_cleaner(strip_boilerplate: bool = True) -> Cleaner:
         scripts=True,
         javascript=True,
         style=True,
-        embedded=True,       # object/embed/applet
-        frames=True,         # iframe/frame
-        forms=False,         # keep forms (may contain content)
+        embedded=True,  # object/embed/applet
+        frames=True,  # iframe/frame
+        forms=False,  # keep forms (may contain content)
         # strip these tags but keep their text content
         remove_tags=None,
         # remove these tags along with all children
-        kill_tags=["svg", "canvas",
-                   "map", "area", "noscript"]
-                  + (["nav", "footer", "header", "aside"] if strip_boilerplate else []),
+        kill_tags=["svg", "canvas", "map", "area", "noscript"]
+        + (["nav", "footer", "header", "aside"] if strip_boilerplate else []),
         comments=True,
         processing_instructions=True,
-        meta=False,           # keep meta tags (may have useful structured data)
-        links=False,          # keep <link> tags
-        page_structure=False, # keep html/head/body
-        annoying_tags=True,   # blink, marquee
+        meta=False,  # keep meta tags (may have useful structured data)
+        links=False,  # keep <link> tags
+        page_structure=False,  # keep html/head/body
+        annoying_tags=True,  # blink, marquee
         remove_unknown_tags=False,
         safe_attrs_only=False,  # we handle attrs ourselves in a later pass
     )
@@ -191,7 +201,11 @@ def _remove_empty(tree) -> None:
                 continue
             if el.tag in SKIP:
                 continue
-            if len(el) == 0 and not (el.text or "").strip() and not (el.tail or "").strip():
+            if (
+                len(el) == 0
+                and not (el.text or "").strip()
+                and not (el.tail or "").strip()
+            ):
                 parent = el.getparent()
                 if parent is not None:
                     parent.remove(el)

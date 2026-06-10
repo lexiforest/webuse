@@ -2,22 +2,21 @@
 
 ## Project Summary
 
-`webuse` is a small scraping toolkit built around `curl_cffi`.
+`webuse` is a small scraping toolkit built around `curl_cffi` and `pydantic`.
 
-Current v1 scope:
+Current scope:
 - sync and async HTTP helpers
 - explicit sync and async clients
 - sync and async websocket wrappers
 - a light HTML parsing layer
-- prompt-based smart selectors with local persistence
+- prompt-based llm selectors with local persistence
 - queue-driven crawling via `webuse.crawl` / `webuse.acrawl`
 - a CLI with `fetch` and `crawl`
+- Scrapy like spiders for bigger projects
 
 Out of scope for now:
 - browser automation
-- full spider framework
 - middleware/checkpointing/pause-resume
-- mandatory LLM integration
 
 ## Repo Layout
 
@@ -27,22 +26,28 @@ Out of scope for now:
 - `src/webuse/parser.py`: lightweight document/element selector layer
 - `src/webuse/smart.py`: smart selector persistence and resolution
 - `src/webuse/websocket.py`: sync/async websocket wrappers
-- `src/webuse/crawl.py`: queue-based crawl engine
-- `src/webuse/cli.py`: CLI entrypoint
-- `src/webuse/models.py`: shared dataclasses and public models
+- `src/webuse/crawl/`: queue-based sync/async crawl engines and crawl utilities
+- `src/webuse/spider/`: sync/async Spider classes
+- `src/webuse/pipelines/`: Pipeline base class, resolver, and built-in item pipelines
+- `src/webuse/cli/`: CLI app and subcommands
+- `src/webuse/models.py`: shared Pydantic models
+- `src/webuse/exceptions.py`: public exception hierarchy
 - `tests/`: unit tests
 
 ## HTTP Client
 
-Use `curl_cffi` for all HTTP requests in this project, including research scripts. Do not use `httpx` or `requests` unless explicitly requested.
+Use `curl_cffi` for all HTTP requests in this project, including research scripts. Do
+not use `httpx` or `requests` unless explicitly requested.
 
 ## Design Rules
 
 - Keep the first-look API simple. Prefer top-level helpers and small examples.
-- Keep advanced transport power available. Do not hide `curl_cffi` features behind an overly narrow wrapper.
+- Keep advanced transport power available. Do not hide `curl_cffi` features behind an
+    overly narrow wrapper.
 - Prefer additive abstractions over deep frameworks.
-- Crawl logic should stay function-based unless there is a strong reason to introduce class-based spiders.
-- Smart selectors must work without an LLM. LLM use is optional and explicit.
+- Crawl logic should stay function-based. For easier user experience bring part of the
+    Spider and ItemPipeline idioms from scrapy.
+- Plain selectors must work without an LLM. Smart selectors use LLM.
 - Avoid coupling unrelated layers. The CLI should call the Python APIs, not duplicate their logic.
 
 ## Coding Guidelines
@@ -52,8 +57,8 @@ Use `curl_cffi` for all HTTP requests in this project, including research script
 - Keep dependencies minimal.
 - Preserve lazy behavior where it matters, especially response parsing.
 - Prefer small focused helpers over inheritance-heavy designs.
-- Keep public names stable and unsurprising.
 - When adding new request options, wire them consistently across sync, async, and CLI surfaces where applicable.
+- When a refactor is needed, ask the user if backward compatibility is required.
 
 ## Crawl Expectations
 
@@ -66,7 +71,7 @@ Use `curl_cffi` for all HTTP requests in this project, including research script
 - domain/scope filtering
 - result/error/stats aggregation
 
-Do not turn crawl into a full spider framework unless explicitly requested.
+`crawl` should support both a configuration and a python spider.
 
 ## Smart Selector Expectations
 

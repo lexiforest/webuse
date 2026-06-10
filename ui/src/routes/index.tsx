@@ -1,16 +1,62 @@
-import { For } from "solid-js";
+import { For, createSignal, onMount } from "solid-js";
 
 import Layout from "~/layout/dashboard";
-import { dataItems, jobs, logs, projects } from "~/lib/dashboard-data";
 
-const stats = [
-  { label: "Projects", value: projects.length },
-  { label: "Running jobs", value: jobs.filter(job => job.status === "running").length },
-  { label: "Items", value: dataItems.length },
-  { label: "Log lines", value: logs.length },
-];
+type Job = {
+  id: number;
+  project: string;
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  items: number;
+};
+
+type LogLine = {
+  id: number;
+  stream: "stdout" | "stderr";
+  message: string;
+  time: string;
+};
 
 export default function Overview() {
+  const [projectCount, setProjectCount] = createSignal(0);
+  const [itemCount, setItemCount] = createSignal(0);
+  const [jobs, setJobs] = createSignal<Job[]>([]);
+  const [logs, setLogs] = createSignal<LogLine[]>([]);
+
+  const stats = () => [
+    { label: "Projects", value: projectCount() },
+    { label: "Running jobs", value: jobs().filter(job => job.status === "running").length },
+    { label: "Items", value: itemCount() },
+    { label: "Log lines", value: logs().length },
+  ];
+
+  onMount(() => {
+    void (async () => {
+      const [projectsResponse, jobsResponse, logsResponse, dataResponse] = await Promise.all([
+        fetch("/api/projects"),
+        fetch("/api/jobs"),
+        fetch("/api/logs"),
+        fetch("/api/data"),
+      ]);
+
+      if (projectsResponse.ok) {
+        const data = (await projectsResponse.json()) as { projects: unknown[] };
+        setProjectCount(data.projects.length);
+      }
+      if (jobsResponse.ok) {
+        const data = (await jobsResponse.json()) as { jobs: Job[] };
+        setJobs(data.jobs);
+      }
+      if (logsResponse.ok) {
+        const data = (await logsResponse.json()) as { logs: LogLine[] };
+        setLogs(data.logs.slice(0, 6));
+      }
+      if (dataResponse.ok) {
+        const data = (await dataResponse.json()) as { dataItems: unknown[] };
+        setItemCount(data.dataItems.length);
+      }
+    })();
+  });
+
   return (
     <Layout currentTab="overview">
       <div class="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -22,7 +68,7 @@ export default function Overview() {
       </div>
 
       <section class="grid gap-4 md:grid-cols-4">
-        <For each={stats}>
+        <For each={stats()}>
           {stat => (
             <div class="rounded-lg border border-gray-700 bg-gray-900 p-4">
               <div class="text-sm text-gray-400">{stat.label}</div>
@@ -44,7 +90,7 @@ export default function Overview() {
                 <tr><th>ID</th><th>Project</th><th>Status</th><th>Items</th></tr>
               </thead>
               <tbody>
-                <For each={jobs.slice(0, 3)}>
+                <For each={jobs().slice(0, 3)} fallback={<tr><td colspan="4" class="py-6 text-center text-gray-500">No jobs yet.</td></tr>}>
                   {job => (
                     <tr>
                       <td>#{job.id}</td>
@@ -65,7 +111,7 @@ export default function Overview() {
             <a href="/logs" class="text-sm text-sky-400 hover:text-sky-300">Open logs</a>
           </div>
           <div class="space-y-2">
-            <For each={logs}>
+            <For each={logs()} fallback={<div class="text-sm text-gray-500">No logs yet.</div>}>
               {line => (
                 <div class="rounded bg-gray-800 px-3 py-2 font-mono text-xs text-gray-300">
                   <span class="text-gray-500">{line.time}</span>{" "}

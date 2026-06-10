@@ -76,6 +76,28 @@ export default function Projects() {
     })();
   };
 
+  const runProject = (id: number) => {
+    setError(undefined);
+
+    void (async () => {
+      try {
+        const response = await fetch("/api/jobs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectId: id }),
+        });
+        if (!response.ok) {
+          const data = (await response.json().catch(() => ({}))) as { error?: string };
+          throw new Error(data.error || `Failed to queue job (${response.status})`);
+        }
+
+        navigate("/jobs");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to queue job");
+      }
+    })();
+  };
+
   onMount(() => {
     void loadProjects();
   });
@@ -135,7 +157,18 @@ export default function Projects() {
                     <td class="max-w-[420px] truncate">{project.target}</td>
                     <td>{project.status}</td>
                     <td>{project.updatedAt}</td>
-                    <td>
+                    <td class="flex gap-2">
+                      <Button
+                        size="compact"
+                        variant="primary"
+                        type="button"
+                        onClick={event => {
+                          event.stopPropagation();
+                          runProject(project.id);
+                        }}
+                      >
+                        Run
+                      </Button>
                       <Button
                         size="compact"
                         variant="danger"

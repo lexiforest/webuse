@@ -95,11 +95,55 @@ class Response(Document):
         max_chars: int | None = 12000,
         temperature: float = 0,
         **kwargs: Any,
-    ):
+    ) -> list[Any]:
         if not translate_xpath:
             return extract_smart(
                 self,
                 prompt,
+                first=False,
+                model=model,
+                client=client,
+                api_key=api_key,
+                base_url=base_url,
+                system_prompt=system_prompt,
+                max_chars=max_chars,
+                temperature=temperature,
+                **kwargs,
+            )
+        return [
+            resolve_smart(
+                self,
+                prompt,
+                key=key,
+                use_llm=use_llm,
+                resolver=resolver,
+                store=store,
+            )
+        ]
+
+    def smart_first(
+        self,
+        prompt: str,
+        *,
+        translate_xpath: bool = False,
+        key: str | None = None,
+        use_llm: bool = False,
+        resolver: SmartResolver | None = None,
+        store: SmartSelectorStore | None = None,
+        model: str | None = None,
+        client: Any = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        system_prompt: str | None = None,
+        max_chars: int | None = 12000,
+        temperature: float = 0,
+        **kwargs: Any,
+    ) -> Any:
+        if not translate_xpath:
+            return extract_smart(
+                self,
+                prompt,
+                first=True,
                 model=model,
                 client=client,
                 api_key=api_key,

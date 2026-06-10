@@ -108,12 +108,6 @@ class SmartSelectorRecord(WebuseModel):
     prompt: str
     selectors: list[str] = Field(default_factory=list)
     xpath_selectors: list[str] = Field(default_factory=list)
-    tag: str | None = None
-    attrs: dict[str, str] = Field(default_factory=dict)
-    text: str = ""
-    text_tokens: list[str] = Field(default_factory=list)
-    url: str | None = None
-    hints: dict[str, Any] = Field(default_factory=dict)
 
 
 class CrawlStats(WebuseModel):

@@ -52,6 +52,28 @@ def test_openai_defaults_detect_local_lmstudio(monkeypatch):
     assert settings.model == "local-model"
 
 
+def test_openai_settings_from_config_does_not_probe_when_complete(monkeypatch):
+    _reset(monkeypatch)
+
+    def fail_get(*args, **kwargs):
+        raise AssertionError("local endpoints should not be probed")
+
+    monkeypatch.setattr(llm.requests, "get", fail_get)
+
+    settings = llm.openai_settings_from_config(
+        {
+            "model": "configured-model",
+            "api_key": "configured-key",
+            "base_url": "https://llm.example.com/v1",
+        }
+    )
+
+    assert settings.provider == "config"
+    assert settings.api_key == "configured-key"
+    assert settings.base_url == "https://llm.example.com/v1"
+    assert settings.model == "configured-model"
+
+
 def test_cli_startup_detects_local_openai_defaults_for_llm(monkeypatch, capsys):
     _reset(monkeypatch)
     captured = {}
@@ -65,26 +87,29 @@ def test_cli_startup_detects_local_openai_defaults_for_llm(monkeypatch, capsys):
     class FakeResponse:
         url = "https://example.com"
 
-        def llm(self, prompt, **kwargs):
+        def smart(self, prompt, **kwargs):
             captured["prompt"] = prompt
             captured["kwargs"] = kwargs
-            return "Local answer"
+            return ["Local answer"]
 
     monkeypatch.setattr(llm.requests, "get", fake_get)
     monkeypatch.setattr(cli, "request", lambda *args, **kwargs: FakeResponse())
 
-    code = cli.main(["fetch", "https://example.com", "--llm", "Extract title"])
+    code = cli.main(["fetch", "https://example.com", "--smart", "Extract title"])
     out = capsys.readouterr().out.strip()
 
     assert code == 0
     assert out == (
         "{\n"
         '  "url": "https://example.com",\n'
-        '  "match": "Local answer",\n'
+        '  "matches": [\n'
+        '    "Local answer"\n'
+        "  ],\n"
         '  "selector": "Extract title"\n'
         "}"
     )
     assert captured["prompt"] == "Extract title"
+    assert captured["kwargs"]["translate_xpath"] is False
     assert captured["kwargs"]["model"] == "local-model"
     assert captured["kwargs"]["api_key"] == "lm-studio"
     assert captured["kwargs"]["base_url"] == "http://127.0.0.1:1234/v1"

@@ -252,10 +252,10 @@ def extract_by_selector(scope: Any, rule: dict[str, Any], selector_type: str) ->
 
 
 def extract_by_smart(scope: Any, rule: dict[str, Any]) -> Any:
-    smart = getattr(scope, "smart", None)
-    if smart is None:
+    smart_first = getattr(scope, "smart_first", None)
+    if smart_first is None:
         return None
-    match = smart(rule["smart"], key=rule.get("key"), translate_xpath=True)
+    match = smart_first(rule["smart"], key=rule.get("key"), translate_xpath=True)
     if not match:
         return None
     return element_value(match, rule.get("attr"))

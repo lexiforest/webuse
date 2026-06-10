@@ -4,13 +4,13 @@ Webuse is a small scraping toolkit built around `curl_cffi`.
 
 `webuse` is part of the impersonate suite:
 
-- [`curl-impersonate`], make curl impersonates browsers' tls/ja3 fingerprints.
+- [`curl-impersonate`](https://github.com/lexiforest/curl-impersonate), make curl impersonate browsers' tls/ja3 fingerprints.
 - [`curl_cffi`](https://github.com/lexiforest/curl_cffi), Python binding for curl-impersonate.
 - [`impers`](https://github.com/lexiforest/impers), Nodejs binding to curl-impersonate.
 - [`webuse`](https://github.com/riverside-ai/webuse), this one
 - [impersonate.pro](https://impersonate.pro), commercial support and webuse cloud hosting.
 
-## Features
+## Why
 
 Why yet another scraping library?
 
@@ -93,15 +93,39 @@ XPath is also available:
 product = response.xpath_first("//article[@class='product']")
 ```
 
-### Smart selectors
+Regex extraction follows the same list/first pattern:
 
-Smart selectors store prompt-based matches in `.webuse/selectors.json`.
+```python
+slugs = response.re(r"/products/([a-z-]+)")
+first_slug = response.re_first(r"/products/([a-z-]+)")
+```
+
+### Smart extraction
+
+Smart extraction asks the model for all matches:
 
 ```python
 import webuse
 
 response = webuse.get("https://example.com/products")
-match = response.smart("primary product link")
+titles = response.smart("All product titles")
+print(titles)
+```
+
+Use `smart_first()` when you only want the first match:
+
+```python
+title = response.smart_first("First product title")
+```
+
+If you want a prompt translated into a cached selector, enable XPath
+translation:
+
+```python
+import webuse
+
+response = webuse.get("https://example.com/products")
+match = response.smart_first("primary product link", translate_xpath=True)
 
 print(match.text())
 print(match.attr("href"))
@@ -157,6 +181,80 @@ print(result.items)
 print(result.stats)
 ```
 
+Class-based spiders are a thin wrapper around the same crawl API:
+
+```python
+import webuse
+
+
+class BooksSpider(webuse.Spider):
+    start_urls = ["https://books.toscrape.com/"]
+    allowed_domains = {"books.toscrape.com"}
+    max_depth = 1
+
+    follow = [
+        webuse.FollowRule(css=".next a", same_domain=True),
+    ]
+
+    extract = {
+        "item_css": ".product_pod",
+        "fields": {
+            "title": {"css": "h3 a", "attr": "title"},
+            "price": ".price_color",
+        },
+    }
+
+
+result = BooksSpider().run()
+print(result.items)
+```
+
+The default `Spider.parse()` extracts items from `extract`. If you define your own
+`parse()` method, it replaces that default extraction behavior. Custom `parse()`
+methods may yield item dictionaries or follow-up requests:
+
+```python
+def parse(self, response):
+    yield {"title": response.css_first("h1").text()}
+    yield response.follow("/next", options=webuse.RequestOptions(timeout=5))
+```
+
+For multi-step crawls, use serializable request categories instead of callback
+functions:
+
+```python
+class BooksSpider(webuse.Spider):
+    start_urls = ["https://example.com/books"]
+    routes = {"detail": "parse_detail"}
+
+    def parse(self, response):
+        for link in response.links("a.book"):
+            yield response.follow(link, category="detail")
+
+    def parse_detail(self, response):
+        yield {"title": response.css_first("h1").text()}
+```
+
+Spiders can also run item pipelines. Pipeline items are Pydantic `BaseModel` instances; set `Spider.item_model` to convert extracted dictionaries before they enter the pipeline chain. `Spider.pipelines` overrides project defaults from `[items.pipelines]` in `webuse.toml`.
+
+```python
+from pydantic import BaseModel
+
+
+class BookItem(BaseModel):
+    title: str
+
+
+class BooksSpider(webuse.Spider):
+    start_urls = ["https://books.toscrape.com/"]
+    extract = {"title": "h1"}
+    item_model = BookItem
+    pipelines = [
+        webuse.JsonlPipeline("books.jsonl"),
+        webuse.SQLitePipeline("books.sqlite"),
+    ]
+```
+
 Async crawling:
 
 ```python
@@ -172,6 +270,26 @@ async def main():
         max_depth=2,
         concurrency=10,
     )
+    print(result.items)
+
+
+asyncio.run(main())
+```
+
+Async spiders use `AsyncSpider` and keep the same `run()` entrypoint:
+
+```python
+import asyncio
+import webuse
+
+
+class BooksSpider(webuse.AsyncSpider):
+    start_urls = ["https://books.toscrape.com/"]
+    extract = {"title": "h1"}
+
+
+async def main():
+    result = await BooksSpider().run()
     print(result.items)
 
 
@@ -229,11 +347,13 @@ Extract with XPath:
 webuse fetch https://example.com --xpath "//title"
 ```
 
-Use a smart selector:
+Use smart extraction:
 
 ```bash
 webuse fetch https://example.com/products --smart "primary product link"
 ```
+
+Add `--first` when you want one value instead of all matches.
 
 Print response metadata:
 
@@ -241,47 +361,72 @@ Print response metadata:
 webuse fetch https://example.com --meta
 ```
 
-### Crawl from the terminal
+### Run a spider project
 
 ```bash
-webuse crawl https://example.com \
-  --follow-css "a" \
-  --same-domain \
-  --extract-css "title=h1" \
-  --max-depth 1
+webuse crawl books_project --spider books -o books.jsonl
 ```
 
-Run the async crawl path:
+### Run an ad hoc crawl
+
+Use `--item-css` to select each repeated record container, then extract fields
+relative to that container. When `--item-css` is omitted, fields are extracted
+from the whole document.
 
 ```bash
-webuse crawl https://example.com \
-  --follow-css "a" \
+webuse crawl https://books.toscrape.com/ \
+  --item-css ".product_pod" \
+  --css title="h3 a" \
+  --attr title=title \
+  --css price=".price_color" \
+  --follow-css ".next a" \
   --same-domain \
-  --extract-css "title=h1" \
-  --async
+  --max-depth 49 \
+  -o books.jsonl
 ```
 
 ### Config file
 
-You can move fetch or crawl settings into a YAML or TOML config file.
+You can move fetch settings into a TOML or YAML config file.
 
-Example YAML:
+Example TOML:
 
-```yaml
-crawl:
-  seeds:
-    - https://example.com
-  follow_css:
-    - a
-  same_domain: true
-  extract:
-    title: h1
-  max_depth: 1
-  concurrency: 5
+```toml
+[fetch]
+url = "https://example.com"
+css = "h1"
 ```
 
 Run it with:
 
 ```bash
-webuse crawl --config webuse.yaml
+webuse fetch --config webuse.toml
+```
+
+For crawl tasks, YAML spider configs use the same item-scoped extraction model
+as the CLI:
+
+```yaml
+name: books
+start_urls:
+  - https://books.toscrape.com/
+allowed_domains:
+  - books.toscrape.com
+max_depth: 1
+follow:
+  - css: .next a
+    same_domain: true
+extract:
+  item_css: .product_pod
+  fields:
+    title:
+      css: h3 a
+      attr: title
+    price: .price_color
+```
+
+Run it with:
+
+```bash
+webuse crawl books.yaml -o books.jsonl
 ```

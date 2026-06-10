@@ -1,4 +1,5 @@
 from html.parser import HTMLParser
+import re as re_module
 from typing import Any, Iterable
 from urllib.parse import urljoin
 
@@ -98,6 +99,18 @@ class Element(BaseModel):
                 urls.append(urljoin(self.base_url or "", value))
         return urls
 
+    def re(self, pattern: str | re_module.Pattern[str], flags: int = 0) -> list[Any]:
+        return re_module.findall(pattern, self.html(), flags)
+
+    def re_first(
+        self,
+        pattern: str | re_module.Pattern[str],
+        default: Any = None,
+        flags: int = 0,
+    ) -> Any:
+        matches = self.re(pattern, flags)
+        return matches[0] if matches else default
+
 
 class Document:
     def __init__(self, content: str | bytes, base_url: str | None = None):
@@ -155,6 +168,18 @@ class Document:
             if value:
                 links.append(urljoin(self.base_url or "", value))
         return links
+
+    def re(self, pattern: str | re_module.Pattern[str], flags: int = 0) -> list[Any]:
+        return re_module.findall(pattern, self.raw_text, flags)
+
+    def re_first(
+        self,
+        pattern: str | re_module.Pattern[str],
+        default: Any = None,
+        flags: int = 0,
+    ) -> Any:
+        matches = self.re(pattern, flags)
+        return matches[0] if matches else default
 
     def iter_elements(self) -> Iterable[Element]:
         for node in self._get_tree().iter():

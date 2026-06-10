@@ -256,6 +256,7 @@ def fetch_command(args: argparse.Namespace) -> int:
         )
         return 0
     smart_prompt = args.smart or config.get("smart")
+    first = False if args.all_matches else args.first or config.get("first", False)
     if smart_prompt and not (
         getattr(args, "translate_xpath", False) or config.get("translate_xpath")
     ):
@@ -276,7 +277,8 @@ def fetch_command(args: argparse.Namespace) -> int:
             }.items()
             if value is not None
         }
-        value = response.smart(smart_prompt, translate_xpath=False, **llm_kwargs)
+        extractor = response.smart_first if first else response.smart
+        value = extractor(smart_prompt, translate_xpath=False, **llm_kwargs)
         _print_extraction(
             args=args,
             config=config,
@@ -285,7 +287,7 @@ def fetch_command(args: argparse.Namespace) -> int:
             selector=smart_prompt,
             output_shape=args.output_shape or config.get("output_shape", "matches"),
             field=args.field or config.get("field", "value"),
-            first=True,
+            first=first,
         )
         return 0
     if smart_prompt:
@@ -294,7 +296,8 @@ def fetch_command(args: argparse.Namespace) -> int:
         store = SmartSelectorStore(smart_store) if smart_store else None
         resolver = _smart_resolver(args, config, llm_config)
         try:
-            match = response.smart(
+            extractor = response.smart_first if first else response.smart
+            match = extractor(
                 smart_prompt,
                 translate_xpath=True,
                 key=smart_key,
@@ -302,10 +305,15 @@ def fetch_command(args: argparse.Namespace) -> int:
                 use_llm=resolver is not None,
                 resolver=resolver,
             )
-            value = _element_value(match, args.attr)
+            value = (
+                _element_value(match, args.attr)
+                if first
+                else [_element_value(element, args.attr) for element in match]
+            )
         except SmartSelectorError:
-            if (args.smart_failure or config.get("smart_failure", "error")) == "empty":
-                value = None
+            failure = args.smart_failure or config.get("smart_failure", "error")
+            if failure == "empty":
+                value = None if first else []
             else:
                 raise
         _print_extraction(
@@ -316,7 +324,7 @@ def fetch_command(args: argparse.Namespace) -> int:
             selector=smart_prompt,
             output_shape=args.output_shape or config.get("output_shape", "matches"),
             field=args.field or config.get("field", "value"),
-            first=True,
+            first=first,
         )
         return 0
     if args.meta:

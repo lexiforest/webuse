@@ -12,6 +12,7 @@ ENV/
 # Build artifacts
 build/
 dist/
+docs/_build/
 *.egg-info/
 .eggs/
 pip-wheel-metadata/
@@ -26,6 +27,7 @@ htmlcov/
 
 # Local runtime data
 .getkit/
+selectors.json
 
 # OS and editor files
 .DS_Store

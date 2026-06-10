@@ -23,26 +23,19 @@ export const booksToScrapeProject: ProjectFormValue = {
   type: "source",
   target: "https://books.toscrape.com/",
   config: {
-    crawl: {
-      seeds: ["https://books.toscrape.com/"],
-      max_depth: 1,
-      follow: {
-        css: "article.product_pod h3 a",
-      },
-      extract: {
+    start_urls: ["https://books.toscrape.com/"],
+    allowed_domains: ["books.toscrape.com"],
+    max_depth: 1,
+    follow: [{ css: ".next a", same_domain: true }],
+    extract: {
+      item_css: ".product_pod",
+      fields: {
         title: {
-          css: "article.product_pod h3 a",
+          css: "h3 a",
           attr: "title",
-          all: true,
         },
-        price: {
-          css: "article.product_pod .price_color",
-          all: true,
-        },
-        availability: {
-          css: "article.product_pod .availability",
-          all: true,
-        },
+        price: ".price_color",
+        availability: ".availability",
       },
     },
   },

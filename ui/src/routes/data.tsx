@@ -1,9 +1,28 @@
-import { For } from "solid-js";
+import { For, createSignal, onMount } from "solid-js";
 
 import Layout from "~/layout/dashboard";
-import { dataItems } from "~/lib/dashboard-data";
+
+type DataItem = {
+  id: number;
+  jobId: number;
+  url: string;
+  item: Record<string, unknown>;
+};
 
 export default function Data() {
+  const [dataItems, setDataItems] = createSignal<DataItem[]>([]);
+
+  onMount(() => {
+    void (async () => {
+      const response = await fetch("/api/data");
+      if (!response.ok) {
+        return;
+      }
+      const data = (await response.json()) as { dataItems: DataItem[] };
+      setDataItems(data.dataItems);
+    })();
+  });
+
   return (
     <Layout currentTab="data">
       <div class="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -15,7 +34,7 @@ export default function Data() {
       </div>
 
       <section class="grid gap-4">
-        <For each={dataItems}>
+        <For each={dataItems()} fallback={<div class="rounded-lg border border-gray-700 bg-gray-900 p-6 text-sm text-gray-500">No data items yet.</div>}>
           {item => (
             <article class="rounded-lg border border-gray-700 bg-gray-900 p-4">
               <div class="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm">
