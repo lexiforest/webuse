@@ -1,0 +1,29 @@
+services:
+  ui:
+    build:
+      context: ..
+      dockerfile: ui/Dockerfile
+    command: npm run start
+    working_dir: /app/ui
+    ports:
+      - "3000:3000"
+    environment:
+      WEBUSE_WORKER_URL: http://worker:8787
+      HOST: 0.0.0.0
+      PORT: 3000
+    depends_on:
+      - worker
+
+  worker:
+    build:
+      context: ..
+      dockerfile: ui/Dockerfile
+    command: /app/.venv/bin/webuse ui --host 0.0.0.0 --port 8787 --db-path /data/webuse.sqlite --work-dir /data/jobs
+    working_dir: /app
+    environment:
+      WEBUSE_WORKER_COMMAND: /app/.venv/bin/webuse
+    volumes:
+      - webuse-data:/data
+
+volumes:
+  webuse-data:
