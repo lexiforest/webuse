@@ -1,8 +1,9 @@
-import os
 from dataclasses import dataclass
 from typing import Any
 
 from curl_cffi import requests
+
+from .config import load_webuse_config
 
 
 @dataclass(frozen=True)
@@ -21,19 +22,16 @@ _DEFAULT_SETTINGS: OpenAISettings | None = None
 
 
 def openai_configured() -> bool:
-    return bool(
-        os.environ.get("OPENAI_API_KEY")
-        or os.environ.get("OPENAI_BASE_URL")
-        or os.environ.get("OPENAI_MODEL")
-    )
+    return bool(load_webuse_config().get("llm"))
 
 
 def configured_openai_settings() -> OpenAISettings:
+    config = load_webuse_config().get("llm", {})
     return OpenAISettings(
-        model=os.environ.get("OPENAI_MODEL"),
-        api_key=os.environ.get("OPENAI_API_KEY"),
-        base_url=os.environ.get("OPENAI_BASE_URL"),
-        provider="openai" if openai_configured() else None,
+        model=config.get("model"),
+        api_key=config.get("api_key"),
+        base_url=config.get("base_url"),
+        provider=config.get("provider") or ("openai" if config else None),
     )
 
 

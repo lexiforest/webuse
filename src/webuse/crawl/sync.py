@@ -253,6 +253,8 @@ def crawl(
                             if isinstance(candidate, CrawlRequest)
                             else CrawlRequest(url=str(candidate))
                         )
+                        if matched_rule and matched_rule.category and not next_request.category:
+                            next_request.category = matched_rule.category
                         next_request.depth = (
                             request.depth + 1
                             if next_request.depth == 0

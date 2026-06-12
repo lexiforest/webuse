@@ -6,9 +6,14 @@ from webuse import llm
 
 def _reset(monkeypatch):
     monkeypatch.setattr(llm, "_DEFAULT_SETTINGS", None)
+    monkeypatch.delenv("WEBUSE_LLM_API_KEY", raising=False)
+    monkeypatch.delenv("WEBUSE_LLM_BASE_URL", raising=False)
+    monkeypatch.delenv("WEBUSE_LLM_MODEL", raising=False)
+    monkeypatch.delenv("WEBUSE_LLM_PROVIDER", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
     monkeypatch.delenv("OPENAI_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_PROVIDER", raising=False)
 
 
 def test_openai_defaults_use_configured_environment_without_local_probe(monkeypatch):
@@ -28,6 +33,47 @@ def test_openai_defaults_use_configured_environment_without_local_probe(monkeypa
     assert settings.api_key == "test-key"
     assert settings.base_url == "https://api.example.com/v1"
     assert settings.model == "test-model"
+
+
+def test_openai_defaults_use_config_file_precedence(monkeypatch, tmp_path):
+    _reset(monkeypatch)
+    home = tmp_path / "home"
+    work = tmp_path / "work"
+    config_dir = home / ".config" / "webuse"
+    config_dir.mkdir(parents=True)
+    work.mkdir()
+    (config_dir / "config.yaml").write_text(
+        """
+llm:
+  api_key: user-key
+  base_url: https://user.example.com/v1
+  model: user-model
+""",
+        encoding="utf-8",
+    )
+    (work / ".webuserc.yaml").write_text(
+        """
+llm:
+  base_url: https://local.example.com/v1
+  model: local-model
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.chdir(work)
+    monkeypatch.setenv("OPENAI_MODEL", "env-model")
+
+    def fail_get(*args, **kwargs):
+        raise AssertionError("local endpoints should not be probed")
+
+    monkeypatch.setattr(llm.requests, "get", fail_get)
+
+    settings = llm.configure_openai_defaults()
+
+    assert settings.provider == "openai"
+    assert settings.api_key == "user-key"
+    assert settings.base_url == "https://local.example.com/v1"
+    assert settings.model == "env-model"
 
 
 def test_openai_defaults_detect_local_lmstudio(monkeypatch):

@@ -29,6 +29,7 @@ dependencies = [
   "ustats",
   "ruff>=0.15.16",
   "loguru>=0.7.3",
+  "croniter>=6.2.2",
 ]
 
 [project.optional-dependencies]
@@ -46,6 +47,9 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"webuse.ui.skills" = ["*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

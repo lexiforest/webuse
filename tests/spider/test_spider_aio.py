@@ -63,6 +63,121 @@ def test_async_spider_run_is_async_entrypoint():
         {"url": "https://example.com/page-1"},
     ]
 
+def test_async_spider_config_extracts_by_request_category(tmp_path):
+    config = tmp_path / "categories.yaml"
+    config.write_text(
+        """
+start_urls:
+  - https://example.com/
+max_depth: 1
+pages:
+  default:
+    follow:
+      - css: a.detail
+        category: detail
+    extract:
+      listing:
+        fields:
+          title: h1
+  detail:
+    extract:
+      detail:
+        fields:
+          detail_title: h1
+""",
+        encoding="utf-8",
+    )
+
+    pages = {
+        "https://example.com/": b"""
+<html><body>
+  <h1>Listing</h1>
+  <a class="detail" href="/detail">Detail</a>
+</body></html>
+""",
+        "https://example.com/detail": b"<html><body><h1>Detail</h1></body></html>",
+    }
+
+    class CategoryClient:
+        async def request(self, method, url, **kwargs):
+            _ = (method, kwargs)
+            return Response(url=url, status_code=200, content=pages[url])
+
+    class ConfigSpider(AsyncSpider):
+        spider_config_path = config
+
+    async def run_spider():
+        return await ConfigSpider().run(client=CategoryClient())
+
+    result = asyncio.run(run_spider())
+
+    assert result.items == [
+        {"title": "Listing", "_type": "listing"},
+        {"detail_title": "Detail", "_type": "detail"},
+    ]
+
+
+def test_async_spider_config_follow_rule_can_be_limited_to_source_category(tmp_path):
+    config = tmp_path / "source-category.yaml"
+    config.write_text(
+        """
+start_urls:
+  - https://example.com/
+max_depth: 2
+pages:
+  default:
+    follow:
+      - css: a.detail
+        category: detail
+    extract:
+      listing:
+        fields:
+          title: h1
+  detail:
+    extract:
+      detail:
+        fields:
+          detail_title: h1
+""",
+        encoding="utf-8",
+    )
+
+    pages = {
+        "https://example.com/": b"""
+<html><body>
+  <h1>Listing</h1>
+  <a class="detail" href="/detail">Detail</a>
+</body></html>
+""",
+        "https://example.com/detail": b"""
+<html><body>
+  <h1>Detail</h1>
+  <a class="detail" href="/detail-2">Detail Two</a>
+</body></html>
+""",
+        "https://example.com/detail-2": b"<html><body><h1>Detail Two</h1></body></html>",
+    }
+
+    class CategoryClient:
+        async def request(self, method, url, **kwargs):
+            _ = (method, kwargs)
+            return Response(url=url, status_code=200, content=pages[url])
+
+    class ConfigSpider(AsyncSpider):
+        spider_config_path = config
+
+    async def run_spider():
+        return await ConfigSpider().run(client=CategoryClient())
+
+    result = asyncio.run(run_spider())
+
+    assert result.items == [
+        {"title": "Listing", "_type": "listing"},
+        {"detail_title": "Detail", "_type": "detail"},
+    ]
+    assert "https://example.com/detail-2" not in result.visited
+
+
 def test_async_spider_parse_can_yield_items_and_follow_requests():
     class ExampleSpider(AsyncSpider):
         start_urls = ["https://example.com"]

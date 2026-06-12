@@ -5,10 +5,12 @@ export const projects = sqliteTable(
   {
     id: integer("id").primaryKey({ autoIncrement: true }),
     name: text("name").notNull(),
-    type: text("type", { enum: ["source", "git"] }).notNull(),
+    type: text("type", { enum: ["source", "yaml", "python", "git"] }).notNull(),
     gitUrl: text("git_url"),
     sourceTarball: blob("source_tarball").$type<Uint8Array>(),
     config: text("config", { mode: "json" }).$type<Record<string, unknown>>(),
+    cron: text("cron"),
+    nextRunAt: integer("next_run_at", { mode: "timestamp" }),
     createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
     updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
   },
@@ -37,6 +39,24 @@ export const jobs = sqliteTable(
     index("jobs_project_id_idx").on(table.projectId),
     index("jobs_status_idx").on(table.status),
     index("jobs_created_at_idx").on(table.createdAt),
+  ],
+);
+
+export const projectFiles = sqliteTable(
+  "project_files",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    projectId: integer("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    path: text("path").notNull(),
+    content: text("content").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+  },
+  table => [
+    index("project_files_project_id_idx").on(table.projectId),
+    index("project_files_path_idx").on(table.path),
   ],
 );
 
@@ -76,6 +96,7 @@ export const dataItems = sqliteTable(
 
 export const schema = {
   projects,
+  projectFiles,
   jobs,
   logs,
   dataItems,

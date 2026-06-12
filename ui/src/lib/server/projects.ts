@@ -6,7 +6,7 @@ import { projects } from "./schema";
 export type ProjectRow = {
   id: number;
   name: string;
-  type: "source" | "git";
+  type: "source" | "yaml" | "python" | "git";
   target: string;
   status: string;
   updatedAt: string;
@@ -18,25 +18,36 @@ export type ProjectDetail = ProjectRow & {
 
 export type CreateProjectInput = {
   name: string;
-  type: "source" | "git";
+  type: "source" | "yaml" | "python" | "git";
   target: string;
   config?: Record<string, unknown>;
 };
 
 const booksToScrapeConfig = {
-  start_urls: ["https://books.toscrape.com/"],
-  allowed_domains: ["books.toscrape.com"],
-  max_depth: 1,
-  follow: [{ css: ".next a", same_domain: true }],
-  extract: {
-    item_css: ".product_pod",
-    fields: {
-      title: {
-        css: "h3 a",
-        attr: "title",
+  name: "Books to Scrape",
+  spiders: {
+    books: {
+      start_urls: ["https://books.toscrape.com/"],
+      allowed_domains: ["books.toscrape.com"],
+      max_depth: 1,
+      pages: {
+        default: {
+          follow: [{ css: ".next a", same_domain: true }],
+          extract: {
+            books: {
+              item_css: ".product_pod",
+              fields: {
+                title: {
+                  css: "h3 a",
+                  attr: "title",
+                },
+                price: ".price_color",
+                availability: ".availability",
+              },
+            },
+          },
+        },
       },
-      price: ".price_color",
-      availability: ".availability",
     },
   },
 };

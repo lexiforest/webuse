@@ -43,6 +43,88 @@ from crawl_helpers import (
 )
 
 
+def test_acrawl_follow_rule_assigns_request_category():
+    pages = {
+        "https://example.com/": b"""
+        <html><body>
+          <a class="detail" href="/detail">Detail</a>
+          <h1>Listing</h1>
+        </body></html>
+        """,
+        "https://example.com/detail": b"<html><body><h1>Detail</h1></body></html>",
+    }
+
+    class CategoryClient:
+        async def request(self, method, url, **kwargs):
+            _ = (method, kwargs)
+            return Response(url=url, status_code=200, content=pages[url])
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+    def parse(response):
+        return {
+            "title": response.css_first("h1").text(),
+            "category": response.request.category,
+        }
+
+    async def run_crawl():
+        return await acrawl(
+            "https://example.com/",
+            client=CategoryClient(),
+            follow=FollowRule(css="a.detail", category="detail"),
+            extract=parse,
+            max_depth=1,
+        )
+
+    result = asyncio.run(run_crawl())
+
+    assert result.items == [
+        {"title": "Listing", "category": None},
+        {"title": "Detail", "category": "detail"},
+    ]
+
+
+def test_acrawl_follow_rule_can_be_limited_to_source_category():
+    pages = {
+        "https://example.com/": b"""
+        <html><body>
+          <a class="detail" href="/detail">Detail</a>
+          <h1>Listing</h1>
+        </body></html>
+        """,
+        "https://example.com/detail": b"""
+        <html><body>
+          <a class="detail" href="/detail-2">Detail Two</a>
+          <h1>Detail</h1>
+        </body></html>
+        """,
+        "https://example.com/detail-2": b"<html><body><h1>Detail Two</h1></body></html>",
+    }
+
+    class CategoryClient:
+        async def request(self, method, url, **kwargs):
+            _ = (method, kwargs)
+            return Response(url=url, status_code=200, content=pages[url])
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+    async def run_crawl():
+        return await acrawl(
+            "https://example.com/",
+            client=CategoryClient(),
+            follow=FollowRule(css="a.detail", source_category="default", category="detail"),
+            extract=lambda response: {"title": response.css_first("h1").text()},
+            max_depth=2,
+        )
+
+    result = asyncio.run(run_crawl())
+
+    assert result.items == [{"title": "Listing"}, {"title": "Detail"}]
+    assert "https://example.com/detail-2" not in result.visited
+
+
 def test_acrawl_obeys_robots_txt():
     client = AsyncRobotsClient()
 

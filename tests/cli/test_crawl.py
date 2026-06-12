@@ -464,6 +464,21 @@ def test_crawl_command_defaults_to_current_project(cli_project, monkeypatch, cap
         name="beta.py",
         run_body='return CrawlResult(items=[Item(title="Beta")], stats=CrawlStats())',
     )
+    (cli_project.root / "webuse.toml").write_text(
+        '\n'.join(
+            [
+                'name = "project"',
+                "",
+                "[spiders.alpha]",
+                'path = "spiders/alpha.py"',
+                "",
+                "[spiders.beta]",
+                'path = "spiders/beta.py"',
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
     output = cli_project.root / "test.jsonl"
     monkeypatch.chdir(cli_project.root)
 
@@ -538,9 +553,12 @@ def test_crawl_command_runs_standalone_yaml_config_to_output_file(
 name: books
 start_urls:
   - https://example.com/
-extract:
-  fields:
-    title: h1
+pages:
+  default:
+    extract:
+      page:
+        fields:
+          title: h1
 """,
         encoding="utf-8",
     )
@@ -562,7 +580,7 @@ extract:
 
     assert code == 0
     assert out == ""
-    assert output.read_text(encoding="utf-8") == '{"title": "Home"}\n'
+    assert output.read_text(encoding="utf-8") == '{"title": "Home", "_type": "page"}\n'
 
 
 def test_crawl_command_runs_standalone_config_from_directory_and_spider_name(
@@ -576,9 +594,12 @@ def test_crawl_command_runs_standalone_config_from_directory_and_spider_name(
 name: books
 start_urls:
   - https://example.com/
-extract:
-  fields:
-    title: h1
+pages:
+  default:
+    extract:
+      page:
+        fields:
+          title: h1
 """,
         encoding="utf-8",
     )
@@ -601,4 +622,4 @@ extract:
 
     assert code == 0
     assert out == ""
-    assert output.read_text(encoding="utf-8") == '{"title": "Home"}\n'
+    assert output.read_text(encoding="utf-8") == '{"title": "Home", "_type": "page"}\n'

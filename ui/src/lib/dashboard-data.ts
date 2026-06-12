@@ -1,7 +1,7 @@
 export type Project = {
   id: number;
   name: string;
-  type: "source" | "git";
+  type: "source" | "yaml" | "python" | "git";
   target: string;
   updatedAt: string;
   status: string;

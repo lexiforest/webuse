@@ -26,6 +26,7 @@ def test_gen_command_creates_yaml_config_by_default(tmp_path, capsys):
     assert "name: books" in text
     assert "start_urls:" in text
     assert "- https://books.toscrape.com/" in text
+    assert "pages:" in text
     assert "extract:" in text
 
 
@@ -91,6 +92,9 @@ def test_gen_command_creates_project_yaml_config_by_default(tmp_path, capsys):
     config_text = config.read_text(encoding="utf-8")
     assert "start_urls:" in config_text
     assert "fields:" in config_text
+    project_text = (project / "webuse.toml").read_text(encoding="utf-8")
+    assert "[spiders.books]" in project_text
+    assert 'path = "spiders/books.py"' in project_text
 
 
 def test_gen_command_creates_project_python_spider_file(tmp_path, capsys):
@@ -117,6 +121,9 @@ def test_gen_command_creates_project_python_spider_file(tmp_path, capsys):
     text = spider.read_text(encoding="utf-8")
     assert 'item_model = "items.BookItem"' in text
     assert 'start_urls = ["https://books.toscrape.com/"]' in text
+    project_text = (project / "webuse.toml").read_text(encoding="utf-8")
+    assert "[spiders.books]" in project_text
+    assert 'path = "spiders/books.py"' in project_text
 
 
 def test_gen_command_can_create_toml_config(tmp_path, capsys):
@@ -159,10 +166,13 @@ def test_gen_command_can_create_toml_config(tmp_path, capsys):
     assert 'name = "books"' in text
     assert 'start_urls = ["https://books.toscrape.com/"]' in text
     assert 'allowed_domains = ["books.toscrape.com"]' in text
-    assert "[[follow]]" in text
-    assert "[extract.fields]" in text
+    assert "[[pages.default.follow]]" in text
+    assert "[pages.default.extract.books.fields]" in text
     assert "[crawl]" not in text
     assert "[items.pipelines]" not in text
+    project_text = (project / "webuse.toml").read_text(encoding="utf-8")
+    assert "[spiders.books]" in project_text
+    assert 'path = "spiders/books.py"' in project_text
 
 
 def test_gen_command_can_create_standalone_toml_config_only(tmp_path, capsys):
@@ -189,7 +199,7 @@ def test_gen_command_can_create_standalone_toml_config_only(tmp_path, capsys):
     text = config.read_text(encoding="utf-8")
     assert 'name = "books"' in text
     assert 'start_urls = ["https://books.toscrape.com/"]' in text
-    assert "[extract.fields]" in text
+    assert "[pages.default.extract.books.fields]" in text
 
 
 def test_gen_command_refuses_both_config_formats(tmp_path):

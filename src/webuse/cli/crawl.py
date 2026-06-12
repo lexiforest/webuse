@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from ..crawl import (
     FileRequestQueue,
@@ -19,6 +19,8 @@ from ..crawl import (
 from ..models import CrawlResult, CrawlStats, FollowRule
 from ..pipelines import CsvPipeline, JsonlPipeline, Pipeline, SQLitePipeline
 from ..spider import AsyncSpider, Spider
+from ..spider.config import ProjectConfig, SpiderConfig
+from ..crawl.utils import load_config_file
 from .common import add_request_args, cli_request_options
 
 
@@ -35,6 +37,12 @@ _OUTPUT_EXTENSIONS = {
 
 class _OutputItem(BaseModel):
     model_config = ConfigDict(extra="allow")
+
+
+class _InlineSpiderTarget:
+    def __init__(self, name: str, config: SpiderConfig):
+        self.name = name
+        self.config = config
 
 
 def _state_name(target: str) -> str:
@@ -138,6 +146,76 @@ def _spider_files_from_project(project_dir: Path) -> list[Path]:
     )
 
 
+def _project_config_path(project_dir: Path) -> Path:
+    for name in _CONFIG_NAMES:
+        path = project_dir / name
+        if path.exists():
+            return path
+    raise SystemExit(f"cannot find webuse.toml or webuse.yaml in {project_dir}")
+
+
+def _has_project_config(project_dir: Path) -> bool:
+    return any((project_dir / name).exists() for name in _CONFIG_NAMES)
+
+
+def _project_config(project_dir: Path) -> ProjectConfig:
+    path = _project_config_path(project_dir)
+    try:
+        return ProjectConfig.model_validate(load_config_file(path))
+    except ValidationError as exc:
+        raise SystemExit(f"invalid project config: {path}: {exc}") from exc
+
+
+def _inline_spider_target(name: str, value: Any) -> _InlineSpiderTarget:
+    if not isinstance(value, dict):
+        raise SystemExit(f"spiders.{name} must be a mapping, config path, or module path")
+    payload = dict(value)
+    payload.setdefault("name", name)
+    try:
+        config = SpiderConfig.model_validate(payload)
+    except ValidationError as exc:
+        raise SystemExit(f"invalid inline spider config: spiders.{name}: {exc}") from exc
+    return _InlineSpiderTarget(name, config)
+
+
+def _spider_target_from_project_entry(
+    name: str, value: Any, *, project_dir: Path
+) -> str | _InlineSpiderTarget:
+    if isinstance(value, str):
+        return value
+    if not isinstance(value, dict):
+        raise SystemExit(f"spiders.{name} must be a mapping, config path, or module path")
+    for key in ("config", "path"):
+        target = value.get(key)
+        if isinstance(target, str) and target:
+            path = Path(target)
+            return str(path if path.is_absolute() else project_dir / path)
+    module = value.get("module")
+    if isinstance(module, str) and module:
+        return module
+    return _inline_spider_target(name, value)
+
+
+def _spider_targets_from_project_config(
+    project_dir: Path, spider: str | None
+) -> list[str | _InlineSpiderTarget]:
+    config = _project_config(project_dir)
+    if not config.spiders:
+        raise SystemExit("project config must define a non-empty spiders section")
+    if spider is not None:
+        if spider not in config.spiders:
+            raise SystemExit(f"spider not found in project config: {spider}")
+        return [
+            _spider_target_from_project_entry(
+                spider, config.spiders[spider], project_dir=project_dir
+            )
+        ]
+    return [
+        _spider_target_from_project_entry(name, value, project_dir=project_dir)
+        for name, value in config.spiders.items()
+    ]
+
+
 def _module_from_target(target: str, *, project_dir: Path | None = None) -> Any:
     path = Path(target)
     if path.exists():
@@ -196,7 +274,14 @@ def _spider_from_module(module: Any) -> Spider:
     return _configure_spider(candidates[0](), module)
 
 
-def _load_spider(target: str, *, project_dir: Path | None = None) -> Spider:
+def _load_spider(
+    target: str | _InlineSpiderTarget,
+    *,
+    project_dir: Path | None = None,
+    spider_class: type[Spider] | type[AsyncSpider] = Spider,
+) -> Spider:
+    if isinstance(target, _InlineSpiderTarget):
+        return spider_class(spider_config=target.config, project_dir=project_dir)
     module_target, separator, class_name = target.rpartition(":")
     if separator:
         module = _module_from_target(module_target, project_dir=project_dir)
@@ -399,25 +484,24 @@ def _project_dir_from_target(target: str) -> Path:
 
 def _spider_targets_from_crawl_target(
     target: str, spider: str | None
-) -> tuple[list[str], Path | None]:
+) -> tuple[list[str | _InlineSpiderTarget], Path | None]:
     if spider is None:
         target_path = Path(target)
         if target_path.exists() and target_path.is_file():
+            if target_path.name in _CONFIG_NAMES:
+                project_dir = target_path.resolve().parent
+                return _spider_targets_from_project_config(project_dir, None), project_dir
             if target_path.suffix in _SPIDER_CONFIG_SUFFIXES:
                 return [str(target_path)], _project_root_for_config(target_path)
         project_dir = _project_dir_from_target(target)
-        return [
-            str(path) for path in _spider_files_from_project(project_dir)
-        ], project_dir
+        return _spider_targets_from_project_config(project_dir, None), project_dir
     project_dir = (
         _project_dir_from_target(target)
         if Path(target).exists() or target == "."
         else _project_root_from(Path.cwd())
     )
-    if project_dir is not None:
-        spider_path = project_dir / "spiders" / f"{spider}.py"
-        if spider_path.exists():
-            return [str(spider_path)], project_dir
+    if project_dir is not None and _has_project_config(project_dir):
+        return _spider_targets_from_project_config(project_dir, spider), project_dir
     return [spider], project_dir
 
 
@@ -470,7 +554,7 @@ def _write_output(result: CrawlResult, output: str | None) -> None:
 
 
 def _run_single_spider(
-    target: str,
+    target: str | _InlineSpiderTarget,
     *,
     project_dir: Path | None = None,
     attributes: dict[str, str] | None = None,
@@ -478,14 +562,14 @@ def _run_single_spider(
 ) -> CrawlResult:
     result = _apply_attributes(
         _load_spider(target, project_dir=project_dir), attributes or {}
-    ).run(**_state_options(state, target=target))
+    ).run(**_state_options(state, target=target.name if isinstance(target, _InlineSpiderTarget) else target))
     if inspect.isawaitable(result):
         result = asyncio.run(result)
     return result
 
 
 async def _arun_single_spider(
-    target: str,
+    target: str | _InlineSpiderTarget,
     *,
     project_dir: Path | None = None,
     attributes: dict[str, str] | None = None,
@@ -494,7 +578,8 @@ async def _arun_single_spider(
     if state:
         raise SystemExit("--state is currently supported only for sync crawl")
     result = _apply_attributes(
-        _load_spider(target, project_dir=project_dir), attributes or {}
+        _load_spider(target, project_dir=project_dir, spider_class=AsyncSpider),
+        attributes or {},
     ).run()
     if inspect.isawaitable(result):
         result = await result

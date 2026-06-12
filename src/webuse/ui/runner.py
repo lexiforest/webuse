@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -56,12 +57,45 @@ class Runner:
         child.terminate()
         return True
 
+    def apply_settings(self, settings: dict[str, Any]) -> None:
+        runtime = settings.get("runtime") if isinstance(settings.get("runtime"), dict) else {}
+        concurrency = _positive_int(runtime.get("concurrency"))
+        if concurrency is not None:
+            self.concurrency = concurrency
+        work_directory = runtime.get("workDirectory")
+        if isinstance(work_directory, str) and work_directory:
+            self.work_dir = Path(work_directory)
+            self.work_dir.mkdir(parents=True, exist_ok=True)
+
+    def project_checkout_dir(self, project_id: int) -> Path:
+        return self.work_dir / "projects" / str(project_id) / "repo"
+
+    def sync_git_project(self, project: dict[str, Any]) -> Path:
+        if project.get("type") != "git":
+            raise ValueError("Project is not a git project.")
+        git_url = project.get("target")
+        if not isinstance(git_url, str) or not git_url:
+            raise ValueError("Git project is missing a repository URL.")
+
+        checkout_dir = self.project_checkout_dir(int(project["id"]))
+        if (checkout_dir / ".git").is_dir():
+            _run_git(["remote", "set-url", "origin", git_url], cwd=checkout_dir)
+            _run_git(["pull", "--ff-only"], cwd=checkout_dir)
+            return checkout_dir
+
+        if checkout_dir.exists():
+            shutil.rmtree(checkout_dir)
+        checkout_dir.parent.mkdir(parents=True, exist_ok=True)
+        _run_git(["clone", git_url, str(checkout_dir)], cwd=self.work_dir)
+        return checkout_dir
+
     def _loop(self) -> None:
         while not self._stop.is_set():
             self._tick()
             self._stop.wait(self.poll_seconds)
 
     def _tick(self) -> None:
+        self.store.enqueue_due_cron_jobs()
         while True:
             with self._lock:
                 if self._running >= self.concurrency:
@@ -97,12 +131,25 @@ class Runner:
             return
 
         job_dir = self.work_dir / str(job["id"])
+        project_dir = job_dir / "project"
         job_dir.mkdir(parents=True, exist_ok=True)
-        config_path = job_dir / "spider.yaml"
-        output_path = job_dir / "items.jsonl"
-        config_path.write_text(yaml.safe_dump(_normalize_config(project), sort_keys=False), encoding="utf-8")
+        project_dir.mkdir(parents=True, exist_ok=True)
 
-        command = _crawl_command(["crawl", str(config_path), "-o", str(output_path)])
+        if project.get("type") == "git":
+            project_dir = self.sync_git_project(project)
+        else:
+            _materialize_project_files(project, project_dir)
+
+        stored_config_path = next(
+            (project_dir / name for name in ("webuse.yaml", "webuse.yml") if (project_dir / name).exists()),
+            None,
+        )
+        crawl_target = project_dir if project.get("type") == "git" and stored_config_path is None else (stored_config_path or job_dir / "spider.yaml")
+        output_path = job_dir / "items.jsonl"
+        if project.get("type") != "git" and stored_config_path is None:
+            crawl_target.write_text(yaml.safe_dump(_normalize_config(project), sort_keys=False), encoding="utf-8")
+
+        command = _crawl_command(["crawl", str(crawl_target), "-o", str(output_path)])
         command_text = " ".join(command)
         self.store.update_job_command(job["id"], command_text)
         self.store.append_log(job["id"], "stdout", command_text)
@@ -161,21 +208,70 @@ def _crawl_command(args: list[str]) -> list[str]:
     return [sys.executable, "-m", "webuse.cli", *args]
 
 
+def _run_git(args: list[str], *, cwd: Path) -> None:
+    completed = subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        env=os.environ.copy(),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(completed.stderr.strip() or f"git {' '.join(args)} failed")
+
+
+def _positive_int(value: Any) -> int | None:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
+
+
 def _normalize_config(project: dict[str, Any]) -> dict[str, Any]:
+    webuse_file = next(
+        (
+            file
+            for file in project.get("files", [])
+            if file.get("path") in {"webuse.yaml", "webuse.yml"}
+        ),
+        None,
+    )
+    if webuse_file is not None:
+        config = yaml.safe_load(webuse_file["content"])
+        return config if isinstance(config, dict) else {}
+
     config = dict(project.get("config") or {})
-    if isinstance(config.get("start_urls"), list):
+    if isinstance(config.get("spiders"), dict):
         return config
-    crawl = config.get("crawl")
-    if isinstance(crawl, dict):
-        normalized = dict(crawl)
-        if isinstance(crawl.get("seeds"), list) and not isinstance(crawl.get("start_urls"), list):
-            normalized["start_urls"] = crawl["seeds"]
-            normalized.pop("seeds", None)
-        return normalized
     return {
-        "start_urls": [project["target"]],
-        "extract": {"fields": {"title": "title"}},
+        "spiders": {
+            "default": {
+                "start_urls": [project["target"]],
+                "pages": {
+                    "default": {
+                        "extract": {
+                            "page": {
+                                "fields": {"title": "title"},
+                            },
+                        },
+                    },
+                },
+            },
+        },
     }
+
+
+def _materialize_project_files(project: dict[str, Any], project_dir: Path) -> None:
+    root = project_dir.resolve()
+    for file in project.get("files", []):
+        file_path = (root / file["path"]).resolve()
+        if root not in file_path.parents:
+            raise ValueError(f"invalid project file path: {file['path']}")
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(file["content"], encoding="utf-8")
 
 
 def _pipe_lines(stream: Any, callback: Any) -> None:

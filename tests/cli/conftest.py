@@ -30,7 +30,10 @@ def cli_project(tmp_path: Path) -> CliProject:
     project = tmp_path / "project"
     spiders = project / "spiders"
     spiders.mkdir(parents=True)
-    (project / "webuse.toml").write_text('name = "project"\n', encoding="utf-8")
+    (project / "webuse.toml").write_text(
+        'name = "project"\n\n[spiders.books]\npath = "spiders/books.py"\n',
+        encoding="utf-8",
+    )
     return CliProject(project)
 
 

@@ -6,13 +6,16 @@ from ..models import WebuseModel
 
 
 class ProjectConfig(WebuseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True, extra="allow")
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
     name: str | None = None
     user_agent: str | None = None
     llm: dict[str, Any] = Field(default_factory=dict)
     robots_txt: bool | None = None
+    concurrency: dict[str, Any] = Field(default_factory=dict)
     items: dict[str, Any] = Field(default_factory=dict)
+    log: dict[str, Any] = Field(default_factory=dict)
+    spiders: dict[str, Any] = Field(default_factory=dict)
 
     def pipeline_specs(self) -> Any:
         pipelines = self.items.get("pipelines")
@@ -26,8 +29,7 @@ class SpiderConfig(WebuseModel):
 
     name: str | None = None
     start_urls: Any = None
-    follow: Any = None
-    extract: Any = None
+    pages: Any = None
     max_depth: int | None = None
     max_requests: int | None = None
     concurrency: int | None = None

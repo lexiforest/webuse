@@ -10,9 +10,10 @@ from pydantic import BaseModel, ValidationError
 from ..crawl.sync import crawl
 from ..crawl.utils import (
     UNSET,
+    compile_pages_config,
     coerce_domains,
+    extract_handles_category,
     extract_items,
-    follow_rule_from_config,
     handle_callback_result,
     load_config_file,
 )
@@ -37,6 +38,7 @@ class Spider:
     pipelines: Any = None
     project_dir: str | Path | None = None
     config_path: str | Path | None = None
+    spider_config: SpiderConfig | None = None
     spider_config_path: str | Path | None = None
     max_depth: int = 0
     max_requests: int | None = None
@@ -123,6 +125,8 @@ class Spider:
             raise ConfigError(f"Invalid project config: {config_path}: {exc}") from exc
 
     def _spider_config(self) -> SpiderConfig | None:
+        if self.spider_config is not None:
+            return self.spider_config
         if self.spider_config_path is None:
             return None
         try:
@@ -174,15 +178,14 @@ class Spider:
             for key in spider_config.model_fields_set & _SPIDER_CONFIG_FIELDS:
                 if key == "same_domain":
                     continue
+                if key == "pages":
+                    follow, extract = compile_pages_config(
+                        spider_config.pages, same_domain=spider_config.same_domain
+                    )
+                    values["follow"] = follow
+                    values["extract"] = extract
+                    continue
                 value = getattr(spider_config, key)
-                if key == "follow" and value is not None:
-                    rules = value if isinstance(value, list) else [value]
-                    value = [
-                        follow_rule_from_config(
-                            rule, same_domain=spider_config.same_domain
-                        )
-                        for rule in rules
-                    ]
                 values[key] = value
 
         if values["robots_txt"] is None:
@@ -269,13 +272,38 @@ class Spider:
     def _coerce_pipeline_item(self, item: Any) -> BaseModel:
         if isinstance(item, BaseModel):
             return item
+        item_payload = item
+        item_model_spec = None
+        if isinstance(item, dict):
+            item_model_spec = item.get("_item_model")
+            if item_model_spec is not None:
+                item_payload = {
+                    key: value
+                    for key, value in item.items()
+                    if key not in {"_item_model", "_type"}
+                }
+        if isinstance(item_model_spec, str):
+            item_model = self._import_item_model(item_model_spec)
+            try:
+                return item_model.model_validate(item_payload)
+            except Exception as exc:
+                raise PipelineError(
+                    f"Cannot convert item to {item_model.__name__}: {item!r}"
+                ) from exc
+        if isinstance(item_model_spec, type) and issubclass(item_model_spec, BaseModel):
+            try:
+                return item_model_spec.model_validate(item_payload)
+            except Exception as exc:
+                raise PipelineError(
+                    f"Cannot convert item to {item_model_spec.__name__}: {item!r}"
+                ) from exc
         item_model = self._pipeline_item_model()
         if item_model is None:
             raise PipelineError(
                 "Pipelines require pydantic BaseModel items; set Spider.item_model or return BaseModel items from parse()"
             )
         try:
-            return item_model.model_validate(item)
+            return item_model.model_validate(item_payload)
         except Exception as exc:
             raise PipelineError(
                 f"Cannot convert item to {item_model.__name__}: {item!r}"
@@ -375,7 +403,13 @@ class Spider:
         self, response: Any, settings: EffectiveSpiderSettings
     ) -> Any:
         request = getattr(response, "request", None)
-        handler = self._route_handler(getattr(request, "category", None))
+        category = getattr(request, "category", None)
+        try:
+            handler = self._route_handler(category)
+        except SpiderError:
+            if not extract_handles_category(settings.extract, category):
+                raise
+            handler = self.parse
         parse_result = handler(response)
         if inspect.isawaitable(parse_result):
             raise SpiderError("async parse() requires AsyncSpider.run()")

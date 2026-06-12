@@ -6,7 +6,8 @@ from typing import Any
 from pydantic import BaseModel
 
 from ..crawl.aio import acrawl
-from ..crawl.utils import UNSET, handle_callback_result
+from ..crawl.utils import UNSET, extract_handles_category, handle_callback_result
+from ..exceptions import SpiderError
 from ..models import CrawlResult
 from ..pipelines import DropItem, Pipeline
 from ..signals import SignalBus
@@ -137,7 +138,13 @@ class AsyncSpider(Spider):
         self, response: Any, settings: EffectiveSpiderSettings
     ) -> Any:
         request = getattr(response, "request", None)
-        handler = self._route_handler(getattr(request, "category", None))
+        category = getattr(request, "category", None)
+        try:
+            handler = self._route_handler(category)
+        except SpiderError:
+            if not extract_handles_category(settings.extract, category):
+                raise
+            handler = self.parse
         parse_result = handler(response)
         if inspect.isawaitable(parse_result):
             parse_result = await parse_result

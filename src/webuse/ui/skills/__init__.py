@@ -1,0 +1,1 @@
+"""Packaged assistant skill documents."""

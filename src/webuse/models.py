@@ -95,6 +95,8 @@ class FollowRule(WebuseModel):
     css: str | None = None
     xpath: str | None = None
     attr: str = "href"
+    source_category: str | list[str] | set[str] | tuple[str, ...] | None = None
+    category: str | None = None
     include: str | None = None
     exclude: str | None = None
     same_domain: bool = False

@@ -30,7 +30,15 @@ class Database:
             self.conn.execute("PRAGMA foreign_keys = ON")
             self.conn.execute("PRAGMA journal_mode = WAL")
             self.conn.executescript(SCHEMA)
+            self._ensure_project_columns()
             self.conn.commit()
+
+    def _ensure_project_columns(self) -> None:
+        columns = {row["name"] for row in self.conn.execute("PRAGMA table_info(projects)")}
+        if "cron" not in columns:
+            self.conn.execute("ALTER TABLE projects ADD COLUMN cron text")
+        if "next_run_at" not in columns:
+            self.conn.execute("ALTER TABLE projects ADD COLUMN next_run_at integer")
 
     def execute(self, sql: str, values: tuple = ()) -> sqlite3.Cursor:
         with self._lock:
@@ -63,11 +71,26 @@ CREATE TABLE IF NOT EXISTS projects (
   git_url text,
   source_tarball blob,
   config text,
+  cron text,
+  next_run_at integer,
   created_at integer NOT NULL,
   updated_at integer NOT NULL
 );
 CREATE INDEX IF NOT EXISTS projects_type_idx ON projects (type);
 CREATE INDEX IF NOT EXISTS projects_created_at_idx ON projects (created_at);
+
+CREATE TABLE IF NOT EXISTS project_files (
+  id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+  project_id integer NOT NULL,
+  path text NOT NULL,
+  content text NOT NULL,
+  created_at integer NOT NULL,
+  updated_at integer NOT NULL,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON UPDATE no action ON DELETE cascade,
+  UNIQUE(project_id, path)
+);
+CREATE INDEX IF NOT EXISTS project_files_project_id_idx ON project_files (project_id);
+CREATE INDEX IF NOT EXISTS project_files_path_idx ON project_files (path);
 
 CREATE TABLE IF NOT EXISTS jobs (
   id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -106,4 +129,27 @@ CREATE TABLE IF NOT EXISTS data_items (
 );
 CREATE INDEX IF NOT EXISTS data_items_job_id_idx ON data_items (job_id);
 CREATE INDEX IF NOT EXISTS data_items_created_at_idx ON data_items (created_at);
+
+CREATE TABLE IF NOT EXISTS assistant_sessions (
+  id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+  project_id integer NOT NULL,
+  title text,
+  created_at integer NOT NULL,
+  updated_at integer NOT NULL,
+  FOREIGN KEY (project_id) REFERENCES projects(id) ON UPDATE no action ON DELETE cascade
+);
+CREATE INDEX IF NOT EXISTS assistant_sessions_project_id_idx ON assistant_sessions (project_id);
+CREATE INDEX IF NOT EXISTS assistant_sessions_updated_at_idx ON assistant_sessions (updated_at);
+
+CREATE TABLE IF NOT EXISTS assistant_messages (
+  id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+  session_id integer NOT NULL,
+  role text NOT NULL,
+  content text NOT NULL,
+  metadata text,
+  created_at integer NOT NULL,
+  FOREIGN KEY (session_id) REFERENCES assistant_sessions(id) ON UPDATE no action ON DELETE cascade
+);
+CREATE INDEX IF NOT EXISTS assistant_messages_session_id_idx ON assistant_messages (session_id);
+CREATE INDEX IF NOT EXISTS assistant_messages_created_at_idx ON assistant_messages (created_at);
 """

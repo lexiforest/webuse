@@ -8,7 +8,7 @@ module.exports = {
       name: "webuse-worker",
       cwd: "..",
       script: workerScript,
-      args: "ui --host 127.0.0.1 --port 8787 --db-path ui/webuse.sqlite --work-dir ui/jobs",
+      args: "ui --host 127.0.0.1 --port 8787 --db-path ui/webuse.sqlite --work-dir ui/runs",
       interpreter: "none",
       env: {
         WEBUSE_WORKER_COMMAND: workerScript,

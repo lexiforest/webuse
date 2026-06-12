@@ -1,8 +1,9 @@
-import { For, createSignal, onMount } from "solid-js";
+import { For, createSignal, onCleanup, onMount } from "solid-js";
 
+import { ButtonLink } from "~/components/Button";
 import Layout from "~/layout/dashboard";
 
-type Job = {
+type Run = {
   id: number;
   project: string;
   status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
@@ -18,43 +19,53 @@ type LogLine = {
 
 export default function Overview() {
   const [projectCount, setProjectCount] = createSignal(0);
-  const [itemCount, setItemCount] = createSignal(0);
-  const [jobs, setJobs] = createSignal<Job[]>([]);
+  const [runs, setRuns] = createSignal<Run[]>([]);
   const [logs, setLogs] = createSignal<LogLine[]>([]);
+  const [logCount, setLogCount] = createSignal(0);
+  const itemCount = () => runs().reduce((total, run) => total + run.items, 0);
 
   const stats = () => [
     { label: "Projects", value: projectCount() },
-    { label: "Running jobs", value: jobs().filter(job => job.status === "running").length },
+    {
+      label: "Runs",
+      value: `${runs().filter(run => run.status === "queued" || run.status === "running").length}/${runs().length}`,
+    },
     { label: "Items", value: itemCount() },
-    { label: "Log lines", value: logs().length },
+    { label: "Log lines", value: logCount() },
   ];
+
+  const loadLogs = async () => {
+    const response = await fetch("/api/logs");
+    if (!response.ok) {
+      return;
+    }
+    const data = (await response.json()) as { logs: LogLine[]; total?: number };
+    setLogs(data.logs.slice(0, 6));
+    setLogCount(data.total ?? data.logs.length);
+  };
 
   onMount(() => {
     void (async () => {
-      const [projectsResponse, jobsResponse, logsResponse, dataResponse] = await Promise.all([
+      const [projectsResponse, runsResponse] = await Promise.all([
         fetch("/api/projects"),
-        fetch("/api/jobs"),
-        fetch("/api/logs"),
-        fetch("/api/data"),
+        fetch("/api/runs"),
       ]);
 
       if (projectsResponse.ok) {
         const data = (await projectsResponse.json()) as { projects: unknown[] };
         setProjectCount(data.projects.length);
       }
-      if (jobsResponse.ok) {
-        const data = (await jobsResponse.json()) as { jobs: Job[] };
-        setJobs(data.jobs);
-      }
-      if (logsResponse.ok) {
-        const data = (await logsResponse.json()) as { logs: LogLine[] };
-        setLogs(data.logs.slice(0, 6));
-      }
-      if (dataResponse.ok) {
-        const data = (await dataResponse.json()) as { dataItems: unknown[] };
-        setItemCount(data.dataItems.length);
+      if (runsResponse.ok) {
+        const data = (await runsResponse.json()) as { runs: Run[] };
+        setRuns(data.runs);
       }
     })();
+
+    void loadLogs();
+    const timer = window.setInterval(() => {
+      void loadLogs();
+    }, 2000);
+    onCleanup(() => window.clearInterval(timer));
   });
 
   return (
@@ -64,7 +75,7 @@ export default function Overview() {
           <h1 class="text-3xl font-bold text-sky-400">Dashboard</h1>
           <p class="mt-1 text-sm text-gray-400">webuse crawling task control plane</p>
         </div>
-        <a href="/projects" class="btn primary">New project</a>
+        <ButtonLink href="/projects" variant="primary">New project</ButtonLink>
       </div>
 
       <section class="grid gap-4 md:grid-cols-4">
@@ -81,8 +92,8 @@ export default function Overview() {
       <section class="mt-6 grid gap-4 lg:grid-cols-[1fr_0.8fr]">
         <div class="rounded-lg border border-gray-700 bg-gray-900 p-4">
           <div class="mb-3 flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-white">Recent jobs</h2>
-            <a href="/jobs" class="text-sm text-sky-400 hover:text-sky-300">View all</a>
+            <h2 class="text-lg font-semibold text-white">Recent runs</h2>
+            <a href="/runs" class="text-sm text-sky-400 hover:text-sky-300">View all</a>
           </div>
           <div class="overflow-x-auto">
             <table class="data-table">
@@ -90,13 +101,13 @@ export default function Overview() {
                 <tr><th>ID</th><th>Project</th><th>Status</th><th>Items</th></tr>
               </thead>
               <tbody>
-                <For each={jobs().slice(0, 3)} fallback={<tr><td colspan="4" class="py-6 text-center text-gray-500">No jobs yet.</td></tr>}>
-                  {job => (
+                <For each={runs().slice(0, 3)} fallback={<tr><td colspan="4" class="py-6 text-center text-gray-500">No runs yet.</td></tr>}>
+                  {run => (
                     <tr>
-                      <td>#{job.id}</td>
-                      <td>{job.project}</td>
-                      <td><Status value={job.status} /></td>
-                      <td>{job.items}</td>
+                      <td>#{run.id}</td>
+                      <td>{run.project}</td>
+                      <td><Status value={run.status} /></td>
+                      <td>{run.items}</td>
                     </tr>
                   )}
                 </For>
@@ -115,7 +126,7 @@ export default function Overview() {
               {line => (
                 <div class="rounded bg-gray-800 px-3 py-2 font-mono text-xs text-gray-300">
                   <span class="text-gray-500">{line.time}</span>{" "}
-                  <span class={line.stream === "stderr" ? "text-red-300" : "text-emerald-300"}>{line.stream}</span>{" "}
+                  <span class={line.stream === "stderr" ? "text-sky-300" : "text-emerald-300"}>{line.stream}</span>{" "}
                   {line.message}
                 </div>
               )}

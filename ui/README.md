@@ -19,17 +19,17 @@ uv run webuse ui
 
 The SolidStart API routes proxy to the worker at
 `WEBUSE_WORKER_URL` or `http://127.0.0.1:8787` by default. The worker owns the
-SQLite database and stores projects, jobs, logs, and imported data items.
+SQLite database and stores projects, runs, logs, and imported data items.
 
 Useful worker environment variables:
 
 ```bash
 WEBUSE_DB_PATH=/data/webuse.sqlite
-WEBUSE_WORK_DIR=/data/jobs
+WEBUSE_WORK_DIR=/data/runs
 WEBUSE_WORKER_COMMAND=webuse
 ```
 
-The Python worker runs crawl jobs through `python -m webuse.cli` by default.
+The Python worker runs crawl tasks through `python -m webuse.cli` by default.
 Set `WEBUSE_WORKER_COMMAND` when you want it to launch a specific executable,
 for example a project-local virtualenv command.
 

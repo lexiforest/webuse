@@ -1,14 +1,17 @@
-import { For, Show, createSignal, onMount } from "solid-js";
+import { Show, createSignal, onMount } from "solid-js";
 import { useNavigate } from "@solidjs/router";
+import { FiBarChart2, FiEdit3, FiPlay } from "solid-icons/fi";
 
 import Button, { ButtonLink } from "~/components/Button";
+import TableView from "~/components/TableView";
 import Layout from "~/layout/dashboard";
 
 type ProjectRow = {
   id: number;
   name: string;
-  type: "source" | "git";
+  type: "source" | "yaml" | "python" | "git";
   target: string;
+  cron: string;
   status: string;
   updatedAt: string;
 };
@@ -81,19 +84,19 @@ export default function Projects() {
 
     void (async () => {
       try {
-        const response = await fetch("/api/jobs", {
+        const response = await fetch("/api/runs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ projectId: id }),
         });
         if (!response.ok) {
           const data = (await response.json().catch(() => ({}))) as { error?: string };
-          throw new Error(data.error || `Failed to queue job (${response.status})`);
+          throw new Error(data.error || `Failed to queue run (${response.status})`);
         }
 
-        navigate("/jobs");
+        navigate("/runs");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to queue job");
+        setError(err instanceof Error ? err.message : "Failed to queue run");
       }
     })();
   };
@@ -107,7 +110,7 @@ export default function Projects() {
       <div class="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 class="text-3xl font-bold text-sky-400">Projects</h1>
-          <p class="mt-1 text-sm text-gray-400">Source tarballs and git-backed crawl tasks</p>
+          <p class="mt-1 text-sm text-gray-400">Project source files and local crawl runs</p>
         </div>
         <ButtonLink href="/projects/create" variant="primary">
           Create project
@@ -122,71 +125,63 @@ export default function Projects() {
             </div>
           )}
         </Show>
-        <div class="overflow-x-auto">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Name</th>
-                <th>Type</th>
-                <th>Source</th>
-                <th>Status</th>
-                <th>Updated</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              <For
-                each={projects()}
-                fallback={
-                  <tr>
-                    <td class="py-10 text-center text-gray-500" colspan="7">
-                      {loading() ? "Loading projects..." : "No projects yet."}
-                    </td>
-                  </tr>
-                }
-              >
-                {project => (
-                      <tr
-                        class="cursor-pointer transition-colors hover:bg-gray-800/70"
-                        onClick={() => navigate(`/projects/${project.id}`)}
-                      >
-                        <td>#{project.id}</td>
-                        <td class="font-medium text-white">{project.name}</td>
-                    <td>{project.type}</td>
-                    <td class="max-w-[420px] truncate">{project.target}</td>
-                    <td>{project.status}</td>
-                    <td>{project.updatedAt}</td>
-                    <td class="flex gap-2">
-                      <Button
-                        size="compact"
-                        variant="primary"
-                        type="button"
-                        onClick={event => {
-                          event.stopPropagation();
-                          runProject(project.id);
-                        }}
-                      >
-                        Run
-                      </Button>
-                      <Button
-                        size="compact"
-                        variant="danger"
-                        type="button"
-                        onClick={event => {
-                          event.stopPropagation();
-                          deleteProject(project.id);
-                        }}
-                      >
-                        Delete
-                      </Button>
-                    </td>
-                  </tr>
-                )}
-              </For>
-            </tbody>
-          </table>
-        </div>
+        <TableView
+          items={projects()}
+          columns={["ID", "Name", "Type", "Source", "Schedule", "Status", "Updated", "Actions"]}
+          loading={loading()}
+          loadingText="Loading projects..."
+          emptyText="No projects yet."
+          itemLabel="projects"
+          renderRow={project => (
+            <tr class="transition-colors hover:bg-gray-800/70">
+              <td>#{project.id}</td>
+              <td class="font-medium text-white">{project.name}</td>
+              <td>{project.type}</td>
+              <td class="max-w-[420px] truncate">{project.target}</td>
+              <td>{project.cron || "Manual"}</td>
+              <td>{project.status}</td>
+              <td>{project.updatedAt}</td>
+              <td class="flex gap-2">
+                <Button
+                  class="gap-1.5"
+                  size="compact"
+                  variant="success"
+                  type="button"
+                  onClick={() => runProject(project.id)}
+                >
+                  <FiPlay size={13} stroke-width={2} aria-hidden="true" />
+                  Run
+                </Button>
+                <Button
+                  class="gap-1.5"
+                  size="compact"
+                  type="button"
+                  onClick={() => navigate(`/runs?project_id=${project.id}`)}
+                >
+                  <FiBarChart2 size={13} stroke-width={2} aria-hidden="true" />
+                  Runs
+                </Button>
+                <Button
+                  class="gap-1.5"
+                  size="compact"
+                  type="button"
+                  onClick={() => navigate(`/projects/${project.id}/${project.type === "git" ? "settings" : "files"}`)}
+                >
+                  <FiEdit3 size={13} stroke-width={2} aria-hidden="true" />
+                  Edit
+                </Button>
+                <Button
+                  size="compact"
+                  variant="danger"
+                  type="button"
+                  onClick={() => deleteProject(project.id)}
+                >
+                  Delete
+                </Button>
+              </td>
+            </tr>
+          )}
+        />
         <Show when={!loading() && projects().length === 0}>
           <div class="mt-4 flex justify-center border-t border-gray-800 pt-4">
             <Button variant="primary" type="button" onClick={generateExample}>

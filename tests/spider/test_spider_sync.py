@@ -16,6 +16,7 @@ from webuse.crawl import (
     acrawl,
     crawl,
 )
+from webuse.exceptions import ConfigError
 from webuse.models import CrawlRequest, FollowRule
 from webuse.pipelines import (
     AssetDownloadPipeline,
@@ -92,11 +93,15 @@ start_urls:
 allowed_domains:
   - example.com
 max_depth: 1
-follow:
-  - css: a.next
-    same_domain: true
-extract:
-  title: h1
+pages:
+  default:
+    follow:
+      - css: a.next
+        same_domain: true
+    extract:
+      page:
+        fields:
+          title: h1
 """,
         encoding="utf-8",
     )
@@ -107,9 +112,79 @@ extract:
     spider = ConfigSpider()
     result = spider.run(client=FakeClient())
 
-    assert result.items == [{"title": "Home"}, {"title": "Page One"}]
+    assert result.items == [
+        {"title": "Home", "_type": "page"},
+        {"title": "Page One", "_type": "page"},
+    ]
     assert result.stats.followed_links == 1
     assert spider.name is None
+
+
+def test_spider_config_rejects_old_top_level_follow_extract(tmp_path):
+    config = tmp_path / "old.yaml"
+    config.write_text(
+        """
+start_urls:
+  - https://example.com
+follow:
+  - css: a.next
+extract:
+  title: h1
+""",
+        encoding="utf-8",
+    )
+
+    class ConfigSpider(Spider):
+        spider_config_path = config
+
+    with pytest.raises(ConfigError):
+        ConfigSpider().run(client=FakeClient())
+
+
+def test_spider_config_rejects_legacy_page_follow_from(tmp_path):
+    config = tmp_path / "from.yaml"
+    config.write_text(
+        """
+start_urls:
+  - https://example.com
+pages:
+  default:
+    follow:
+      - css: a.next
+        from: default
+        category: detail
+""",
+        encoding="utf-8",
+    )
+
+    class ConfigSpider(Spider):
+        spider_config_path = config
+
+    with pytest.raises(ConfigError):
+        ConfigSpider().run(client=FakeClient())
+
+
+def test_spider_config_rejects_legacy_category_extract_shorthand(tmp_path):
+    config = tmp_path / "extract.yaml"
+    config.write_text(
+        """
+start_urls:
+  - https://example.com
+pages:
+  default:
+    extract:
+      fields:
+        title: h1
+""",
+        encoding="utf-8",
+    )
+
+    class ConfigSpider(Spider):
+        spider_config_path = config
+
+    with pytest.raises(ConfigError):
+        ConfigSpider().run(client=FakeClient())
+
 
 def test_spider_config_extracts_records_with_item_css(tmp_path):
     config = tmp_path / "items.yaml"
@@ -117,13 +192,16 @@ def test_spider_config_extracts_records_with_item_css(tmp_path):
         """
 start_urls:
   - https://example.com
-extract:
-  item_css: article.product
-  fields:
-    title:
-      css: h3 a
-      attr: title
-    price: .price
+pages:
+  default:
+    extract:
+      products:
+        item_css: article.product
+        fields:
+          title:
+            css: h3 a
+            attr: title
+          price: .price
 """,
         encoding="utf-8",
     )
@@ -152,8 +230,173 @@ extract:
     result = ConfigSpider().run(client=ItemClient())
 
     assert result.items == [
-        {"title": "One", "price": "$1.00"},
-        {"title": "Two", "price": None},
+        {"title": "One", "price": "$1.00", "_type": "products"},
+        {"title": "Two", "price": None, "_type": "products"},
+    ]
+
+def test_spider_config_extracts_by_request_category(tmp_path):
+    config = tmp_path / "categories.yaml"
+    config.write_text(
+        """
+start_urls:
+  - https://example.com/
+max_depth: 1
+pages:
+  default:
+    follow:
+      - css: a.detail
+        category: detail
+    extract:
+      listing:
+        fields:
+          title: h1
+  detail:
+    extract:
+      detail:
+        fields:
+          detail_title: h1
+""",
+        encoding="utf-8",
+    )
+
+    pages = {
+        "https://example.com/": b"""
+<html><body>
+  <h1>Listing</h1>
+  <a class="detail" href="/detail">Detail</a>
+</body></html>
+""",
+        "https://example.com/detail": b"<html><body><h1>Detail</h1></body></html>",
+    }
+
+    class CategoryClient:
+        def request(self, method, url, **kwargs):
+            _ = (method, kwargs)
+            return Response(url=url, status_code=200, content=pages[url])
+
+    class ConfigSpider(Spider):
+        spider_config_path = config
+
+    result = ConfigSpider().run(client=CategoryClient())
+
+    assert result.items == [
+        {"title": "Listing", "_type": "listing"},
+        {"detail_title": "Detail", "_type": "detail"},
+    ]
+
+
+def test_spider_config_follow_rule_can_be_limited_to_source_category(tmp_path):
+    config = tmp_path / "source-category.yaml"
+    config.write_text(
+        """
+start_urls:
+  - https://example.com/
+max_depth: 2
+pages:
+  default:
+    follow:
+      - css: a.detail
+        category: detail
+    extract:
+      listing:
+        fields:
+          title: h1
+  detail:
+    extract:
+      detail:
+        fields:
+          detail_title: h1
+""",
+        encoding="utf-8",
+    )
+
+    pages = {
+        "https://example.com/": b"""
+<html><body>
+  <h1>Listing</h1>
+  <a class="detail" href="/detail">Detail</a>
+</body></html>
+""",
+        "https://example.com/detail": b"""
+<html><body>
+  <h1>Detail</h1>
+  <a class="detail" href="/detail-2">Detail Two</a>
+</body></html>
+""",
+        "https://example.com/detail-2": b"<html><body><h1>Detail Two</h1></body></html>",
+    }
+
+    class CategoryClient:
+        def request(self, method, url, **kwargs):
+            _ = (method, kwargs)
+            return Response(url=url, status_code=200, content=pages[url])
+
+    class ConfigSpider(Spider):
+        spider_config_path = config
+
+    result = ConfigSpider().run(client=CategoryClient())
+
+    assert result.items == [
+        {"title": "Listing", "_type": "listing"},
+        {"detail_title": "Detail", "_type": "detail"},
+    ]
+    assert "https://example.com/detail-2" not in result.visited
+
+
+def test_spider_config_extracts_multiple_item_types_from_one_page(tmp_path):
+    config = tmp_path / "multi-items.yaml"
+    config.write_text(
+        """
+start_urls:
+  - https://example.com/
+pages:
+  default:
+    extract:
+      books:
+        item_css: article.product
+        fields:
+          title:
+            css: h3 a
+            attr: title
+      categories:
+        item_css: nav a
+        fields:
+          name: .
+          url:
+            css: .
+            attr: href
+""",
+        encoding="utf-8",
+    )
+
+    class MultiItemClient:
+        def request(self, method, url, **kwargs):
+            _ = (method, kwargs)
+            return Response(
+                url=url,
+                status_code=200,
+                content=b"""
+<html><body>
+  <nav>
+    <a href="/fiction">Fiction</a>
+    <a href="/history">History</a>
+  </nav>
+  <article class="product"><h3><a title="One">One</a></h3></article>
+  <article class="product"><h3><a title="Two">Two</a></h3></article>
+</body></html>
+""",
+            )
+
+    class ConfigSpider(Spider):
+        spider_config_path = config
+
+    result = ConfigSpider().run(client=MultiItemClient())
+
+    assert result.items == [
+        {"title": "One", "_type": "books"},
+        {"title": "Two", "_type": "books"},
+        {"name": "Fiction", "url": "https://example.com/fiction", "_type": "categories"},
+        {"name": "History", "url": "https://example.com/history", "_type": "categories"},
     ]
 
 def test_spider_settings_precedence_config_then_run_overrides(tmp_path):
@@ -163,11 +406,11 @@ def test_spider_settings_precedence_config_then_run_overrides(tmp_path):
 start_urls = ["https://example.com"]
 max_depth = 1
 
-[[follow]]
+[[pages.default.follow]]
 css = "a.next"
 same_domain = true
 
-[extract]
+[pages.default.extract.page.fields]
 title = "h1"
 """,
         encoding="utf-8",
@@ -181,8 +424,11 @@ title = "h1"
     config_result = ConfigSpider().run(client=FakeClient())
     override_result = ConfigSpider().run(client=FakeClient(), max_depth=0)
 
-    assert config_result.items == [{"title": "Home"}, {"title": "Page One"}]
-    assert override_result.items == [{"title": "Home"}]
+    assert config_result.items == [
+        {"title": "Home", "_type": "page"},
+        {"title": "Page One", "_type": "page"},
+    ]
+    assert override_result.items == [{"title": "Home", "_type": "page"}]
 
 def test_spider_parse_can_return_items_and_followups():
     class ParseSpider(Spider):

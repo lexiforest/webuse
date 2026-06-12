@@ -1,8 +1,8 @@
 import { A } from "@solidjs/router";
 import { splitProps, type JSX } from "solid-js";
 
-type ButtonVariant = "default" | "primary" | "danger";
-type ButtonSize = "default" | "compact";
+type ButtonVariant = "default" | "primary" | "danger" | "success";
+type ButtonSize = "default" | "compact" | "icon";
 
 type ButtonProps = JSX.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
@@ -22,11 +22,13 @@ const variantClasses: Record<ButtonVariant, string> = {
   default: "border-gray-600 bg-gray-800 text-gray-100 hover:bg-gray-700",
   primary: "border-sky-600 bg-sky-600 text-white hover:bg-sky-500",
   danger: "border-red-500/40 bg-red-500/10 text-red-200 hover:bg-red-500/20",
+  success: "border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-500",
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
   default: "min-h-9 px-3 py-2 text-sm",
   compact: "min-h-7 px-2 py-1 text-xs",
+  icon: "h-6 w-6 p-0 text-xs",
 };
 
 export default function Button(props: ButtonProps) {

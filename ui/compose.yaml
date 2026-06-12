@@ -18,7 +18,7 @@ services:
     build:
       context: ..
       dockerfile: ui/Dockerfile
-    command: /app/.venv/bin/webuse ui --host 0.0.0.0 --port 8787 --db-path /data/webuse.sqlite --work-dir /data/jobs
+    command: /app/.venv/bin/webuse ui --host 0.0.0.0 --port 8787 --db-path /data/webuse.sqlite --work-dir /data/runs
     working_dir: /app
     environment:
       WEBUSE_WORKER_COMMAND: /app/.venv/bin/webuse

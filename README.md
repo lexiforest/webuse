@@ -1,6 +1,6 @@
 # Webuse
 
-Webuse is a small scraping toolkit built around `curl_cffi`.
+Webuse is a small scraping toolkit built around `curl_cffi` and `pydantic`.
 
 `webuse` is part of the impersonate suite:
 
@@ -16,28 +16,15 @@ Why yet another scraping library?
 
 - We need to build tools for both human and agents.
 - A comprehensive CLI is crucial for agents like OpenClaw, so we offer it.
-- You can define most of your tasks with yaml, instead of code, which is another great thing for agents and non-technical users.
-- Even better, there is an simple GUI for you to generate scraping tasks.
-- Writing and maintaining XPath/CSS is fragile and frustrating, these tedious work should be handed over to AI.
-- `webuse` is created by the author of `curl_cffi`, the integration and support is much better.
-- Last but not least, I have some extra Codex tokens, why not utilizing it?
-
-Here is a comparison in tables:
-
-||scrapy|aiohttp|httpx|pycurl|webuse|
-|---|---|---|---|---|---|
-|http/2|❌|❌|✅|✅|✅|
-|http/3|❌|❌|❌|☑️<sup>1</sup>|✅<sup>2</sup>|
-|sync|✅|❌|✅|✅|✅|
-|async|❌|✅|✅|❌|✅|
-|LLM selectors|❌|✅|❌|❌|✅|
-|native cli|❌|❌|❌|❌|✅|
-|tls/h2/h3 fingerprints|❌|❌|❌|❌|✅|
-|speed|🐇|🐇🐇|🐇|🐇🐇|🐇🐇|
+- You can define most of your tasks with yaml, instead of real code, which is great for non-technical users, and agents.
+- Even better, there is an simple GUI to orchestrate your scraping tasks.
+- Writing and *maintaining* XPath/CSS is fragile and frustrating, these tedious work should be handed over to AI.
+- `webuse` is created by the author of `curl_cffi`. We do impersonation right, so your scrapers run smoother.
+- Last but not least, I have some extra Codex tokens, why not utilizing it? But don't worry, this library is *100% reviewed by humans*.
 
 What about dynamic websites?
 
-Well, that's what we are building next. Playwright and puppeteer is real solution, and
+Well, that's what we are building next. Playwright and puppeteer is not the final solution,
 headless real browsers are just too heavy to be agents. We are building a new lightweight
 browser-ish executor, stay tuned.
 
@@ -49,29 +36,15 @@ Install from PyPI:
 pip install webuse
 ```
 
-Install from source:
-
-```bash
-pip install .
-```
-
-For development:
+For development, clone and then:
 
 ```bash
 python -m pip install -e .[dev]
 ```
 
+The development of UI parts requires Node.js.
+
 ## Usage
-
-### Quick HTTP request
-
-```python
-import webuse
-
-response = webuse.get("https://example.com", impersonate="chrome")
-print(response.status_code)
-print(response.text)
-```
 
 ### Parse HTML
 
@@ -234,6 +207,46 @@ class BooksSpider(webuse.Spider):
     def parse_detail(self, response):
         yield {"title": response.css_first("h1").text()}
 ```
+
+Declarative YAML is page-first. `pages` is keyed by source page category,
+`follow` rules label discovered requests with `category`, and `extract` is keyed
+by item type:
+
+```yaml
+start_urls:
+  - https://books.toscrape.com/
+max_depth: 1
+pages:
+  default:
+    follow:
+      - css: .product_pod h3 a
+        category: detail
+    extract:
+      books:
+        item_css: .product_pod
+        fields:
+          title:
+            css: h3 a
+            attr: title
+          price: .price_color
+      categories:
+        item_css: .side_categories a
+        fields:
+          name: .
+          url:
+            css: .
+            attr: href
+  detail:
+    extract:
+      book_details:
+        fields:
+          title: h1
+          description: "#product_description + p"
+```
+
+Named item extractors add `_type` to dictionary output. Set `item_model` on a
+named extractor when that item should be validated with a specific Pydantic
+model before pipelines run.
 
 Spiders can also run item pipelines. Pipeline items are Pydantic `BaseModel` instances; set `Spider.item_model` to convert extracted dictionaries before they enter the pipeline chain. `Spider.pipelines` overrides project defaults from `[items.pipelines]` in `webuse.toml`.
 
@@ -403,8 +416,9 @@ Run it with:
 webuse fetch --config webuse.toml
 ```
 
-For crawl tasks, YAML spider configs use the same item-scoped extraction model
-as the CLI:
+For standalone crawl tasks, YAML spider configs use a page-first extraction
+model. For multi-page crawls, put page-local follow and extract instructions
+under `pages.<category>`:
 
 ```yaml
 name: books
@@ -413,20 +427,40 @@ start_urls:
 allowed_domains:
   - books.toscrape.com
 max_depth: 1
-follow:
-  - css: .next a
-    same_domain: true
-extract:
-  item_css: .product_pod
-  fields:
-    title:
-      css: h3 a
-      attr: title
-    price: .price_color
+pages:
+  default:
+    follow:
+      - css: .product_pod h3 a
+        category: detail
+    extract:
+      books:
+        item_css: .product_pod
+        fields:
+          title:
+            css: h3 a
+            attr: title
+          price: .price_color
+  detail:
+    extract:
+      book_details:
+        fields:
+          title: h1
 ```
 
 Run it with:
 
 ```bash
 webuse crawl books.yaml -o books.jsonl
+```
+
+In a project root, `webuse.yaml` is a project config and lists spiders
+explicitly:
+
+```yaml
+name: books-project
+spiders:
+  books:
+    config: spiders/books.yaml
+  custom_python:
+    path: spiders/custom_python.py
 ```

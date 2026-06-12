@@ -12,6 +12,7 @@ from .client import (
     put,
     request,
 )
+from .config import load_webuse_config
 from .crawl import (
     DefaultRequestHasher,
     FileRequestQueue,
@@ -85,6 +86,7 @@ __all__ = [
     "FollowRule",
     "IgnoreRequest",
     "JsonlPipeline",
+    "load_webuse_config",
     "MemoryRequestQueue",
     "MemoryRequestSeen",
     "NotConfigured",

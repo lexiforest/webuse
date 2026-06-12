@@ -3,6 +3,8 @@ import re
 from pathlib import Path
 from urllib.parse import urlparse
 
+import yaml
+
 from .common import print_jsonl
 
 _CONFIG_NAMES = ("webuse.toml", "webuse.yaml", "webuse.yml")
@@ -35,6 +37,43 @@ def _is_project_dir(path: Path) -> bool:
     return any((path / name).exists() for name in _CONFIG_NAMES)
 
 
+def _project_config_file(path: Path) -> Path:
+    for name in _CONFIG_NAMES:
+        candidate = path / name
+        if candidate.exists():
+            return candidate
+    raise SystemExit(f"cannot find project config in {path}")
+
+
+def _register_spider(project_dir: Path, name: str, path: Path, *, force: bool) -> None:
+    config_path = _project_config_file(project_dir)
+    relative_path = path.relative_to(project_dir).as_posix()
+    if config_path.suffix == ".toml":
+        text = config_path.read_text(encoding="utf-8")
+        section = f"[spiders.{name}]"
+        if section in text and not force:
+            raise SystemExit(f"spider already registered in project config: {name}")
+        if section in text:
+            return
+        suffix = "\n" if text.endswith("\n") else "\n\n"
+        config_path.write_text(
+            f'{text}{suffix}{section}\npath = "{relative_path}"\n',
+            encoding="utf-8",
+        )
+        return
+
+    config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    if not isinstance(config, dict):
+        raise SystemExit(f"project config must be a mapping: {config_path}")
+    spiders = config.setdefault("spiders", {})
+    if not isinstance(spiders, dict):
+        raise SystemExit("project config spiders must be a mapping")
+    if name in spiders and not force:
+        raise SystemExit(f"spider already registered in project config: {name}")
+    spiders[name] = {"path": relative_path}
+    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+
+
 def _spider_config_toml(name: str, url: str) -> str:
     parsed = urlparse(url)
     allowed_domains = (
@@ -44,11 +83,11 @@ def _spider_config_toml(name: str, url: str) -> str:
 start_urls = ["{url}"]
 {allowed_domains}max_depth = 1
 
-[[follow]]
+[[pages.default.follow]]
 css = "a"
 same_domain = true
 
-[extract.fields]
+[pages.default.extract.{_module_name(name)}.fields]
 title = "title"
 '''
 
@@ -62,12 +101,15 @@ def _spider_config_yaml(name: str, url: str) -> str:
 start_urls:
   - {url}
 {allowed_domains}max_depth: 1
-follow:
-  - css: a
-    same_domain: true
-extract:
-  fields:
-    title: title
+pages:
+  default:
+    follow:
+      - css: a
+        same_domain: true
+    extract:
+      {_module_name(name)}:
+        fields:
+          title: title
 """
 
 
@@ -184,6 +226,8 @@ def gen_command(args: argparse.Namespace) -> int:
     if config_path is not None and config_content is not None:
         config_path.write_text(config_content, encoding="utf-8")
         payload["config"] = str(config_path)
+    if project_mode:
+        _register_spider(target, module, path, force=args.force)
     print_jsonl([payload])
     return 0
 
