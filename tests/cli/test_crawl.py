@@ -465,7 +465,7 @@ def test_crawl_command_defaults_to_current_project(cli_project, monkeypatch, cap
         run_body='return CrawlResult(items=[Item(title="Beta")], stats=CrawlStats())',
     )
     (cli_project.root / "webuse.toml").write_text(
-        '\n'.join(
+        "\n".join(
             [
                 'name = "project"',
                 "",

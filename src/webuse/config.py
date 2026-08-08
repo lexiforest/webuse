@@ -64,10 +64,7 @@ def _read_yaml(path: Path) -> dict[str, Any]:
 def _deep_merge(base: dict[str, Any], override: Mapping[str, Any]) -> dict[str, Any]:
     merged = dict(base)
     for key, value in override.items():
-        if (
-            isinstance(value, Mapping)
-            and isinstance(merged.get(key), Mapping)
-        ):
+        if isinstance(value, Mapping) and isinstance(merged.get(key), Mapping):
             merged[key] = _deep_merge(dict(merged[key]), value)
         else:
             merged[key] = value
@@ -88,7 +85,9 @@ def env_config() -> dict[str, Any]:
         for key, value in {
             "database_path": _env_first("WEBUSE_DB_PATH"),
             "work_directory": _env_first("WEBUSE_WORK_DIR"),
-            "concurrency": _env_first("WEBUSE_CONCURRENCY", "WEBUSE_WORKER_CONCURRENCY"),
+            "concurrency": _env_first(
+                "WEBUSE_CONCURRENCY", "WEBUSE_WORKER_CONCURRENCY"
+            ),
         }.items()
         if value is not None
     }
@@ -170,13 +169,17 @@ def webuse_settings_from_config(
 
 
 def webuse_local_settings() -> dict[str, Any]:
-    return webuse_settings_from_config(_read_yaml(local_config_path()), defaults=EMPTY_SETTINGS)
+    return webuse_settings_from_config(
+        _read_yaml(local_config_path()), defaults=EMPTY_SETTINGS
+    )
 
 
 def save_local_webuse_settings(settings: dict[str, Any]) -> dict[str, Any]:
     import yaml
 
-    runtime = settings.get("runtime") if isinstance(settings.get("runtime"), dict) else {}
+    runtime = (
+        settings.get("runtime") if isinstance(settings.get("runtime"), dict) else {}
+    )
     llm = settings.get("llm") if isinstance(settings.get("llm"), dict) else {}
     smart = settings.get("smart") if isinstance(settings.get("smart"), dict) else {}
     config = _drop_empty(

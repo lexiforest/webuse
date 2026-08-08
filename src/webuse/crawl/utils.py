@@ -372,25 +372,28 @@ def looks_like_field_rule(value: Any) -> bool:
 
 
 def looks_like_field_mapping(value: Any) -> bool:
-    return isinstance(value, dict) and bool(value) and all(
-        looks_like_field_rule(rule) for rule in value.values()
+    return (
+        isinstance(value, dict)
+        and bool(value)
+        and all(looks_like_field_rule(rule) for rule in value.values())
     )
 
 
 def looks_like_extract_spec(value: Any) -> bool:
     if not isinstance(value, dict):
         return False
-    return any(key in value for key in ("fields", "item_css", "item_xpath")) or looks_like_field_mapping(value)
+    return any(
+        key in value for key in ("fields", "item_css", "item_xpath")
+    ) or looks_like_field_mapping(value)
 
 
-def extract_spec_items(response: Any, name: str | None, spec: dict[str, Any]) -> list[Any]:
+def extract_spec_items(
+    response: Any, name: str | None, spec: dict[str, Any]
+) -> list[Any]:
     fields = extraction_fields(spec)
     if not fields:
         return []
-    items = [
-        extract_item(scope, fields)
-        for scope in extraction_scopes(response, spec)
-    ]
+    items = [extract_item(scope, fields) for scope in extraction_scopes(response, spec)]
     if name is None:
         return items
     item_type = spec.get("type") or spec.get("item_type") or name
@@ -402,7 +405,9 @@ def extract_spec_items(response: Any, name: str | None, spec: dict[str, Any]) ->
     return items
 
 
-def extract_specs_for_response(response: Any, extract: dict[str, Any]) -> list[tuple[str | None, dict[str, Any]]]:
+def extract_specs_for_response(
+    response: Any, extract: dict[str, Any]
+) -> list[tuple[str | None, dict[str, Any]]]:
     if looks_like_extract_spec(extract):
         return [(None, extract)]
 

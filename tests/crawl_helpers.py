@@ -203,5 +203,3 @@ class QueryClient:
 
     def close(self):
         return None
-
-

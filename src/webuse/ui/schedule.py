@@ -17,6 +17,8 @@ def next_run_at_ms(expression: str | None, base_ms: int | None = None) -> int | 
     value = (expression or "").strip()
     if not value:
         return None
-    base = datetime.fromtimestamp((base_ms if base_ms is not None else now_ms()) / 1000, timezone.utc)
+    base = datetime.fromtimestamp(
+        (base_ms if base_ms is not None else now_ms()) / 1000, timezone.utc
+    )
     next_run = croniter(value, base).get_next(datetime)
     return int(next_run.timestamp() * 1000)

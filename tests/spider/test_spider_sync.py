@@ -59,6 +59,7 @@ def test_spider_runs_declarative_crawl():
     assert webuse.Spider is Spider
     assert webuse.AsyncSpider is AsyncSpider
 
+
 def test_custom_parse_replaces_declarative_extract():
     class ExampleSpider(Spider):
         start_urls = ["https://example.com"]
@@ -71,6 +72,7 @@ def test_custom_parse_replaces_declarative_extract():
 
     assert result.items == [{"url": "https://example.com/"}]
 
+
 def test_spider_start_method_can_override_initial_requests():
     class StartSpider(Spider):
         start_urls = ["https://example.com/page-2"]
@@ -82,6 +84,7 @@ def test_spider_start_method_can_override_initial_requests():
     result = StartSpider().run(client=FakeClient())
 
     assert result.items == [{"title": "Home"}]
+
 
 def test_spider_runs_from_yaml_config(tmp_path):
     config = tmp_path / "books.yaml"
@@ -233,6 +236,7 @@ pages:
         {"title": "One", "price": "$1.00", "_type": "products"},
         {"title": "Two", "price": None, "_type": "products"},
     ]
+
 
 def test_spider_config_extracts_by_request_category(tmp_path):
     config = tmp_path / "categories.yaml"
@@ -395,9 +399,18 @@ pages:
     assert result.items == [
         {"title": "One", "_type": "books"},
         {"title": "Two", "_type": "books"},
-        {"name": "Fiction", "url": "https://example.com/fiction", "_type": "categories"},
-        {"name": "History", "url": "https://example.com/history", "_type": "categories"},
+        {
+            "name": "Fiction",
+            "url": "https://example.com/fiction",
+            "_type": "categories",
+        },
+        {
+            "name": "History",
+            "url": "https://example.com/history",
+            "_type": "categories",
+        },
     ]
+
 
 def test_spider_settings_precedence_config_then_run_overrides(tmp_path):
     config = tmp_path / "books.toml"
@@ -430,6 +443,7 @@ title = "h1"
     ]
     assert override_result.items == [{"title": "Home", "_type": "page"}]
 
+
 def test_spider_parse_can_return_items_and_followups():
     class ParseSpider(Spider):
         start_urls = ["https://example.com"]
@@ -445,6 +459,7 @@ def test_spider_parse_can_return_items_and_followups():
 
     assert result.items == [{"title": "Home"}, {"title": "Page One"}]
 
+
 def test_spider_parse_can_yield_items_and_follow_requests():
     class ParseSpider(Spider):
         start_urls = ["https://example.com"]
@@ -459,6 +474,7 @@ def test_spider_parse_can_yield_items_and_follow_requests():
 
     assert result.items == [{"title": "Home"}, {"title": "Page One"}]
     assert any(page.url == "https://example.com/page-1" for page in result.pages)
+
 
 def test_spider_routes_follow_request_by_category():
     class ParseSpider(Spider):
@@ -477,6 +493,7 @@ def test_spider_routes_follow_request_by_category():
 
     assert result.items == [{"title": "Home"}, {"detail": "Page One"}]
 
+
 def test_spider_routes_follow_request_by_parse_method_name():
     class ParseSpider(Spider):
         start_urls = ["https://example.com"]
@@ -491,6 +508,7 @@ def test_spider_routes_follow_request_by_parse_method_name():
     result = ParseSpider().run(client=FakeClient())
 
     assert result.items == [{"detail": "Page One"}]
+
 
 def test_spider_routes_can_use_handler_function():
     class ParseSpider(Spider):
@@ -509,6 +527,7 @@ def test_spider_routes_can_use_handler_function():
 
     assert result.items == [{"detail": "Page One"}]
 
+
 def test_spider_parse_can_yield_pydantic_items():
     class ParseSpider(Spider):
         start_urls = ["https://example.com"]
@@ -519,6 +538,7 @@ def test_spider_parse_can_yield_pydantic_items():
     result = ParseSpider().run(client=FakeClient())
 
     assert result.items == [SampleItem(title="Home")]
+
 
 def test_response_follow_builds_crawl_request_with_options():
     response = Response(url="https://example.com/catalog/", status_code=200)

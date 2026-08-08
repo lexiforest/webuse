@@ -57,6 +57,7 @@ def test_builtin_csv_pipeline(tmp_path):
         rows = list(csv.DictReader(file))
     assert rows == [{"title": "Home", "source": ""}]
 
+
 def test_builtin_sqlite_pipeline(tmp_path):
     class SQLiteSpider(Spider):
         name = "sqlite-spider"
@@ -76,6 +77,7 @@ def test_builtin_sqlite_pipeline(tmp_path):
     finally:
         connection.close()
     assert rows == [("SampleItem", json.dumps({"title": "Home", "source": ""}))]
+
 
 def test_builtin_asset_download_pipeline_downloads_assets(tmp_path):
     url = "https://cdn.example.com/images/cover.JPG?size=small"
@@ -99,6 +101,7 @@ def test_builtin_asset_download_pipeline_downloads_assets(tmp_path):
     ).read_bytes() == b"image-bytes"
     assert session.requests == [("GET", url, {"timeout": 30})]
 
+
 def test_builtin_asset_download_pipeline_resolves_from_config_spec(tmp_path):
     url = "https://cdn.example.com/files/spec.pdf"
     session = FakeAssetSession(FakeAssetResponse(content=b"pdf"))
@@ -116,6 +119,7 @@ def test_builtin_asset_download_pipeline_resolves_from_config_spec(tmp_path):
     assert result.assets[0]["path"].endswith(".pdf")
     assert (tmp_path / "downloads" / result.assets[0]["path"]).read_bytes() == b"pdf"
 
+
 def test_builtin_asset_download_pipeline_uses_cached_file(tmp_path):
     url = "https://cdn.example.com/files/spec.pdf"
     session = FakeAssetSession(FakeAssetResponse(content=b"new"))
@@ -128,6 +132,7 @@ def test_builtin_asset_download_pipeline_uses_cached_file(tmp_path):
     assert second.assets[0]["checksum"] == hashlib.sha1(b"new").hexdigest()
     assert len(session.requests) == 1
 
+
 def test_builtin_asset_download_pipeline_raises_on_http_error(tmp_path):
     url = "https://cdn.example.com/missing.png"
     session = FakeAssetSession(FakeAssetResponse(status_code=404, content=b"missing"))
@@ -135,6 +140,7 @@ def test_builtin_asset_download_pipeline_raises_on_http_error(tmp_path):
 
     with pytest.raises(webuse.PipelineError, match="HTTP 404"):
         pipeline.process_item(AssetItem(asset_urls=[url]))
+
 
 def test_builtin_webhook_pipeline_sends_each_item():
     session = FakeWebhookSession()
@@ -167,6 +173,7 @@ def test_builtin_webhook_pipeline_sends_each_item():
         )
     ]
 
+
 def test_builtin_webhook_pipeline_resolves_from_config_spec():
     session = FakeWebhookSession()
     pipeline = resolve_pipeline(
@@ -187,6 +194,7 @@ def test_builtin_webhook_pipeline_resolves_from_config_spec():
             {"json": {"title": "Home", "source": ""}, "timeout": 10},
         )
     ]
+
 
 def test_builtin_webhook_pipeline_raises_on_http_error():
     session = FakeWebhookSession(FakeWebhookResponse(status_code=500, text="failed"))

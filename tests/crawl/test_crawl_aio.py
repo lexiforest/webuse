@@ -114,7 +114,9 @@ def test_acrawl_follow_rule_can_be_limited_to_source_category():
         return await acrawl(
             "https://example.com/",
             client=CategoryClient(),
-            follow=FollowRule(css="a.detail", source_category="default", category="detail"),
+            follow=FollowRule(
+                css="a.detail", source_category="default", category="detail"
+            ),
             extract=lambda response: {"title": response.css_first("h1").text()},
             max_depth=2,
         )

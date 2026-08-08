@@ -168,13 +168,17 @@ def _project_config(project_dir: Path) -> ProjectConfig:
 
 def _inline_spider_target(name: str, value: Any) -> _InlineSpiderTarget:
     if not isinstance(value, dict):
-        raise SystemExit(f"spiders.{name} must be a mapping, config path, or module path")
+        raise SystemExit(
+            f"spiders.{name} must be a mapping, config path, or module path"
+        )
     payload = dict(value)
     payload.setdefault("name", name)
     try:
         config = SpiderConfig.model_validate(payload)
     except ValidationError as exc:
-        raise SystemExit(f"invalid inline spider config: spiders.{name}: {exc}") from exc
+        raise SystemExit(
+            f"invalid inline spider config: spiders.{name}: {exc}"
+        ) from exc
     return _InlineSpiderTarget(name, config)
 
 
@@ -184,7 +188,9 @@ def _spider_target_from_project_entry(
     if isinstance(value, str):
         return value
     if not isinstance(value, dict):
-        raise SystemExit(f"spiders.{name} must be a mapping, config path, or module path")
+        raise SystemExit(
+            f"spiders.{name} must be a mapping, config path, or module path"
+        )
     for key in ("config", "path"):
         target = value.get(key)
         if isinstance(target, str) and target:
@@ -490,7 +496,9 @@ def _spider_targets_from_crawl_target(
         if target_path.exists() and target_path.is_file():
             if target_path.name in _CONFIG_NAMES:
                 project_dir = target_path.resolve().parent
-                return _spider_targets_from_project_config(project_dir, None), project_dir
+                return _spider_targets_from_project_config(
+                    project_dir, None
+                ), project_dir
             if target_path.suffix in _SPIDER_CONFIG_SUFFIXES:
                 return [str(target_path)], _project_root_for_config(target_path)
         project_dir = _project_dir_from_target(target)
@@ -562,7 +570,12 @@ def _run_single_spider(
 ) -> CrawlResult:
     result = _apply_attributes(
         _load_spider(target, project_dir=project_dir), attributes or {}
-    ).run(**_state_options(state, target=target.name if isinstance(target, _InlineSpiderTarget) else target))
+    ).run(
+        **_state_options(
+            state,
+            target=target.name if isinstance(target, _InlineSpiderTarget) else target,
+        )
+    )
     if inspect.isawaitable(result):
         result = asyncio.run(result)
     return result

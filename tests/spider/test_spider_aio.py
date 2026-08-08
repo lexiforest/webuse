@@ -63,6 +63,7 @@ def test_async_spider_run_is_async_entrypoint():
         {"url": "https://example.com/page-1"},
     ]
 
+
 def test_async_spider_config_extracts_by_request_category(tmp_path):
     config = tmp_path / "categories.yaml"
     config.write_text(
@@ -194,6 +195,7 @@ def test_async_spider_parse_can_yield_items_and_follow_requests():
     result = asyncio.run(run_spider())
 
     assert result.items == [{"title": "Home"}, {"title": "Page One"}]
+
 
 def test_async_spider_routes_follow_request_by_category():
     class ExampleSpider(AsyncSpider):

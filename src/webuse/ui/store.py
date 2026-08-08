@@ -98,11 +98,15 @@ def _duration(started_at: int | None, finished_at: int | None) -> str:
     return f"{minutes}m {remainder:02d}s"
 
 
-def _normalize_project_files(files: Any, fallback_config: Any = None) -> list[dict[str, str]]:
+def _normalize_project_files(
+    files: Any, fallback_config: Any = None
+) -> list[dict[str, str]]:
     if isinstance(files, list) and files:
         return [{"path": file["path"], "content": file["content"]} for file in files]
     if fallback_config is not None:
-        return [{"path": "webuse.yaml", "content": json.dumps(fallback_config, indent=2)}]
+        return [
+            {"path": "webuse.yaml", "content": json.dumps(fallback_config, indent=2)}
+        ]
     return []
 
 
@@ -117,7 +121,9 @@ class Store:
             "type": row["type"],
             "target": row["git_url"] or "https://books.toscrape.com/",
             "cron": row["cron"] or "",
-            "nextRunAt": _serialize_date(row["next_run_at"]) if "next_run_at" in row.keys() else "",
+            "nextRunAt": _serialize_date(row["next_run_at"])
+            if "next_run_at" in row.keys()
+            else "",
             "status": row["status"] if "status" in row.keys() else "Ready",
             "updatedAt": _serialize_date(row["updated_at"]),
         }
@@ -190,7 +196,9 @@ class Store:
         )
         return [{"path": row["path"], "content": row["content"]} for row in rows]
 
-    def _replace_project_files(self, project_id: int, files: list[dict[str, str]]) -> None:
+    def _replace_project_files(
+        self, project_id: int, files: list[dict[str, str]]
+    ) -> None:
         timestamp = now()
         self.db.execute("DELETE FROM project_files WHERE project_id = ?", (project_id,))
         for file in files:
@@ -236,7 +244,9 @@ class Store:
                     input["name"],
                     input["type"],
                     input["target"],
-                    json.dumps(input["config"]) if input.get("config") is not None else None,
+                    json.dumps(input["config"])
+                    if input.get("config") is not None
+                    else None,
                     cron,
                     next_run_at,
                     timestamp,
@@ -264,7 +274,9 @@ class Store:
             }
         )
 
-    def update_project(self, project_id: int, input: dict[str, Any]) -> dict[str, Any] | None:
+    def update_project(
+        self, project_id: int, input: dict[str, Any]
+    ) -> dict[str, Any] | None:
         timestamp = now()
         cron = input.get("cron") or None
         next_run_at = next_run_at_ms(cron, timestamp)
@@ -279,7 +291,9 @@ class Store:
                     input["name"],
                     input["type"],
                     input["target"],
-                    json.dumps(input["config"]) if input.get("config") is not None else None,
+                    json.dumps(input["config"])
+                    if input.get("config") is not None
+                    else None,
                     cron,
                     next_run_at,
                     timestamp,
@@ -298,7 +312,9 @@ class Store:
 
     def delete_project(self, project_id: int) -> bool:
         with self.db.transaction():
-            job_ids = self.db.all("SELECT id FROM jobs WHERE project_id = ?", (project_id,))
+            job_ids = self.db.all(
+                "SELECT id FROM jobs WHERE project_id = ?", (project_id,)
+            )
             for job in job_ids:
                 self.db.execute("DELETE FROM data_items WHERE job_id = ?", (job["id"],))
                 self.db.execute("DELETE FROM logs WHERE job_id = ?", (job["id"],))
@@ -364,10 +380,16 @@ class Store:
         for row in rows:
             self.db.execute(
                 "UPDATE projects SET next_run_at = ?, updated_at = ? WHERE id = ?",
-                (next_run_at_ms(row["cron"], scheduled_from), scheduled_from, row["id"]),
+                (
+                    next_run_at_ms(row["cron"], scheduled_from),
+                    scheduled_from,
+                    row["id"],
+                ),
             )
 
-    def enqueue_due_cron_jobs(self, timestamp: int | None = None) -> list[dict[str, Any]]:
+    def enqueue_due_cron_jobs(
+        self, timestamp: int | None = None
+    ) -> list[dict[str, Any]]:
         due_at = timestamp if timestamp is not None else now()
         self.ensure_cron_schedules(due_at)
         rows = self.db.all(
@@ -408,7 +430,13 @@ class Store:
                     (
                         row["id"],
                         f"webuse crawl project:{row['id']}",
-                        json.dumps({"scheduled": True, "cron": row["cron"], "scheduledAt": due_at}),
+                        json.dumps(
+                            {
+                                "scheduled": True,
+                                "cron": row["cron"],
+                                "scheduledAt": due_at,
+                            }
+                        ),
                         due_at,
                         due_at,
                     ),
@@ -440,7 +468,9 @@ class Store:
         timestamp = now()
         rows = self.db.all("SELECT id FROM jobs WHERE status = 'running'")
         for row in rows:
-            self.append_log(row["id"], "stderr", "worker restarted while this job was running")
+            self.append_log(
+                row["id"], "stderr", "worker restarted while this job was running"
+            )
         self.db.execute(
             """
             UPDATE jobs
@@ -456,7 +486,9 @@ class Store:
             (command, now(), job_id),
         )
 
-    def finish_job(self, job_id: int, status: str, metadata: dict[str, Any] | None = None) -> None:
+    def finish_job(
+        self, job_id: int, status: str, metadata: dict[str, Any] | None = None
+    ) -> None:
         timestamp = now()
         self.db.execute(
             """
@@ -505,7 +537,9 @@ class Store:
 
     def count_logs(self, job_id: int | None) -> int:
         row = (
-            self.db.one("SELECT COUNT(*) AS total FROM logs WHERE job_id = ?", (job_id,))
+            self.db.one(
+                "SELECT COUNT(*) AS total FROM logs WHERE job_id = ?", (job_id,)
+            )
             if job_id
             else self.db.one("SELECT COUNT(*) AS total FROM logs")
         )
@@ -514,7 +548,12 @@ class Store:
     def insert_data_item(self, job_id: int, item: dict[str, Any]) -> None:
         self.db.execute(
             "INSERT INTO data_items (job_id, url, item, created_at) VALUES (?, ?, ?, ?)",
-            (job_id, item.get("url") if isinstance(item.get("url"), str) else None, json.dumps(item), now()),
+            (
+                job_id,
+                item.get("url") if isinstance(item.get("url"), str) else None,
+                json.dumps(item),
+                now(),
+            ),
         )
 
     def clear_data_items(self, job_id: int) -> None:
@@ -558,7 +597,9 @@ class Store:
         return self.get_assistant_session(int(cursor.lastrowid))
 
     def get_assistant_session(self, session_id: int) -> dict[str, Any] | None:
-        row = self.db.one("SELECT * FROM assistant_sessions WHERE id = ?", (session_id,))
+        row = self.db.one(
+            "SELECT * FROM assistant_sessions WHERE id = ?", (session_id,)
+        )
         return self._assistant_session_row(row) if row else None
 
     def list_assistant_messages(self, session_id: int) -> list[dict[str, Any]]:
@@ -589,5 +630,7 @@ class Store:
             "UPDATE assistant_sessions SET updated_at = ? WHERE id = ?",
             (timestamp, session_id),
         )
-        row = self.db.one("SELECT * FROM assistant_messages WHERE id = ?", (int(cursor.lastrowid),))
+        row = self.db.one(
+            "SELECT * FROM assistant_messages WHERE id = ?", (int(cursor.lastrowid),)
+        )
         return self._assistant_message_row(row) if row else None

@@ -75,6 +75,7 @@ def test_spider_pipelines_process_and_drop_items():
     assert result.items == [SampleItem(title="HOME")]
     assert events == ["open", "close"]
 
+
 def test_spider_pipelines_require_pydantic_items():
     class PipelineSpider(Spider):
         start_urls = ["https://example.com"]
@@ -83,6 +84,7 @@ def test_spider_pipelines_require_pydantic_items():
 
     with pytest.raises(webuse.PipelineError, match="BaseModel"):
         PipelineSpider().run(client=FakeClient())
+
 
 def test_project_level_jsonl_pipeline_from_webuse_toml(tmp_path):
     (tmp_path / "webuse.toml").write_text(
@@ -106,6 +108,7 @@ default = [
 
     assert result.items == [SampleItem(title="Home")]
     assert lines == ['{"title": "Home", "source": ""}']
+
 
 def test_spider_does_not_search_upwards_for_project_config(tmp_path, monkeypatch):
     project = tmp_path / "project"
@@ -131,6 +134,7 @@ default = [
 
     assert result.items == [{"title": "Home"}]
     assert not (project / "items.jsonl").exists()
+
 
 def test_spider_pipelines_take_precedence_over_project_config(tmp_path):
     (tmp_path / "webuse.toml").write_text(
@@ -158,6 +162,7 @@ default = [
 
     assert result.items == [SampleItem(title="Home", source="spider")]
     assert not (tmp_path / "project.jsonl").exists()
+
 
 def test_project_level_custom_pipeline_imports_from_project_dir(tmp_path):
     (tmp_path / "project_pipelines.py").write_text(
@@ -187,6 +192,7 @@ default = [
     result = ProjectSpider().run(client=FakeClient())
 
     assert result.items == [SampleItem(title="Home", source="project")]
+
 
 def test_run_pipeline_override_takes_precedence(tmp_path):
     class ClassPipeline(Pipeline):

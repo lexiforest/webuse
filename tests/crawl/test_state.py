@@ -49,6 +49,7 @@ def test_canonical_request_url_sorts_params_and_removes_tracking_params():
         == "https://example.com/path?a=1&b=2"
     )
 
+
 def test_default_request_hasher_uses_method_and_canonical_url_by_default():
     hasher = DefaultRequestHasher()
     first = CrawlRequest(
@@ -59,6 +60,7 @@ def test_default_request_hasher_uses_method_and_canonical_url_by_default():
 
     assert hasher.hash(first) == hasher.hash(second)
     assert hasher.hash(first) != hasher.hash(third)
+
 
 def test_default_request_hasher_can_include_headers():
     plain = DefaultRequestHasher()
@@ -75,6 +77,7 @@ def test_default_request_hasher_can_include_headers():
     assert plain.hash(first) == plain.hash(second)
     assert with_headers.hash(first) != with_headers.hash(second)
 
+
 def test_file_request_queue_persists_jsonl(tmp_path):
     path = tmp_path / "queue.jsonl"
     queue = FileRequestQueue(path)
@@ -86,6 +89,7 @@ def test_file_request_queue_persists_jsonl(tmp_path):
     assert loaded.pop() == request
     assert path.read_text(encoding="utf-8").count("\n") == 1
 
+
 def test_file_request_seen_persists_jsonl(tmp_path):
     path = tmp_path / "seen.jsonl"
     seen = FileRequestSeen(path)
@@ -94,6 +98,7 @@ def test_file_request_seen_persists_jsonl(tmp_path):
     assert not seen.add("hash-1")
     assert FileRequestSeen(path).contains("hash-1")
     assert path.read_text(encoding="utf-8").splitlines() == ['{"hash": "hash-1"}']
+
 
 def test_redis_request_queue_and_seen_use_list_and_set():
     client = FakeRedis()

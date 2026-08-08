@@ -70,7 +70,11 @@ TOOLS = [
         "function": {
             "name": "list_files",
             "description": "List files in the current webuse project.",
-            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
         },
     },
     {
@@ -241,7 +245,9 @@ def run_project_assistant(
         "content": getattr(assistant_message, "content", None) or "",
         "files": next_files,
         "changedFiles": _changed_paths(normalized_files, next_files),
-        "selectedPath": selected_path if selected_path in paths else (next_files[0]["path"] if next_files else ""),
+        "selectedPath": selected_path
+        if selected_path in paths
+        else (next_files[0]["path"] if next_files else ""),
         "toolResults": tool_results,
     }
 
@@ -270,13 +276,17 @@ def _openai_messages(
     ]
     for message in history:
         if message.get("role") in {"user", "assistant"}:
-            messages.append({"role": message["role"], "content": message.get("content", "")})
+            messages.append(
+                {"role": message["role"], "content": message.get("content", "")}
+            )
     messages.append({"role": "user", "content": user_message})
     return messages
 
 
 def _load_skill_text() -> str:
-    return resources.files(SKILL_PACKAGE).joinpath(SKILL_FILE).read_text(encoding="utf-8")
+    return (
+        resources.files(SKILL_PACKAGE).joinpath(SKILL_FILE).read_text(encoding="utf-8")
+    )
 
 
 def _read_project_docs(topic: Any) -> dict[str, Any]:
@@ -351,8 +361,12 @@ def _yaml_context_lines(path: str, content: str) -> list[str]:
     if isinstance(summary, dict):
         if summary.get("spiders"):
             lines.append(f"- spiders: {', '.join(summary.get('spiders', []))}")
-        lines.append(f"- start_urls: {', '.join(summary.get('startUrls', [])) or '(none)'}")
-        lines.append(f"- allowed_domains: {', '.join(summary.get('allowedDomains', [])) or '(none)'}")
+        lines.append(
+            f"- start_urls: {', '.join(summary.get('startUrls', [])) or '(none)'}"
+        )
+        lines.append(
+            f"- allowed_domains: {', '.join(summary.get('allowedDomains', [])) or '(none)'}"
+        )
         lines.append(f"- pages: {', '.join(summary.get('pages', [])) or '(none)'}")
         lines.append(f"- follow_rules: {summary.get('followRuleCount', 0)}")
         lines.append(f"- item_types: {summary.get('itemTypes', {})}")
@@ -361,7 +375,9 @@ def _yaml_context_lines(path: str, content: str) -> list[str]:
         lines.append("- yaml_errors: " + "; ".join(str(error) for error in errors[:3]))
     warnings = validation.get("warnings") or []
     if warnings:
-        lines.append("- yaml_warnings: " + "; ".join(str(warning) for warning in warnings[:3]))
+        lines.append(
+            "- yaml_warnings: " + "; ".join(str(warning) for warning in warnings[:3])
+        )
     return lines
 
 
@@ -370,7 +386,11 @@ def _sanitize_path(value: Any) -> str:
         raise ValueError("path must be a string")
     normalized = value.strip().replace("\\", "/")
     parts = normalized.split("/")
-    if not normalized or normalized.startswith("/") or any(part in {"", ".", ".."} for part in parts):
+    if (
+        not normalized
+        or normalized.startswith("/")
+        or any(part in {"", ".", ".."} for part in parts)
+    ):
         raise ValueError(f"invalid project file path: {value}")
     return normalized
 
@@ -417,17 +437,27 @@ def _walk_files(root: Path) -> list[dict[str, str]]:
     if not root.exists():
         return files
     for file_path in sorted(path for path in root.rglob("*") if path.is_file()):
-        if any(part in {"__pycache__", ".venv", "node_modules"} for part in file_path.parts):
+        if any(
+            part in {"__pycache__", ".venv", "node_modules"} for part in file_path.parts
+        ):
             continue
         relative = file_path.relative_to(root).as_posix()
-        files.append({"path": relative, "content": file_path.read_text(encoding="utf-8")})
+        files.append(
+            {"path": relative, "content": file_path.read_text(encoding="utf-8")}
+        )
     return files
 
 
-def _changed_paths(before: list[dict[str, str]], after: list[dict[str, str]]) -> list[str]:
+def _changed_paths(
+    before: list[dict[str, str]], after: list[dict[str, str]]
+) -> list[str]:
     before_map = {file["path"]: file["content"] for file in before}
     after_map = {file["path"]: file["content"] for file in after}
-    return sorted(path for path in set(before_map) | set(after_map) if before_map.get(path) != after_map.get(path))
+    return sorted(
+        path
+        for path in set(before_map) | set(after_map)
+        if before_map.get(path) != after_map.get(path)
+    )
 
 
 def _validate_webuse_yaml(project_dir: Path, path: Any = None) -> dict[str, Any]:
@@ -473,14 +503,18 @@ def _validate_yaml_content(path: str, content: str) -> dict[str, Any]:
                 if any(key in spec for key in ("path", "module", "config")):
                     continue
                 try:
-                    SpiderConfig.model_validate({**spec, "name": spec.get("name") or str(name)})
+                    SpiderConfig.model_validate(
+                        {**spec, "name": spec.get("name") or str(name)}
+                    )
                 except ValidationError as exc:
                     errors.append(f"spiders.{name}: {exc}")
                 if "start_urls" not in spec:
                     warnings.append(f"spiders.{name}.start_urls is not configured")
                 if "pages" not in spec:
                     warnings.append(f"spiders.{name}.pages is not configured")
-                errors.extend(_validate_pages(spec.get("pages"), f"spiders.{name}.pages"))
+                errors.extend(
+                    _validate_pages(spec.get("pages"), f"spiders.{name}.pages")
+                )
     else:
         try:
             SpiderConfig.model_validate(parsed)
@@ -510,9 +544,13 @@ def _validate_pages(value: Any, label: str = "pages") -> list[str]:
         if not isinstance(page, dict):
             errors.append(f"{label}.{category} must be a mapping")
             continue
-        errors.extend(_validate_follow_rules(page.get("follow"), f"{label}.{category}.follow"))
+        errors.extend(
+            _validate_follow_rules(page.get("follow"), f"{label}.{category}.follow")
+        )
         if "extract" in page:
-            errors.extend(_validate_extract_rules(page["extract"], f"{label}.{category}.extract"))
+            errors.extend(
+                _validate_extract_rules(page["extract"], f"{label}.{category}.extract")
+            )
     return errors
 
 
@@ -525,7 +563,9 @@ def _validate_follow_rules(value: Any, label: str) -> list[str]:
         if isinstance(rule, dict) and (
             {"source_category", "from_category", "from", "on"} & set(rule)
         ):
-            errors.append(f"{label}[{index}] source category is implied by the page key")
+            errors.append(
+                f"{label}[{index}] source category is implied by the page key"
+            )
             continue
         try:
             parsed = follow_rule_from_config(rule)
@@ -564,13 +604,17 @@ def _looks_like_fields(value: Any) -> bool:
     if not isinstance(value, dict) or not value:
         return False
     reserved = {"type", "item_type", "item_model"}
-    return all(key in reserved or _looks_like_field_rule(rule) for key, rule in value.items())
+    return all(
+        key in reserved or _looks_like_field_rule(rule) for key, rule in value.items()
+    )
 
 
 def _looks_like_field_rule(rule: Any) -> bool:
     if isinstance(rule, str):
         return True
-    return isinstance(rule, dict) and any(key in rule for key in ("css", "xpath", "smart"))
+    return isinstance(rule, dict) and any(
+        key in rule for key in ("css", "xpath", "smart")
+    )
 
 
 def _validate_single_extract(value: dict[str, Any], label: str) -> list[str]:
@@ -617,7 +661,13 @@ def _summarize_yaml(config: dict[str, Any]) -> dict[str, Any]:
         rule
         for page in pages.values()
         if isinstance(page, dict)
-        for rule in (page.get("follow") if isinstance(page.get("follow"), list) else [page.get("follow")] if page.get("follow") else [])
+        for rule in (
+            page.get("follow")
+            if isinstance(page.get("follow"), list)
+            else [page.get("follow")]
+            if page.get("follow")
+            else []
+        )
     ]
     return {
         "name": str(config.get("name") or ""),
@@ -661,7 +711,9 @@ def _summarize_follow_rules(value: Any) -> list[dict[str, Any]]:
     result = []
     for rule in rules:
         if isinstance(rule, str):
-            result.append({"selector": rule, "sourceCategory": "*", "targetCategory": ""})
+            result.append(
+                {"selector": rule, "sourceCategory": "*", "targetCategory": ""}
+            )
         elif isinstance(rule, dict):
             result.append(
                 {
@@ -733,8 +785,19 @@ def _workflow_graph(config: dict[str, Any]) -> dict[str, Any]:
         prefix = _node_id(spider_name)
         start_urls = _string_list(spider_config.get("start_urls")) or ["start"]
         for index, url in enumerate(start_urls):
-            nodes.append({"id": f"start_{prefix}_{index}", "type": "start", "label": f"Start: {spider_name}", "detail": url})
-        pages = spider_config.get("pages") if isinstance(spider_config.get("pages"), dict) else {}
+            nodes.append(
+                {
+                    "id": f"start_{prefix}_{index}",
+                    "type": "start",
+                    "label": f"Start: {spider_name}",
+                    "detail": url,
+                }
+            )
+        pages = (
+            spider_config.get("pages")
+            if isinstance(spider_config.get("pages"), dict)
+            else {}
+        )
         for category, page in pages.items():
             category_name = str(category)
             if not isinstance(page, dict):
@@ -742,32 +805,82 @@ def _workflow_graph(config: dict[str, Any]) -> dict[str, Any]:
             page_node_id = f"page_{prefix}_{_node_id(category_name)}"
             sources = [page_node_id]
             if category_name == "default":
-                sources = [f"start_{prefix}_{index}" for index, _ in enumerate(start_urls)]
+                sources = [
+                    f"start_{prefix}_{index}" for index, _ in enumerate(start_urls)
+                ]
             elif page_node_id not in page_nodes:
-                nodes.append({"id": page_node_id, "type": "page", "label": f"Page: {category_name}", "detail": spider_name})
+                nodes.append(
+                    {
+                        "id": page_node_id,
+                        "type": "page",
+                        "label": f"Page: {category_name}",
+                        "detail": spider_name,
+                    }
+                )
                 page_nodes.add(page_node_id)
             for index, rule in enumerate(_summarize_follow_rules(page.get("follow"))):
                 follow_id = f"follow_{prefix}_{_node_id(category_name)}_{index}"
                 target = str(rule.get("targetCategory") or "page")
                 target_page_id = f"page_{prefix}_{_node_id(target)}"
-                nodes.append({"id": follow_id, "type": "follow", "label": "Follow", "detail": str(rule.get("selector") or "link rule")})
+                nodes.append(
+                    {
+                        "id": follow_id,
+                        "type": "follow",
+                        "label": "Follow",
+                        "detail": str(rule.get("selector") or "link rule"),
+                    }
+                )
                 if target_page_id not in page_nodes:
-                    nodes.append({"id": target_page_id, "type": "page", "label": f"Page: {target}", "detail": spider_name})
+                    nodes.append(
+                        {
+                            "id": target_page_id,
+                            "type": "page",
+                            "label": f"Page: {target}",
+                            "detail": spider_name,
+                        }
+                    )
                     page_nodes.add(target_page_id)
                 for source in sources:
                     edges.append({"from": source, "to": follow_id, "label": ""})
-                edges.append({"from": follow_id, "to": target_page_id, "label": str(rule.get("attr") or "href")})
+                edges.append(
+                    {
+                        "from": follow_id,
+                        "to": target_page_id,
+                        "label": str(rule.get("attr") or "href"),
+                    }
+                )
             if isinstance(page.get("extract"), dict):
                 for item_type, spec in page["extract"].items():
                     fields = _field_names(spec) if isinstance(spec, dict) else []
                     extract_id = f"extract_{prefix}_{_node_id(category_name)}_{_node_id(str(item_type))}"
                     item_id = f"item_{prefix}_{_node_id(category_name)}_{_node_id(str(item_type))}"
-                    nodes.append({"id": extract_id, "type": "extract", "label": f"Extract: {category_name}", "detail": spider_name})
-                    nodes.append({"id": item_id, "type": "item", "label": f"Item: {item_type}", "detail": ", ".join(fields)})
+                    nodes.append(
+                        {
+                            "id": extract_id,
+                            "type": "extract",
+                            "label": f"Extract: {category_name}",
+                            "detail": spider_name,
+                        }
+                    )
+                    nodes.append(
+                        {
+                            "id": item_id,
+                            "type": "item",
+                            "label": f"Item: {item_type}",
+                            "detail": ", ".join(fields),
+                        }
+                    )
                     for source in sources:
                         edges.append({"from": source, "to": extract_id, "label": ""})
                     edges.append({"from": extract_id, "to": item_id, "label": ""})
-    nodes.append({"id": "database", "type": "database", "label": "Data", "detail": "pipelines/export"})
+    nodes.append(
+        {
+            "id": "database",
+            "type": "database",
+            "label": "Data",
+            "detail": "pipelines/export",
+        }
+    )
     for node in [node for node in nodes if node["type"] == "item"]:
         edges.append({"from": node["id"], "to": "database", "label": ""})
     return {"nodes": nodes, "edges": edges}
@@ -776,7 +889,11 @@ def _workflow_graph(config: dict[str, Any]) -> dict[str, Any]:
 def _workflow_mermaid(graph: dict[str, Any]) -> str:
     lines = ["flowchart LR"]
     for node in graph["nodes"]:
-        label = node["label"] if not node.get("detail") else f"{node['label']}\\n{node['detail']}"
+        label = (
+            node["label"]
+            if not node.get("detail")
+            else f"{node['label']}\\n{node['detail']}"
+        )
         lines.append(f"  {node['id']}[{json.dumps(label)}]")
     for edge in graph["edges"]:
         label = edge.get("label")
@@ -861,4 +978,8 @@ def _webuse_command(args: list[str]) -> list[str]:
 
 
 def _trim_output(value: str) -> str:
-    return value if len(value) <= MAX_COMMAND_OUTPUT else f"{value[:MAX_COMMAND_OUTPUT]}\n...[truncated]"
+    return (
+        value
+        if len(value) <= MAX_COMMAND_OUTPUT
+        else f"{value[:MAX_COMMAND_OUTPUT]}\n...[truncated]"
+    )

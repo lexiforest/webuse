@@ -100,7 +100,9 @@ pages:
     validation = _validate_webuse_yaml(tmp_path)
 
     assert validation["ok"] is False
-    assert any("Extra inputs are not permitted" in item for item in validation["errors"])
+    assert any(
+        "Extra inputs are not permitted" in item for item in validation["errors"]
+    )
     assert "webuse.yaml must define a non-empty spiders mapping" in validation["errors"]
 
 
@@ -155,8 +157,13 @@ def test_python_ui_worker_project_and_job_api(tmp_path: Path):
         assert [item["id"] for item in projects] == [project["id"]]
 
         detail = _json_request(f"{base_url}/projects?id={project['id']}")["project"]
-        assert detail["config"]["spiders"]["books"]["start_urls"] == ["https://books.toscrape.com/"]
-        assert {file["path"] for file in detail["files"]} == {"spiders/books.py", "webuse.yaml"}
+        assert detail["config"]["spiders"]["books"]["start_urls"] == [
+            "https://books.toscrape.com/"
+        ]
+        assert {file["path"] for file in detail["files"]} == {
+            "spiders/books.py",
+            "webuse.yaml",
+        }
 
         job = _json_request(
             f"{base_url}/jobs", method="POST", body={"projectId": project["id"]}
@@ -189,7 +196,9 @@ def test_python_ui_worker_project_and_job_api(tmp_path: Path):
         )["project"]
         assert other_project["cron"] == "0 * * * *"
         assert other_project["nextRunAt"]
-        other_detail = _json_request(f"{base_url}/projects?id={other_project['id']}")["project"]
+        other_detail = _json_request(f"{base_url}/projects?id={other_project['id']}")[
+            "project"
+        ]
         assert other_detail["cron"] == "0 * * * *"
         assert other_detail["nextRunAt"]
         assert other_detail["files"] == [
@@ -205,9 +214,9 @@ def test_python_ui_worker_project_and_job_api(tmp_path: Path):
         jobs = _json_request(f"{base_url}/jobs")["jobs"]
         assert {item["id"] for item in jobs} == {job["id"], other_job["id"]}
 
-        project_jobs = _json_request(
-            f"{base_url}/jobs?project_id={project['id']}"
-        )["jobs"]
+        project_jobs = _json_request(f"{base_url}/jobs?project_id={project['id']}")[
+            "jobs"
+        ]
         assert [item["projectId"] for item in project_jobs] == [project["id"]]
 
         store.append_log(job["id"], "stderr", "first project log")
@@ -225,8 +234,12 @@ def test_python_ui_worker_project_and_job_api(tmp_path: Path):
         )["logs"]
         assert [item["message"] for item in next_run_logs] == ["third project log"]
 
-        store.insert_data_item(job["id"], {"url": "https://example.com/one", "title": "One"})
-        store.insert_data_item(other_job["id"], {"url": "https://example.com/two", "title": "Two"})
+        store.insert_data_item(
+            job["id"], {"url": "https://example.com/one", "title": "One"}
+        )
+        store.insert_data_item(
+            other_job["id"], {"url": "https://example.com/two", "title": "Two"}
+        )
         run_data = _json_request(f"{base_url}/data?run_id={job['id']}")["dataItems"]
         assert [item["item"]["title"] for item in run_data] == ["One"]
     finally:
@@ -285,7 +298,10 @@ def test_python_ui_worker_supports_api_aliases(tmp_path: Path, monkeypatch):
         )
         assert response["message"]["content"] == "Updated webuse.yaml."
         assert response["changedFiles"] == ["webuse.yaml"]
-        assert response["files"][0]["content"] == "spiders:\n  default:\n    start_urls:\n      - https://example.com/\n"
+        assert (
+            response["files"][0]["content"]
+            == "spiders:\n  default:\n    start_urls:\n      - https://example.com/\n"
+        )
     finally:
         server.shutdown()
         runner.stop()
@@ -312,7 +328,9 @@ def test_python_ui_worker_settings_save_and_apply(tmp_path: Path, monkeypatch):
         assert payload["settings"]["llm"]["baseUrl"] == ""
         assert payload["settings"]["llm"]["model"] == ""
         assert payload["settings"]["smart"]["selectorStore"] == ""
-        assert payload["effectiveSettings"]["smart"]["selectorStore"] == "selectors.json"
+        assert (
+            payload["effectiveSettings"]["smart"]["selectorStore"] == "selectors.json"
+        )
 
         updated = _json_request(
             f"{base_url}/settings",
@@ -422,7 +440,9 @@ def test_python_ui_worker_enqueues_due_cron_project(tmp_path: Path):
     assert jobs[0]["metadata"]["scheduled"] is True
     assert jobs[0]["metadata"]["cron"] == "* * * * *"
 
-    updated = store.db.one("SELECT next_run_at FROM projects WHERE id = ?", (project["id"],))
+    updated = store.db.one(
+        "SELECT next_run_at FROM projects WHERE id = ?", (project["id"],)
+    )
     assert updated["next_run_at"] > due_at
     assert store.enqueue_due_cron_jobs(due_at) == []
 
@@ -443,9 +463,13 @@ def test_python_ui_worker_backfills_missing_next_run_at(tmp_path: Path):
             "files": [],
         }
     )
-    store.db.execute("UPDATE projects SET next_run_at = NULL WHERE id = ?", (project["id"],))
+    store.db.execute(
+        "UPDATE projects SET next_run_at = NULL WHERE id = ?", (project["id"],)
+    )
 
     store.ensure_cron_schedules(1_800_000_000_000)
 
-    updated = store.db.one("SELECT next_run_at FROM projects WHERE id = ?", (project["id"],))
+    updated = store.db.one(
+        "SELECT next_run_at FROM projects WHERE id = ?", (project["id"],)
+    )
     assert updated["next_run_at"] is not None

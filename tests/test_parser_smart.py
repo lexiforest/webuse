@@ -89,9 +89,7 @@ def test_smart_passes_prompt_and_text_to_model():
             captured.update(kwargs)
             return SimpleNamespace(
                 choices=[
-                    SimpleNamespace(
-                        message=SimpleNamespace(content='["Alpha Gadget"]')
-                    )
+                    SimpleNamespace(message=SimpleNamespace(content='["Alpha Gadget"]'))
                 ]
             )
 

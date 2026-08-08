@@ -61,6 +61,7 @@ def test_crawl_accepts_request_queue_and_seen():
     assert result.stats.skipped_duplicates == 1
     assert result.stats.fetched == 0
 
+
 def test_crawl_dedupes_by_request_hash_but_fetches_real_url():
     client = QueryClient()
 
@@ -76,6 +77,7 @@ def test_crawl_dedupes_by_request_hash_but_fetches_real_url():
     assert result.stats.fetched == 1
     assert result.stats.skipped_duplicates == 1
     assert client.requests == ["https://example.com/path?b=2&utm_source=news&a=1"]
+
 
 def test_crawl_follows_links_and_enforces_depth():
     result = crawl(
@@ -95,6 +97,7 @@ def test_crawl_follows_links_and_enforces_depth():
     assert result.stats.followed_links == 1
     assert result.stats.skipped_rules == 1
     assert "https://example.com/page-2" not in result.visited
+
 
 def test_crawl_follow_rule_assigns_request_category():
     pages = {
@@ -194,6 +197,7 @@ def test_crawl_obeys_robots_txt():
         "https://example.com/allowed",
     }
 
+
 def test_crawl_ignore_request_skips_callback_result():
     def parse(response):
         if response.url == "https://example.com/page-1":
@@ -211,6 +215,7 @@ def test_crawl_ignore_request_skips_callback_result():
     assert result.items == [{"title": "Home"}]
     assert result.stats.skipped_ignored == 1
 
+
 def test_crawl_close_spider_stops_scheduling():
     def parse(response):
         raise webuse.CloseSpider("enough")
@@ -226,6 +231,7 @@ def test_crawl_close_spider_stops_scheduling():
     assert result.close_reason == "enough"
     assert result.stats.fetched == 1
     assert "https://example.com/page-1" not in result.visited
+
 
 def test_crawl_extracts_rich_rules(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)

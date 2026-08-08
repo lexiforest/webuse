@@ -8,7 +8,10 @@ def default_data_dir() -> Path:
     if os.name == "nt":
         root = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
         return Path(root) / "webuse"
-    return Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "webuse"
+    return (
+        Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+        / "webuse"
+    )
 
 
 def default_db_path() -> Path:
@@ -34,7 +37,9 @@ class Database:
             self.conn.commit()
 
     def _ensure_project_columns(self) -> None:
-        columns = {row["name"] for row in self.conn.execute("PRAGMA table_info(projects)")}
+        columns = {
+            row["name"] for row in self.conn.execute("PRAGMA table_info(projects)")
+        }
         if "cron" not in columns:
             self.conn.execute("ALTER TABLE projects ADD COLUMN cron text")
         if "next_run_at" not in columns:

@@ -82,14 +82,24 @@ def _handler_class(*, store: Store, runner: Runner, static_dir: Path | None):
                 project_id = self._id_param()
                 if project_id is not None:
                     project = store.get_project(project_id)
-                    return self._json({"project": project} if project else {"error": "Project not found."}, HTTPStatus.OK if project else HTTPStatus.NOT_FOUND)
+                    return self._json(
+                        {"project": project}
+                        if project
+                        else {"error": "Project not found."},
+                        HTTPStatus.OK if project else HTTPStatus.NOT_FOUND,
+                    )
                 return self._json({"projects": store.list_projects()})
             if self.path_only == "/jobs":
                 job_id = self._id_param()
                 if job_id is not None:
                     job = store.get_job(job_id)
-                    return self._json({"job": job} if job else {"error": "Job not found."}, HTTPStatus.OK if job else HTTPStatus.NOT_FOUND)
-                return self._json({"jobs": store.list_jobs(self._query_int("project_id"))})
+                    return self._json(
+                        {"job": job} if job else {"error": "Job not found."},
+                        HTTPStatus.OK if job else HTTPStatus.NOT_FOUND,
+                    )
+                return self._json(
+                    {"jobs": store.list_jobs(self._query_int("project_id"))}
+                )
             if self.path_only == "/logs":
                 run_id = self._run_id_param()
                 limit = self._query_int("limit") or 100
@@ -101,25 +111,42 @@ def _handler_class(*, store: Store, runner: Runner, static_dir: Path | None):
                     }
                 )
             if self.path_only == "/data":
-                return self._json({"dataItems": store.list_data_items(self._run_id_param())})
+                return self._json(
+                    {"dataItems": store.list_data_items(self._run_id_param())}
+                )
             if self.path_only == "/assistant/project":
                 project_id = self._query_int("project_id")
                 if project_id is None:
-                    return self._json({"error": "A valid project_id is required."}, HTTPStatus.BAD_REQUEST)
+                    return self._json(
+                        {"error": "A valid project_id is required."},
+                        HTTPStatus.BAD_REQUEST,
+                    )
                 session = store.get_or_create_assistant_session(project_id)
                 if not session:
-                    return self._json({"error": "Project not found."}, HTTPStatus.NOT_FOUND)
-                return self._json({"session": session, "messages": store.list_assistant_messages(session["id"])})
+                    return self._json(
+                        {"error": "Project not found."}, HTTPStatus.NOT_FOUND
+                    )
+                return self._json(
+                    {
+                        "session": session,
+                        "messages": store.list_assistant_messages(session["id"]),
+                    }
+                )
             return self._static()
 
         def do_POST(self) -> None:
             if self.path_only == "/projects":
                 body = self._read_json(required=False)
                 if body is None:
-                    return self._json({"project": store.create_books_to_scrape_project()}, HTTPStatus.CREATED)
+                    return self._json(
+                        {"project": store.create_books_to_scrape_project()},
+                        HTTPStatus.CREATED,
+                    )
                 result = _validate_project_input(body)
                 if "error" in result:
-                    return self._json({"error": result["error"]}, HTTPStatus.BAD_REQUEST)
+                    return self._json(
+                        {"error": result["error"]}, HTTPStatus.BAD_REQUEST
+                    )
                 project = store.create_project(result["input"])
                 if project.get("type") == "git":
                     try:
@@ -132,30 +159,51 @@ def _handler_class(*, store: Store, runner: Runner, static_dir: Path | None):
                 body = self._read_json(required=True)
                 project_id = _positive_int((body or {}).get("projectId"))
                 if project_id is None:
-                    return self._json({"error": "A valid projectId is required."}, HTTPStatus.BAD_REQUEST)
+                    return self._json(
+                        {"error": "A valid projectId is required."},
+                        HTTPStatus.BAD_REQUEST,
+                    )
                 job = store.create_job(project_id)
-                return self._json({"job": job} if job else {"error": "Project not found."}, HTTPStatus.CREATED if job else HTTPStatus.NOT_FOUND)
+                return self._json(
+                    {"job": job} if job else {"error": "Project not found."},
+                    HTTPStatus.CREATED if job else HTTPStatus.NOT_FOUND,
+                )
             if self.path_only == "/assistant/project":
                 body = self._read_json(required=True)
                 project_id = _positive_int((body or {}).get("projectId"))
                 if project_id is None:
-                    return self._json({"error": "A valid projectId is required."}, HTTPStatus.BAD_REQUEST)
+                    return self._json(
+                        {"error": "A valid projectId is required."},
+                        HTTPStatus.BAD_REQUEST,
+                    )
                 if not store.get_project(project_id):
-                    return self._json({"error": "Project not found."}, HTTPStatus.NOT_FOUND)
+                    return self._json(
+                        {"error": "Project not found."}, HTTPStatus.NOT_FOUND
+                    )
                 message = (body or {}).get("message")
                 if not isinstance(message, str) or not message.strip():
-                    return self._json({"error": "Assistant message is required."}, HTTPStatus.BAD_REQUEST)
+                    return self._json(
+                        {"error": "Assistant message is required."},
+                        HTTPStatus.BAD_REQUEST,
+                    )
                 files_result = _validate_assistant_files((body or {}).get("files"))
                 if "error" in files_result:
-                    return self._json({"error": files_result["error"]}, HTTPStatus.BAD_REQUEST)
-                requested_session = store.get_assistant_session(_positive_int((body or {}).get("sessionId")) or 0)
+                    return self._json(
+                        {"error": files_result["error"]}, HTTPStatus.BAD_REQUEST
+                    )
+                requested_session = store.get_assistant_session(
+                    _positive_int((body or {}).get("sessionId")) or 0
+                )
                 session = (
                     requested_session
-                    if requested_session and requested_session["projectId"] == project_id
+                    if requested_session
+                    and requested_session["projectId"] == project_id
                     else store.get_or_create_assistant_session(project_id)
                 )
                 if not session:
-                    return self._json({"error": "Project not found."}, HTTPStatus.NOT_FOUND)
+                    return self._json(
+                        {"error": "Project not found."}, HTTPStatus.NOT_FOUND
+                    )
                 history = store.list_assistant_messages(session["id"])
                 user_content = message.strip()
                 store.append_assistant_message(session["id"], "user", user_content)
@@ -164,18 +212,25 @@ def _handler_class(*, store: Store, runner: Runner, static_dir: Path | None):
                         project_id=project_id,
                         session_id=session["id"],
                         files=files_result["files"],
-                        selected_path=(body or {}).get("selectedPath") if isinstance((body or {}).get("selectedPath"), str) else None,
+                        selected_path=(body or {}).get("selectedPath")
+                        if isinstance((body or {}).get("selectedPath"), str)
+                        else None,
                         history=history,
                         user_message=user_content,
                         work_dir=runner.work_dir,
                     )
                 except Exception as exc:
-                    return self._json({"error": str(exc)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+                    return self._json(
+                        {"error": str(exc)}, HTTPStatus.INTERNAL_SERVER_ERROR
+                    )
                 store.append_assistant_message(
                     session["id"],
                     "assistant",
                     result["content"],
-                    {"changedFiles": result["changedFiles"], "toolResults": result["toolResults"]},
+                    {
+                        "changedFiles": result["changedFiles"],
+                        "toolResults": result["toolResults"],
+                    },
                 )
                 return self._json(
                     {
@@ -202,7 +257,9 @@ def _handler_class(*, store: Store, runner: Runner, static_dir: Path | None):
                 body = self._read_json(required=True)
                 settings = body.get("settings") if isinstance(body, dict) else None
                 if not isinstance(settings, dict):
-                    return self._json({"error": "Settings body is required."}, HTTPStatus.BAD_REQUEST)
+                    return self._json(
+                        {"error": "Settings body is required."}, HTTPStatus.BAD_REQUEST
+                    )
                 payload = save_local_webuse_settings(settings)
                 runner.apply_settings(payload["effectiveSettings"])
                 return self._json(payload)
@@ -210,7 +267,9 @@ def _handler_class(*, store: Store, runner: Runner, static_dir: Path | None):
                 return self._json({"error": "Not found."}, HTTPStatus.NOT_FOUND)
             project_id = self._id_param()
             if project_id is None:
-                return self._json({"error": "A valid project id is required."}, HTTPStatus.BAD_REQUEST)
+                return self._json(
+                    {"error": "A valid project id is required."}, HTTPStatus.BAD_REQUEST
+                )
             result = _validate_project_input(self._read_json(required=True))
             if "error" in result:
                 return self._json({"error": result["error"]}, HTTPStatus.BAD_REQUEST)
@@ -220,20 +279,30 @@ def _handler_class(*, store: Store, runner: Runner, static_dir: Path | None):
                     runner.sync_git_project(project)
                 except Exception as exc:
                     return self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
-            return self._json({"project": project} if project else {"error": "Project not found."}, HTTPStatus.OK if project else HTTPStatus.NOT_FOUND)
+            return self._json(
+                {"project": project} if project else {"error": "Project not found."},
+                HTTPStatus.OK if project else HTTPStatus.NOT_FOUND,
+            )
 
         def do_DELETE(self) -> None:
             if self.path_only == "/projects":
                 project_id = self._id_param()
                 if project_id is None:
-                    return self._json({"error": "A valid project id is required."}, HTTPStatus.BAD_REQUEST)
+                    return self._json(
+                        {"error": "A valid project id is required."},
+                        HTTPStatus.BAD_REQUEST,
+                    )
                 store.delete_project(project_id)
                 return self._json({"ok": True})
             if self.path_only == "/jobs":
                 job_id = self._id_param()
                 if job_id is None:
-                    return self._json({"error": "A valid job id is required."}, HTTPStatus.BAD_REQUEST)
-                cancelled = store.cancel_queued_job(job_id) or runner.cancel_running_job(job_id)
+                    return self._json(
+                        {"error": "A valid job id is required."}, HTTPStatus.BAD_REQUEST
+                    )
+                cancelled = store.cancel_queued_job(
+                    job_id
+                ) or runner.cancel_running_job(job_id)
                 return self._json({"ok": cancelled})
             return self._json({"error": "Not found."}, HTTPStatus.NOT_FOUND)
 
@@ -281,13 +350,20 @@ def _handler_class(*, store: Store, runner: Runner, static_dir: Path | None):
             relative = self.path_only.lstrip("/") or "index.html"
             path = (static_dir / relative).resolve()
             root = static_dir.resolve()
-            if not str(path).startswith(str(root)) or not path.exists() or path.is_dir():
+            if (
+                not str(path).startswith(str(root))
+                or not path.exists()
+                or path.is_dir()
+            ):
                 path = root / "index.html"
             if not path.exists():
                 return self._minimal_page()
             payload = path.read_bytes()
             self.send_response(HTTPStatus.OK)
-            self.send_header("content-type", mimetypes.guess_type(path.name)[0] or "application/octet-stream")
+            self.send_header(
+                "content-type",
+                mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+            )
             self.send_header("content-length", str(len(payload)))
             self.end_headers()
             self.wfile.write(payload)
@@ -360,7 +436,9 @@ def _validate_project_input(body: dict | None) -> dict:
                 return {"error": "Project file path is required."}
             file_path = raw_path.strip().replace("\\", "/")
             parts = file_path.split("/")
-            if file_path.startswith("/") or any(part in {"", ".", ".."} for part in parts):
+            if file_path.startswith("/") or any(
+                part in {"", ".", ".."} for part in parts
+            ):
                 return {"error": f"Invalid project file path: {raw_path}"}
             if file_path in seen:
                 return {"error": f"Duplicate project file path: {file_path}"}
