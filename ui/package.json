@@ -4,36 +4,34 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
-    "start": "vite start",
-    "worker": "uv run --project .. webuse ui",
+    "start": "PORT=${PORT:-2951} node .output/server/index.mjs",
     "preview": "vite preview",
-    "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:push": "drizzle-kit push"
+    "typecheck": "tsc --noEmit",
+    "test": "node tests/run-orchestrator-smoke.mjs"
   },
   "dependencies": {
     "@kobalte/core": "^0.13.11",
-    "@solidjs/router": "^0.15.0",
-    "@solidjs/start": "2.0.0-alpha.2",
-    "@solidjs/vite-plugin-nitro-2": "^0.1.0",
-    "better-sqlite3": "^12.10.0",
+    "@solidjs/router": "^1.0.0",
+    "@solidjs/start": "^2.0.4",
+    "croner": "^10.0.1",
     "cronstrue": "^3.14.0",
     "dompurify": "^3.4.9",
-    "drizzle-orm": "^0.45.2",
     "marked": "^18.0.5",
     "mermaid": "^11.15.0",
+    "nitro": "^3.0.260903-beta",
     "solid-icons": "^1.2.0",
-    "solid-js": "^1.9.5",
-    "vite": "^7.0.0",
+    "solid-js": "^1.9.15",
+    "vite": "^8.2.2",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
+    "@types/node": "^24.0.0",
     "@tailwindcss/vite": "^4.0.7",
-    "@types/better-sqlite3": "^7.6.13",
-    "drizzle-kit": "^0.31.10",
-    "tailwindcss": "^4.0.7"
+    "esbuild": "^0.28.2",
+    "tailwindcss": "^4.0.7",
+    "typescript": "^7.0.2"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   }
 }

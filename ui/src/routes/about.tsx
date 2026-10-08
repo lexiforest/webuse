@@ -6,7 +6,7 @@ export default function About() {
         <div class="mt-4 space-y-4 text-sm leading-6 text-slate-700">
           <p>The builder generates YAML or TOML task files for `webuse fetch` and `webuse crawl`.</p>
           <p>Run locally from the `ui/` directory:</p>
-          <pre class="rounded bg-slate-950 p-3 text-slate-50">pnpm install{"\n"}pnpm dev</pre>
+          <pre class="rounded bg-slate-950 p-3 text-slate-50">npm install{"\n"}npm run dev</pre>
           <p>Open the local URL printed by Vite, then use the preview command with the generated config file.</p>
         </div>
       </section>

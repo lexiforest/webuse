@@ -1,8 +1,9 @@
-FROM node:22-bookworm-slim
+FROM node:24-bookworm-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV WEBUSE_WORKER_COMMAND=/app/.venv/bin/webuse
+ENV WEBUSE_PYTHON_COMMAND=/app/.venv/bin/python
+ENV PORT=2951
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
@@ -19,4 +20,4 @@ RUN npm ci
 COPY ui /app/ui
 RUN npm run build
 
-EXPOSE 3000 8787
+EXPOSE 2951

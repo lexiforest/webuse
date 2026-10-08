@@ -33,7 +33,7 @@ export type ProjectFile = {
   content: string;
 };
 
-export type ProjectType = "source" | "yaml" | "python" | "git";
+export type ProjectType = "yaml" | "python" | "git";
 
 export type ProjectFormValue = {
   name: string;
@@ -62,6 +62,8 @@ type ProjectSaveResponse = {
   };
 };
 
+const pendingPromptKey = (projectId: number) => `webuse:project:${projectId}:pending-prompt`;
+
 type FileTreeNode = {
   name: string;
   path: string;
@@ -81,7 +83,7 @@ function tabFromPath(pathname: string): ProjectFormTab | undefined {
 
 export const booksToScrapeProject: ProjectFormValue = {
   name: "Books to Scrape",
-  type: "source",
+  type: "yaml",
   target: "https://books.toscrape.com/",
   cron: "",
   config: {
@@ -471,11 +473,12 @@ export default function ProjectForm(props: ProjectFormProps) {
     window.addEventListener("beforeunload", handleBeforeUnload);
     onCleanup(() => window.removeEventListener("beforeunload", handleBeforeUnload));
 
-    if (props.projectId) {
+    const projectId = props.projectId;
+    if (projectId) {
       setChatLoading(true);
       void (async () => {
         try {
-          const response = await fetch(`/api/assistant-project?project_id=${props.projectId}`);
+          const response = await fetch(`/api/assistant-project?project_id=${projectId}`);
           if (!response.ok) {
             throw new Error(await readError(response, `Failed to load assistant history (${response.status})`));
           }
@@ -489,6 +492,12 @@ export default function ProjectForm(props: ProjectFormProps) {
           setChatError(err instanceof Error ? err.message : "Failed to load assistant history");
         } finally {
           setChatLoading(false);
+        }
+
+        const pendingPrompt = window.sessionStorage.getItem(pendingPromptKey(projectId));
+        if (pendingPrompt) {
+          window.sessionStorage.removeItem(pendingPromptKey(projectId));
+          await sendChatMessage(pendingPrompt);
         }
       })();
     }
@@ -628,8 +637,8 @@ export default function ProjectForm(props: ProjectFormProps) {
     setSelectedPath(next[0]?.path ?? "webuse.yaml");
   };
 
-  const sendChatMessage = async () => {
-    const prompt = chatInput().trim();
+  const sendChatMessage = async (initialPrompt?: string) => {
+    const prompt = (initialPrompt ?? chatInput()).trim();
     if (!prompt) {
       return;
     }
@@ -662,7 +671,7 @@ export default function ProjectForm(props: ProjectFormProps) {
 
       const data = await readJsonResponse<{
         session?: { id: number };
-        messages?: ChatMessage[];
+        messages?: LLMChatMessage[];
         files?: ProjectFile[];
         selectedPath?: string;
       }>(response);
@@ -831,7 +840,6 @@ export default function ProjectForm(props: ProjectFormProps) {
                   <option value="yaml">yaml</option>
                   <option value="python">python</option>
                   <option value="git">git</option>
-                  <option value="source">source</option>
                 </select>
               </label>
 
@@ -841,7 +849,7 @@ export default function ProjectForm(props: ProjectFormProps) {
               </label>
 
               <label class="field dark-field">
-                <span>Cron schedule</span>
+                <span>Cron schedule (UTC)</span>
                 <input
                   placeholder="0 * * * *"
                   value={cron()}

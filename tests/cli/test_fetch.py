@@ -1,11 +1,8 @@
-import sqlite3
 
 import pytest
 
 from webuse import cli
 from webuse.exceptions import SmartSelectorError
-from webuse.models import CrawlResult, CrawlStats
-from webuse.response import Response
 
 
 def test_fetch_command_with_selector(monkeypatch, capsys):

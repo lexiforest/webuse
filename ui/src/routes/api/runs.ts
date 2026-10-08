@@ -1,41 +1,20 @@
 import type { APIEvent } from "@solidjs/start/server";
-
-import { proxyWorker } from "~/lib/worker-api";
-
-async function proxyRuns(event: APIEvent) {
-  const response = await proxyWorker(event, "/jobs");
-  const contentType = response.headers.get("content-type") ?? "";
-  if (!contentType.includes("application/json")) {
-    return response;
-  }
-
-  const data = (await response.json()) as Record<string, unknown>;
-  if ("jobs" in data) {
-    data.runs = data.jobs;
-    delete data.jobs;
-  }
-  if ("job" in data) {
-    data.run = data.job;
-    delete data.job;
-  }
-
-  return new Response(JSON.stringify(data), {
-    status: response.status,
-    headers: {
-      "content-type": "application/json",
-      "cache-control": response.headers.get("cache-control") || "no-store",
-    },
-  });
-}
+import { body, json, queryInt } from "~/lib/server/http";
+import { cancelRun, ensureOrchestrator } from "~/lib/server/orchestrator";
+import { store } from "~/lib/server/store";
 
 export function GET(event: APIEvent) {
-  return proxyRuns(event);
+  ensureOrchestrator(); const id = queryInt(event, "id");
+  if (id) { const run = store.getJob(id); return run ? json({ run }) : json({ error: "Run not found." }, 404); }
+  return json({ runs: store.listJobs(queryInt(event, "project_id")) });
 }
-
-export function POST(event: APIEvent) {
-  return proxyRuns(event);
+export async function POST(event: APIEvent) {
+  ensureOrchestrator(); const value = await body(event); const projectId = Number(value?.projectId);
+  if (!Number.isInteger(projectId) || projectId < 1) return json({ error: "A valid projectId is required." }, 400);
+  const run = store.createJob(projectId); if (!run) return json({ error: "Project not found." }, 404);
+  ensureOrchestrator(); return json({ run }, 201);
 }
-
 export function DELETE(event: APIEvent) {
-  return proxyRuns(event);
+  ensureOrchestrator(); const id = queryInt(event, "id"); if (!id) return json({ error: "A valid run id is required." }, 400);
+  return cancelRun(id) ? json({ ok: true }) : json({ error: "Run is not queued or running." }, 409);
 }

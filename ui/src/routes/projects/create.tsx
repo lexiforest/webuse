@@ -169,7 +169,7 @@ export default function CreateProject() {
                 onInput={event => setGitUrl(event.currentTarget.value)}
               />
               <span class="text-xs text-gray-400">
-                Files stay in the checkout under the worker directory and are not editable in the UI.
+                Files stay in the checkout under the orchestrator work directory and are not editable in the UI.
               </span>
             </label>
             <Button

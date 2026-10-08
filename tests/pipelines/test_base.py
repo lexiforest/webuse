@@ -1,44 +1,15 @@
-import asyncio
-import csv
-import hashlib
-import json
-import sqlite3
 
 import pytest
 import webuse
-from webuse.crawl import (
-    DefaultRequestHasher,
-    FileRequestQueue,
-    FileRequestSeen,
-    RedisRequestQueue,
-    RedisRequestSeen,
-    canonical_request_url,
-    acrawl,
-    crawl,
-)
-from webuse.models import CrawlRequest, FollowRule
+from webuse.models import FollowRule
 from webuse.pipelines import (
-    AssetDownloadPipeline,
     DropItem,
     Pipeline,
-    WebhookPipeline,
-    resolve_pipeline,
 )
-from webuse.response import Response
-from webuse.spider import AsyncSpider, Spider
+from webuse.spider import Spider
 
 from crawl_helpers import (
-    AsyncFakeClient,
-    AsyncRobotsClient,
-    AssetItem,
-    FakeAssetResponse,
-    FakeAssetSession,
     FakeClient,
-    FakeRedis,
-    FakeWebhookResponse,
-    FakeWebhookSession,
-    QueryClient,
-    RobotsClient,
     SampleItem,
 )
 

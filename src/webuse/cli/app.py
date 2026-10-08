@@ -26,9 +26,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     configure_logger()
-    configure_openai_defaults()
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.command != "ui":
+        configure_openai_defaults()
     if getattr(args, "use_async", False):
         return asyncio.run(args.async_func(args))
     return args.func(args)

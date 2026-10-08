@@ -1,5 +1,5 @@
 # Python bytecode
-__pycache__/
+__pycache__
 *.py[cod]
 *$py.class
 
@@ -16,6 +16,7 @@ docs/_build/
 *.egg-info/
 .eggs/
 pip-wheel-metadata/
+src/webuse/_ui/
 
 # Test and coverage output
 .pytest_cache/
@@ -39,3 +40,7 @@ selectors.json
 internal/
 
 .webuserc.yaml
+
+# Scraped research corpora (copyrighted page dumps)
+research/extract/data/
+research/extract/clean/

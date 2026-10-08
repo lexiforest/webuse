@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Sync dependencies
+        run: uv sync --extra dev
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Compile
+        run: uv run python3 -m compileall src tests
+
+      - name: Test
+        run: uv run pytest -q
+
+  ui:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ["24", "26"]
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Build sdist and wheel with compiled UI
+        run: uv build
+      - name: Install release into a fresh environment
+        run: |
+          uv venv /tmp/webuse-release
+          uv pip install --python /tmp/webuse-release/bin/python dist/*.whl
+      - name: Test installed UI and crawler
+        run: /tmp/webuse-release/bin/python scripts/smoke_ui.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-distributions
+          path: dist/*

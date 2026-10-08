@@ -9,7 +9,7 @@ import Layout from "~/layout/dashboard";
 type ProjectRow = {
   id: number;
   name: string;
-  type: "source" | "yaml" | "python" | "git";
+  type: "yaml" | "python" | "git";
   target: string;
   cron: string;
   status: string;

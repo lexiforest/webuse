@@ -1,7 +1,7 @@
 import { A } from "@solidjs/router";
 import { For, Show, createSignal, onMount, type ParentProps } from "solid-js";
 import { AiFillCloud, AiFillGithub } from "solid-icons/ai";
-import type { IconTypes } from "solid-icons/lib";
+import type { IconTypes } from "solid-icons";
 import {
   FiActivity,
   FiChevronsLeft,
@@ -11,10 +11,12 @@ import {
   FiFileText,
   FiFolder,
   FiSettings,
+  FiZap,
 } from "solid-icons/fi";
 
 const tabs = [
-  { href: "/", label: "Overview", icon: FiActivity },
+  { href: "/", label: "New project", icon: FiZap },
+  { href: "/stats", label: "Stats", icon: FiActivity },
   { href: "/projects", label: "Projects", icon: FiFolder },
   { href: "/runs", label: "Runs", icon: FiClipboard },
   { href: "/logs", label: "Logs", icon: FiFileText },
@@ -57,7 +59,7 @@ export default function Dashboard(props: ParentProps<{ currentTab: string }>) {
       </header>
 
       <aside
-        class={`hidden shrink-0 flex-col bg-gray-800 transition-[width,padding] duration-200 md:flex ${
+        class={`hidden shrink-0 flex-col border-r border-gray-700 bg-gray-800 transition-[width,padding] duration-200 md:flex ${
           collapsed() ? "w-18 px-3 py-6" : "w-64 p-6"
         }`}
       >
@@ -115,8 +117,8 @@ export default function Dashboard(props: ParentProps<{ currentTab: string }>) {
         </div>
       </aside>
 
-      <main class="min-h-0 min-w-0 flex-grow overflow-auto p-2">
-        <div class="flex h-full min-h-full w-full flex-col bg-gray-800 p-3 shadow-lg sm:rounded-lg">
+      <main class="min-h-0 min-w-0 flex-grow overflow-auto">
+        <div class="flex h-full min-h-full w-full flex-col bg-gray-800 p-3">
           {props.children}
         </div>
       </main>

@@ -4,6 +4,7 @@ dist
 .vercel
 .netlify
 .vinxi
+.nitro
 app.config.timestamp_*.js
 
 # Environment
@@ -24,6 +25,8 @@ app.config.timestamp_*.js
 gitignore
 webuse.sqlite
 webuse.sqlite-*
+webuse-ui.sqlite
+webuse-ui.sqlite-*
 
 # System Files
 .DS_Store

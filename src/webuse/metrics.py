@@ -1,9 +1,8 @@
 from time import perf_counter
 from typing import Any
 
-import ustats
-
 from .signals import SignalBus
+from . import ustats
 
 
 class UStatsMetrics:

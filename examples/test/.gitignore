@@ -1,0 +1,4 @@
+.webuse/selectors.json
+output.jsonl
+*.sqlite
+*.sqlite-*

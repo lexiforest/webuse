@@ -26,14 +26,11 @@ dependencies = [
   "PyYAML>=6.0.0",
   "openai>=2.40.0",
   "pydantic>=2.13.4",
-  "ustats",
-  "ruff>=0.15.16",
   "loguru>=0.7.3",
-  "croniter>=6.2.2",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0.0"]
+dev = ["pytest>=8.0.0", "ruff>=0.15.16"]
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
@@ -44,18 +41,17 @@ webuse = "webuse.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+include-package-data = false
 
 [tool.setuptools.packages.find]
 where = ["src"]
+namespaces = false
 
 [tool.setuptools.package-data]
-"webuse.ui.skills" = ["*.md"]
+webuse = ["_ui/**/*", "_ui/public/.vite/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
-[tool.uv.sources]
-ustats = { path = "../ustats" }
 
 [tool.uv.workspace]
 members = [

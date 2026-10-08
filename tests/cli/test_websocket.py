@@ -1,11 +1,6 @@
-import sqlite3
 
-import pytest
 
 from webuse import cli
-from webuse.exceptions import SmartSelectorError
-from webuse.models import CrawlResult, CrawlStats
-from webuse.response import Response
 
 
 def test_websocket_command_sends_and_receives(monkeypatch, capsys):

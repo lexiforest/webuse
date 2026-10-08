@@ -1,7 +1,7 @@
 export type Project = {
   id: number;
   name: string;
-  type: "source" | "yaml" | "python" | "git";
+  type: "yaml" | "python" | "git";
   target: string;
   updatedAt: string;
   status: string;
@@ -43,7 +43,7 @@ export const projects: Project[] = [
   {
     id: 2,
     name: "Pricing monitor",
-    type: "source",
+    type: "yaml",
     target: "pricing-task.tar.gz",
     updatedAt: "2026-06-02 18:05",
     status: "Needs review",

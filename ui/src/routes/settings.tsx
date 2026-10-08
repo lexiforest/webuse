@@ -48,7 +48,7 @@ async function readSettingsResponse(response: Response, action: "load" | "save")
   }
   if (!contentType.includes("application/json")) {
     throw new Error(
-      "Settings API returned HTML instead of JSON. Restart the UI worker so the /settings endpoint is available.",
+      "Settings API returned HTML instead of JSON. Restart the Node UI server.",
     );
   }
   return JSON.parse(body) as {
@@ -139,7 +139,7 @@ export default function Settings() {
       </Show>
       <Show when={saved()}>
         <div class="mb-4 rounded border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
-          Saved to {localPath()} and applied to the worker.
+          Saved in {localPath()} and applied to the orchestrator.
         </div>
       </Show>
 
@@ -148,7 +148,7 @@ export default function Settings() {
           <section class="grid gap-6 py-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
             <div>
               <h2 class="text-lg font-semibold text-white">Runtime</h2>
-              <p class="mt-1 text-sm text-gray-400">Local worker storage and execution defaults.</p>
+              <p class="mt-1 text-sm text-gray-400">Node orchestration and crawler process defaults.</p>
             </div>
             <div class="grid max-w-2xl gap-3">
               <label class="field dark-field">
@@ -156,11 +156,11 @@ export default function Settings() {
                 <input
                   value={settings().runtime.databasePath}
                   placeholder="Not set locally"
-                  disabled={loading()}
+                  disabled
                   onInput={event => updateRuntime({ databasePath: event.currentTarget.value })}
                 />
                 <span class="text-xs text-gray-400">
-                  Effective: {effectiveSettings().runtime.databasePath}
+                  Fixed at server startup: {effectiveSettings().runtime.databasePath}
                 </span>
               </label>
               <label class="field dark-field">

@@ -736,6 +736,62 @@ textarea {
   box-shadow: 0 0 0 2px rgb(14 165 233 / 0.18);
 }
 
+.new-project-composer {
+  position: relative;
+  border: 1px solid #374151;
+  border-radius: 1.5rem;
+  background: #111827;
+  box-shadow: 0 18px 45px rgb(0 0 0 / 0.22);
+  padding: 0.875rem 3.75rem 0.875rem 1.125rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.new-project-composer:focus-within {
+  border-color: #0ea5e9;
+  box-shadow: 0 0 0 3px rgb(14 165 233 / 0.14), 0 18px 45px rgb(0 0 0 / 0.22);
+}
+
+.new-project-composer textarea {
+  display: block;
+  width: 100%;
+  min-height: 5rem;
+  resize: none;
+  border: 0;
+  background: transparent;
+  color: #f9fafb;
+  line-height: 1.55;
+  outline: none;
+}
+
+.new-project-composer textarea::placeholder {
+  color: #6b7280;
+}
+
+.new-project-submit {
+  position: absolute;
+  right: 0.875rem;
+  bottom: 0.875rem;
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: #0ea5e9;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.new-project-submit:hover:not(:disabled) {
+  background: #38bdf8;
+}
+
+.new-project-submit:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
 @media (max-width: 720px) {
   .project-code-pane {
     min-height: 28rem;
