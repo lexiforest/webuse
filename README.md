@@ -40,7 +40,7 @@ The benefits of agentic crawlers is more reliablity against site changes.
 
 ## Install
 
-Add the Python package to your project:
+Requires Python 3.11 or newer. Add the Python package to your project:
 
 ```bash
 pip install webuse
@@ -72,6 +72,17 @@ These are three views of the same crawler project:
 - **Chat** expresses intent and helps create, edit, and debug the crawler.
 - **Code** holds the implementation and configuration that users can inspect.
 - **Dashboard** makes execution status, logs, and extracted records visible.
+
+Chat is powered by [Pi](https://pi.dev/), with Webuse tools and a bundled crawler
+skill. It can inspect pages, read and edit project drafts, execute Python checks,
+run small crawls, and inspect their logs and records. Responses and tool activity
+stream into Chat; Stop cancels the current turn. Review the resulting files and
+Save to update the project. Sample crawls use drafts without changing its saved
+version or schedule. Python tools execute on your computer as the UI user.
+
+Configure a streaming, tool-capable OpenAI-compatible model in Settings. Pi
+conversation context persists locally; no Pi account or separate Pi installation
+is required. Automatic UI model discovery and cloud isolation remain planned.
 
 The product direction is to keep this experience consistent locally and in cloud.
 The local UI will offer Run locally and Deploy to cloud. Local projects can run

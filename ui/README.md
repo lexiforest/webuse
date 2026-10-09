@@ -67,6 +67,35 @@ Configure the Chat model, endpoint, and credentials in Settings. Automatic LM
 Studio/Ollama discovery exists in the Python helpers; integrating that discovery
 into UI Chat is planned. Explicit settings should take precedence.
 
+## Pi assistant
+
+Chat embeds `@earendil-works/pi-coding-agent`, with no separate Pi process or
+account. The configured OpenAI-compatible endpoint must support streaming and
+tool calls. Pi manages the tool loop, context compaction, retries, and cancellation.
+Session entries and tool history are stored in the UI's SQLite database; ambient
+Pi configuration, extensions, and credentials are not loaded.
+
+Webuse provides `workspace_info`, `read_file`, `write_file`, `edit_file`,
+`delete_file`, `fetch_page`, `run_python`, `run_crawl`, and `inspect_run`.
+The bundled [crawler skill](skills/webuse-crawlers/SKILL.md) is readable through
+`read_file`. Page fetching uses Python/curl_cffi. Python checks run against
+temporary draft snapshots; source changes must use the file tools to persist.
+Sample crawls enter the normal queue, and their logs and records appear in the
+dashboard. Neither edits nor samples change the saved project until the user
+clicks Save. The editor is read-only during a turn to prevent conflicting edits.
+
+The UI streams text/tool activity and offers Stop. A turn is limited to five
+minutes and 30 tool calls; Python checks have a 30-second limit and bounded
+output. Each turn can request three sample crawls, each limited to 10 requests
+and 60 seconds including queue time. Chat accepts at most 100 text files, 256 KB
+per file and 2 MB total. These limits bound routine local agent work; Python
+executes with the UI user's access and is not sandboxed. Cloud isolation,
+resource accounting, and managed crawling services remain separate work.
+
+Run `npm test` for orchestration and mocked Pi tool-loop checks. The installed
+wheel test in `scripts/smoke_ui.py` exercises Pi with a local mock model and real
+HTTP/Python/crawl tools; no external model calls are needed.
+
 ## Python release packaging
 
 Run `uv build` from the repository root with Node.js 24+ and npm installed. The

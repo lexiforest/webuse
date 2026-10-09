@@ -169,8 +169,8 @@ export const store = {
   },
   insertDataItem(jobId: number, item: Record<string, unknown>) { sqlite.prepare("INSERT INTO data_items (job_id, url, item, created_at) VALUES (?, ?, ?, ?)").run(jobId, typeof item.url === "string" ? item.url : null, JSON.stringify(item), Date.now()); },
   clearDataItems(jobId: number) { sqlite.prepare("DELETE FROM data_items WHERE job_id = ?").run(jobId); },
-  listDataItems(jobId?: number) {
-    const rows = (jobId ? sqlite.prepare("SELECT * FROM data_items WHERE job_id = ? ORDER BY id").all(jobId) : sqlite.prepare("SELECT * FROM data_items ORDER BY created_at DESC, id DESC LIMIT 500").all()) as Row[];
+  listDataItems(jobId?: number, limit = -1) {
+    const rows = (jobId ? sqlite.prepare("SELECT * FROM data_items WHERE job_id = ? ORDER BY id LIMIT ?").all(jobId, limit) : sqlite.prepare("SELECT * FROM data_items ORDER BY created_at DESC, id DESC LIMIT 500").all()) as Row[];
     return rows.map(row => ({ id: row.id, jobId: row.job_id, url: row.url || "", item: parseJson(row.item, {}), createdAt: displayDate(row.created_at) }));
   },
   enqueueDueJobs(now = Date.now()) {
@@ -187,6 +187,12 @@ export const store = {
   },
   getSettings() { return parseJson<Record<string, unknown>>((sqlite.prepare("SELECT value FROM settings WHERE key = 'settings'").get() as Row | undefined)?.value, {}); },
   saveSettings(settings: Record<string, unknown>) { sqlite.prepare("INSERT INTO settings (key, value, updated_at) VALUES ('settings', ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at").run(JSON.stringify(settings), Date.now()); },
+  getAssistantState(sessionId: number): unknown[] {
+    return parseJson((sqlite.prepare("SELECT entries FROM assistant_state WHERE session_id = ?").get(sessionId) as Row | undefined)?.entries, []);
+  },
+  saveAssistantState(sessionId: number, entries: unknown[]) {
+    sqlite.prepare("INSERT INTO assistant_state (session_id, entries) VALUES (?, ?) ON CONFLICT(session_id) DO UPDATE SET entries = excluded.entries").run(sessionId, JSON.stringify(entries));
+  },
   getOrCreateSession(projectId: number) {
     let row = sqlite.prepare("SELECT * FROM assistant_sessions WHERE project_id = ? ORDER BY updated_at DESC, id DESC LIMIT 1").get(projectId) as Row | undefined;
     if (!row) {

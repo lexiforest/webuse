@@ -60,7 +60,7 @@ async function checkoutProject(jobId: number, project: NonNullable<ReturnType<ty
   }
 }
 
-function pythonCommand() {
+export function pythonCommand() {
   if (process.env.WEBUSE_PYTHON_COMMAND) return process.env.WEBUSE_PYTHON_COMMAND;
   const candidates = process.platform === "win32"
     ? [resolve("../.venv/Scripts/python.exe"), resolve(".venv/Scripts/python.exe")]
@@ -68,7 +68,7 @@ function pythonCommand() {
   return candidates.find(existsSync) || (process.platform === "win32" ? "python" : "python3");
 }
 
-function crawlEnvironment() {
+export function crawlEnvironment() {
   const value = settings();
   return {
     ...process.env,
@@ -100,9 +100,16 @@ async function runJob(job: NonNullable<ReturnType<typeof store.getJob>>) {
   const root = workDirectory();
   const jobDirectory = join(root, String(job.id));
   let projectDirectory = join(jobDirectory, "project");
+  let sampleTimeout: ReturnType<typeof setTimeout> | undefined;
   mkdirSync(jobDirectory, { recursive: true });
   try {
-    if (project.type === "git") {
+    const sample = job.metadata as { assistantSample?: { files: ProjectFile[]; maxRequests: number; deadline: number } };
+    if (sample.assistantSample) {
+      if (sample.assistantSample.deadline <= Date.now()) {
+        store.finishJob(job.id, "cancelled", { reason: "sample_timeout" }); return;
+      }
+      materializeFiles(sample.assistantSample.files, projectDirectory);
+    } else if (project.type === "git") {
       projectDirectory = join(root, "projects", String(project.id), "repo");
       await checkoutProject(job.id, project, projectDirectory);
     } else {
@@ -113,11 +120,13 @@ async function runJob(job: NonNullable<ReturnType<typeof store.getJob>>) {
     const output = join(jobDirectory, "items.jsonl");
     const command = pythonCommand();
     const args = ["-m", "webuse.cli", "crawl", target, "-o", output];
+    if (sample.assistantSample) args.push("--max-requests", String(sample.assistantSample.maxRequests));
     const commandText = [command, ...args].join(" ");
     store.updateJobCommand(job.id, commandText);
     store.appendLog(job.id, "stdout", commandText);
-    const child = spawn(command, args, { cwd: projectDirectory, env: crawlEnvironment(), stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(command, args, { cwd: projectDirectory, env: crawlEnvironment(), detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"] });
     active.set(job.id, child);
+    if (sample.assistantSample) sampleTimeout = setTimeout(() => cancelRun(job.id), Math.max(1, sample.assistantSample.deadline - Date.now()));
     const pipe = (stream: NodeJS.ReadableStream, name: "stdout" | "stderr") => {
       const lines = createInterface({ input: stream, crlfDelay: Infinity });
       lines.on("line", line => store.appendLog(job.id, name, line));
@@ -128,7 +137,8 @@ async function runJob(job: NonNullable<ReturnType<typeof store.getJob>>) {
       child.once("exit", (code, signal) => resolvePromise({ code, signal }));
     });
     active.delete(job.id);
-    if (result.signal) { cancelling.delete(job.id); store.finishJob(job.id, "cancelled", { reason: "signal", signal: result.signal, outputPath: output }); return; }
+    const wasCancelled = cancelling.delete(job.id);
+    if (wasCancelled || result.signal) { store.finishJob(job.id, "cancelled", { reason: wasCancelled ? "cancelled" : "signal", signal: result.signal, outputPath: output }); return; }
     if (result.code !== 0) { store.finishJob(job.id, "failed", { reason: "exit_code", code: result.code, outputPath: output }); return; }
     const itemCount = await importJsonl(job.id, output);
     store.appendLog(job.id, "stdout", `imported ${itemCount} item${itemCount === 1 ? "" : "s"}`);
@@ -138,7 +148,7 @@ async function runJob(job: NonNullable<ReturnType<typeof store.getJob>>) {
     const message = error instanceof Error ? error.message : String(error);
     store.appendLog(job.id, "stderr", message);
     store.finishJob(job.id, cancelling.delete(job.id) ? "cancelled" : "failed", { reason: "orchestrator_error" });
-  }
+  } finally { if (sampleTimeout) clearTimeout(sampleTimeout); }
 }
 
 async function tick() {
@@ -167,12 +177,25 @@ export function ensureOrchestrator() {
 
 export function cancelRun(id: number) {
   const child = active.get(id);
-  if (child) { cancelling.add(id); child.kill("SIGTERM"); return true; }
+  if (child) { cancelling.add(id); terminateProcess(child); return true; }
   return store.cancelQueuedJob(id);
 }
 
 export function stopOrchestrator() {
   if (timer) clearInterval(timer);
   timer = undefined;
-  for (const child of active.values()) child.kill("SIGTERM");
+  for (const child of active.values()) terminateProcess(child);
+}
+
+export function terminateProcess(child: ReturnType<typeof spawn>) {
+  const kill = (signal: NodeJS.Signals) => {
+    try {
+      if (process.platform !== "win32" && child.pid) process.kill(-child.pid, signal);
+      else child.kill(signal);
+    } catch { child.kill(signal); }
+  };
+  kill("SIGTERM");
+  const force = setTimeout(() => kill("SIGKILL"), 1500);
+  force.unref();
+  child.once("close", () => clearTimeout(force));
 }

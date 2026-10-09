@@ -105,4 +105,8 @@ sqlite.exec(`
     metadata text,
     created_at integer NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS assistant_state (
+    session_id integer PRIMARY KEY REFERENCES assistant_sessions(id) ON DELETE CASCADE,
+    entries text NOT NULL
+  );
 `);

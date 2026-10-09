@@ -109,6 +109,10 @@ async def acrawl(
                 )
                 queue.task_done()
                 continue
+            # Check after robots awaits so concurrent workers share one budget.
+            if max_requests is not None and result.stats.queued >= max_requests:
+                queue.task_done()
+                continue
             result.visited.add(normalized)
             result.stats.queued += 1
             request_after_downloader = False

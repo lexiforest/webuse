@@ -1,1 +1,1 @@
-export { GET, POST } from "../assistant-project";
+export { GET, POST, DELETE } from "../assistant-project";

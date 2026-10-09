@@ -12,8 +12,11 @@ export type LLMChatMessage = {
   content: string;
   metadata?: {
     changedFiles?: string[];
+    toolResults?: ToolActivity[];
   };
 };
+
+export type ToolActivity = { id: string; name: string; status: "running" | "succeeded" | "failed" };
 
 type LLMChatProps = {
   messages?: LLMChatMessage[];
@@ -27,6 +30,9 @@ type LLMChatProps = {
   userName?: string;
   assistantName?: string;
   pendingText?: string;
+  streamedText?: string;
+  tools?: ToolActivity[];
+  onCancel?: () => void;
   onValueChange: (value: string) => void;
   onSubmit: () => void;
 };
@@ -90,12 +96,25 @@ export default function LLMChat(props: LLMChatProps) {
                       Changed: {message.metadata?.changedFiles?.join(", ")}
                     </div>
                   </Show>
+                  <Show when={message.metadata?.toolResults?.length}>
+                    <details class="llm-message-meta">
+                      <summary>Tool activity ({message.metadata?.toolResults?.length})</summary>
+                      <For each={message.metadata?.toolResults}>{tool => <div>{tool.name}: {tool.status}</div>}</For>
+                    </details>
+                  </Show>
                 </article>
               )}
             </For>
             <Show when={props.pending}>
               <article class="llm-message assistant pending">
                 <div class="llm-message-role">{assistantName()}</div>
+                <Show when={props.streamedText}>
+                  <div class="llm-message-body" innerHTML={renderMarkdown(props.streamedText || "")} />
+                </Show>
+                <div class="llm-message-meta" aria-live="polite">
+                  <For each={props.tools}>{tool => <div>{tool.name}: {tool.status}</div>}</For>
+                  <Show when={props.pendingText}><div>{props.pendingText}</div></Show>
+                </div>
                 <div class="llm-thinking" aria-label={props.pendingText || "Thinking"}>
                   <span />
                   <span />
@@ -115,6 +134,9 @@ export default function LLMChat(props: LLMChatProps) {
           placeholder={props.placeholder}
           disabled={props.disabled || props.pending || props.loading}
         />
+        <Show when={props.pending && props.onCancel}>
+          <Button size="compact" type="button" onClick={() => props.onCancel?.()} aria-label="Stop assistant">Stop</Button>
+        </Show>
         <Button
           aria-label="Send LLM message"
           disabled={props.disabled || !props.value.trim() || props.pending || props.loading}

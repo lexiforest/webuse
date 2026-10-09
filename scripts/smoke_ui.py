@@ -4,6 +4,7 @@ Run with the Python interpreter of a fresh environment containing the wheel.
 All HTTP traffic stays on loopback; no model or external website is needed.
 """
 
+import json
 import os
 import re
 import socket
@@ -19,10 +20,44 @@ from curl_cffi import requests
 
 
 class Page(BaseHTTPRequestHandler):
+    model_requests = []
+
     def do_GET(self):
         content = b"<html><body><h1>Packaged UI smoke</h1></body></html>"
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(content)))
+        self.end_headers()
+        self.wfile.write(content)
+
+    def do_POST(self):
+        assert self.path == "/v1/chat/completions", self.path
+        request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        self.model_requests.append(request)
+        assert request["model"] == "smoke-model"
+        assert request["stream"] is True
+        calls = [
+            ("read_file", {"path": ".webuse/skills/webuse-crawlers/SKILL.md"}),
+            ("fetch_page", {"url": f"http://127.0.0.1:{self.server.server_port}/"}),
+            ("write_file", {"path": "note.txt", "content": "Pi edited this draft."}),
+            ("run_python", {"code": "from pathlib import Path; print(Path('note.txt').read_text())"}),
+            ("run_crawl", {"maxRequests": 1}),
+        ]
+        index = len(self.model_requests) - 1
+        if index < len(calls):
+            name, arguments = calls[index]
+            delta = {"tool_calls": [{"index": 0, "id": f"call-{index}", "type": "function", "function": {"name": name, "arguments": json.dumps(arguments)}}]}
+            finish = "tool_calls"
+        else:
+            delta = {"content": "The sample crawl succeeded."}
+            finish = "stop"
+        chunks = [
+            {"id": "smoke", "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {"role": "assistant", **delta}, "finish_reason": None}]},
+            {"id": "smoke", "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {}, "finish_reason": finish}]},
+        ]
+        content = ("".join(f"data: {json.dumps(chunk)}\n\n" for chunk in chunks) + "data: [DONE]\n\n").encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
         self.send_header("Content-Length", str(len(content)))
         self.end_headers()
         self.wfile.write(content)
@@ -97,6 +132,34 @@ def check_ui(directory: Path, target: str):
                 items = api("GET", f"/api/data?run_id={run['id']}")["dataItems"]
                 assert len(items) == 1, items
                 assert items[0]["item"]["title"] == "Packaged UI smoke", items
+                api("PUT", "/api/settings", json={"settings": {"llm": {
+                    "baseUrl": target.rstrip("/") + "/v1", "model": "smoke-model", "apiKey": "local-smoke-unused",
+                }}})
+                result = client.post(base + "/api/assistant-project", json={
+                    "projectId": project["id"], "message": "Inspect, edit, and test this crawler.",
+                    "files": project["files"], "selectedPath": "webuse.yaml",
+                }, timeout=60)
+                result.raise_for_status()
+                events = [json.loads(line) for line in result.text.splitlines() if line]
+                final = events[-1]
+                assert final["type"] == "result", events
+                assert not final.get("error"), final
+                assert final["changedFiles"] == ["note.txt"], final
+                assert all(tool["status"] == "succeeded" for tool in final["toolResults"]), final
+                assert any(event["type"] == "text" for event in events), events
+                assert len(Page.model_requests) == 6, Page.model_requests
+                tool_messages = [message for message in Page.model_requests[-1]["messages"] if message["role"] == "tool"]
+                page_result = json.loads(tool_messages[1]["content"])
+                assert page_result["exitCode"] == 0, page_result
+                assert "Packaged UI smoke" in page_result["output"], page_result
+                python_result = json.loads(tool_messages[3]["content"])
+                assert python_result["exitCode"] == 0, python_result
+                assert "Pi edited this draft" in python_result["output"], python_result
+                crawl_result = json.loads(tool_messages[4]["content"])
+                assert crawl_result["status"] == "succeeded", crawl_result
+                assert crawl_result["records"][0]["title"] == "Packaged UI smoke", crawl_result
+                history = api("GET", f"/api/assistant-project?project_id={project['id']}")
+                assert history["messages"][-1]["metadata"]["toolResults"], history
                 assert (directory / "state" / "webuse-ui.sqlite").is_file()
         except BaseException:
             print(log.read_text(), file=sys.stderr)
@@ -121,7 +184,7 @@ def main():
         server.shutdown()
         server.server_close()
         thread.join()
-    print("Installed UI passed: HTML, compiled assets, SQLite, crawler, and extracted records.")
+    print("Installed UI passed: assets, SQLite, crawler records, and Pi Chat tools/streaming.")
 
 
 if __name__ == "__main__":

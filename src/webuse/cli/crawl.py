@@ -368,7 +368,6 @@ def _standalone_option_used(args: argparse.Namespace) -> bool:
             args.same_domain,
             args.allowed_domain,
             args.max_depth is not None,
-            args.max_requests is not None,
             args.concurrency is not None,
             args.dedupe is not None,
             args.robots_txt is not None,
@@ -567,10 +566,12 @@ def _run_single_spider(
     project_dir: Path | None = None,
     attributes: dict[str, str] | None = None,
     state: str | None = None,
+    max_requests: int | None = None,
 ) -> CrawlResult:
     result = _apply_attributes(
         _load_spider(target, project_dir=project_dir), attributes or {}
     ).run(
+        **({"max_requests": max_requests} if max_requests is not None else {}),
         **_state_options(
             state,
             target=target.name if isinstance(target, _InlineSpiderTarget) else target,
@@ -587,13 +588,14 @@ async def _arun_single_spider(
     project_dir: Path | None = None,
     attributes: dict[str, str] | None = None,
     state: str | None = None,
+    max_requests: int | None = None,
 ) -> CrawlResult:
     if state:
         raise SystemExit("--state is currently supported only for sync crawl")
     result = _apply_attributes(
         _load_spider(target, project_dir=project_dir, spider_class=AsyncSpider),
         attributes or {},
-    ).run()
+    ).run(**({"max_requests": max_requests} if max_requests is not None else {}))
     if inspect.isawaitable(result):
         result = await result
     return result
@@ -618,6 +620,8 @@ async def _arun_standalone(args: argparse.Namespace) -> CrawlResult:
 
 
 def crawl_command(args: argparse.Namespace) -> int:
+    if args.max_requests is not None and args.max_requests < 1:
+        raise SystemExit("--max-requests must be positive")
     if _is_url(args.directory):
         if args.spider:
             raise SystemExit("--spider cannot be used with a URL crawl target")
@@ -630,19 +634,26 @@ def crawl_command(args: argparse.Namespace) -> int:
         args.directory, args.spider
     )
     attributes = _attributes(args.attribute)
-    result = _merge_results(
-        [
-            _run_single_spider(
-                target, project_dir=project_dir, attributes=attributes, state=args.state
-            )
-            for target in targets
-        ]
-    )
+    results = []
+    remaining = args.max_requests
+    for target in targets:
+        if remaining is not None and remaining <= 0:
+            break
+        current = _run_single_spider(
+            target, project_dir=project_dir, attributes=attributes,
+            state=args.state, max_requests=remaining,
+        )
+        results.append(current)
+        if remaining is not None:
+            remaining -= current.stats.queued
+    result = _merge_results(results)
     _write_output(result, args.output)
     return 0 if not result.errors else 1
 
 
 async def acrawl_command(args: argparse.Namespace) -> int:
+    if args.max_requests is not None and args.max_requests < 1:
+        raise SystemExit("--max-requests must be positive")
     if _is_url(args.directory):
         if args.spider:
             raise SystemExit("--spider cannot be used with a URL crawl target")
@@ -655,14 +666,19 @@ async def acrawl_command(args: argparse.Namespace) -> int:
         args.directory, args.spider
     )
     attributes = _attributes(args.attribute)
-    result = _merge_results(
-        [
-            await _arun_single_spider(
-                target, project_dir=project_dir, attributes=attributes, state=args.state
-            )
-            for target in targets
-        ]
-    )
+    results = []
+    remaining = args.max_requests
+    for target in targets:
+        if remaining is not None and remaining <= 0:
+            break
+        current = await _arun_single_spider(
+            target, project_dir=project_dir, attributes=attributes,
+            state=args.state, max_requests=remaining,
+        )
+        results.append(current)
+        if remaining is not None:
+            remaining -= current.stats.queued
+    result = _merge_results(results)
     _write_output(result, args.output)
     return 0 if not result.errors else 1
 

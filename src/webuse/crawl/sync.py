@@ -79,6 +79,9 @@ def crawl(
                 while not scheduler_queue.empty() and len(pending) < max(
                     1, concurrency
                 ):
+                    if max_requests is not None and result.stats.queued >= max_requests:
+                        scheduler_queue.clear()
+                        break
                     request = scheduler_queue.pop()
                     if request is None:
                         break

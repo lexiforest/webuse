@@ -7,6 +7,37 @@ from webuse.models import CrawlResult, CrawlStats
 from webuse.response import Response
 
 
+@pytest.mark.parametrize("command", [[], ["--async"]])
+def test_project_request_limit_is_shared_across_spiders(tmp_path, monkeypatch, command):
+    from webuse.spider import aio as aio_module, sync as sync_module
+
+    config = tmp_path / "webuse.yaml"
+    config.write_text(
+        "spiders:\n  first:\n    start_urls: [https://example.com/first]\n"
+        "  second:\n    start_urls: [https://example.com/second]\n"
+        "  third:\n    start_urls: [https://example.com/third]\n"
+    )
+    observed = []
+
+    def fake_crawl(start_urls, **options):
+        observed.append((start_urls, options["max_requests"]))
+        return CrawlResult(stats=CrawlStats(queued=1, fetched=1))
+
+    async def fake_acrawl(start_urls, **options):
+        return fake_crawl(start_urls, **options)
+
+    monkeypatch.setattr(sync_module, "crawl", fake_crawl)
+    monkeypatch.setattr(aio_module, "acrawl", fake_acrawl)
+    assert cli.main(["crawl", str(config), "--max-requests", "2", *command]) == 0
+    assert observed == [(["https://example.com/first"], 2), (["https://example.com/second"], 1)]
+
+
+@pytest.mark.parametrize("command", [[], ["--async"]])
+def test_request_limit_must_be_positive(command):
+    with pytest.raises(SystemExit, match="must be positive"):
+        cli.main(["crawl", "https://example.com", "--max-requests", "0", *command])
+
+
 def test_crawl_command_runs_standalone_url_with_multiple_fields(
     tmp_path, monkeypatch, capsys
 ):

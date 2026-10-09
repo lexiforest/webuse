@@ -19,7 +19,7 @@ import {
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 import Button, { ButtonLink } from "~/components/Button";
-import LLMChat, { type LLMChatMessage } from "~/components/LLMChat";
+import LLMChat, { type LLMChatMessage, type ToolActivity } from "~/components/LLMChat";
 import ProjectVisual from "~/components/ProjectVisual";
 import {
   Collapsible,
@@ -380,6 +380,11 @@ export default function ProjectForm(props: ProjectFormProps) {
   const [chatSessionId, setChatSessionId] = createSignal<number>();
   const [chatLoading, setChatLoading] = createSignal(false);
   const [chatSending, setChatSending] = createSignal(false);
+  const [chatText, setChatText] = createSignal("");
+  const [chatTools, setChatTools] = createSignal<ToolActivity[]>([]);
+  const [chatStatus, setChatStatus] = createSignal("");
+  let chatRequest: AbortController | undefined;
+  onCleanup(() => chatRequest?.abort());
   const [activeTab, setActiveTab] = createSignal<ProjectFormTab>(
     props.initialValue.type === "git" ? "settings" : (props.defaultTab ?? "settings"),
   );
@@ -564,6 +569,7 @@ export default function ProjectForm(props: ProjectFormProps) {
   };
 
   const updateSelectedFile = (patch: Partial<ProjectFile>) => {
+    if (chatSending()) return;
     const currentPath = selectedFile()?.path;
     if (!currentPath) {
       return;
@@ -583,6 +589,7 @@ export default function ProjectForm(props: ProjectFormProps) {
   };
 
   const addFile = () => {
+    if (chatSending()) return;
     const path = window.prompt("New file path", "spiders/new_spider.py")?.trim();
     if (!path) {
       return;
@@ -597,6 +604,7 @@ export default function ProjectForm(props: ProjectFormProps) {
   };
 
   const renameFile = (path: string, nextPathValue: string) => {
+    if (chatSending()) return;
     const nextPath = nextPathValue.trim();
     if (!nextPath) {
       return;
@@ -626,6 +634,7 @@ export default function ProjectForm(props: ProjectFormProps) {
   };
 
   const deleteFile = (path: string) => {
+    if (chatSending()) return;
     if (files().length <= 1) {
       return;
     }
@@ -638,6 +647,7 @@ export default function ProjectForm(props: ProjectFormProps) {
   };
 
   const sendChatMessage = async (initialPrompt?: string) => {
+    if (chatSending()) return;
     const prompt = (initialPrompt ?? chatInput()).trim();
     if (!prompt) {
       return;
@@ -649,12 +659,15 @@ export default function ProjectForm(props: ProjectFormProps) {
 
     setChatError(undefined);
     setChatSending(true);
+    setChatText(""); setChatTools([]); setChatStatus("");
+    chatRequest = new AbortController();
     setChatMessages(current => [...current, { role: "user", content: prompt }]);
     setChatInput("");
 
     try {
       const response = await fetch("/api/assistant-project", {
         method: "POST",
+        signal: chatRequest.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId: props.projectId,
@@ -669,31 +682,57 @@ export default function ProjectForm(props: ProjectFormProps) {
         throw new Error(await readError(response, `Assistant request failed (${response.status})`));
       }
 
-      const data = await readJsonResponse<{
-        session?: { id: number };
-        messages?: LLMChatMessage[];
-        files?: ProjectFile[];
-        selectedPath?: string;
-      }>(response);
-      if (data.session?.id) {
-        setChatSessionId(data.session.id);
-      }
-      if (data.messages) {
-        setChatMessages(data.messages);
-      }
-      if (data.files) {
-        setFiles(data.files);
-        setSelectedPath(
-          data.selectedPath && data.files.some(file => file.path === data.selectedPath)
-            ? data.selectedPath
-            : data.files[0]?.path ?? "",
-        );
-      }
+      if (!response.body) throw new Error("Assistant stream is unavailable.");
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let completed = false;
+      const receive = (line: string) => {
+        const data = JSON.parse(line) as { type: string; text?: string; tool?: ToolActivity; error?: string; session?: { id: number }; messages?: LLMChatMessage[]; files?: ProjectFile[]; selectedPath?: string };
+        if (data.type === "text") setChatText(current => current + (data.text || ""));
+        if (data.type === "status") setChatStatus(data.text || "");
+        if (data.type === "tool" && data.tool) {
+          const tool = data.tool;
+          setChatTools(current => current.some(item => item.id === tool.id) ? current.map(item => item.id === tool.id ? tool : item) : [...current, tool]);
+          setChatStatus("");
+        }
+        if (data.type === "error") throw new Error(data.error || "Assistant failed.");
+        if (data.type === "result") {
+          completed = true;
+          if (data.session?.id) setChatSessionId(data.session.id);
+          if (data.messages) setChatMessages(data.messages);
+          if (data.error) setChatError(data.error);
+          if (data.files) {
+            setFiles(data.files);
+            setSelectedPath(data.selectedPath && data.files.some(file => file.path === data.selectedPath) ? data.selectedPath : data.files[0]?.path ?? "");
+          }
+        }
+      };
+      try {
+        while (true) {
+          const chunk = await reader.read();
+          buffer += decoder.decode(chunk.value, { stream: !chunk.done });
+          const lines = buffer.split("\n"); buffer = lines.pop() || "";
+          for (const line of lines) if (line.trim()) receive(line);
+          if (chunk.done) break;
+        }
+        if (buffer.trim()) receive(buffer);
+        if (!completed) throw new Error("Assistant connection ended before the result arrived.");
+      } finally { reader.releaseLock(); }
     } catch (err) {
       setChatError(err instanceof Error ? err.message : "Assistant request failed");
     } finally {
       setChatSending(false);
+      chatRequest = undefined;
     }
+  };
+
+  const stopChat = async () => {
+    setChatStatus("Stopping...");
+    try {
+      const response = await fetch(`/api/assistant-project?project_id=${props.projectId}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Could not stop the assistant.");
+    } catch (error) { setChatError(error instanceof Error ? error.message : String(error)); }
   };
 
   const deriveConfig = () => {
@@ -766,6 +805,7 @@ export default function ProjectForm(props: ProjectFormProps) {
 
   const submitProject = async (event: SubmitEvent) => {
     event.preventDefault();
+    if (chatSending()) return;
     setError(undefined);
     setSaving(true);
 
@@ -959,6 +999,7 @@ export default function ProjectForm(props: ProjectFormProps) {
                         <For each={codeLines()}>{line => <div>{highlightYamlLine(line)}</div>}</For>
                       </pre>
                       <textarea
+                        readOnly={chatSending()}
                         spellcheck={false}
                         value={selectedContent()}
                         wrap="off"
@@ -975,6 +1016,7 @@ export default function ProjectForm(props: ProjectFormProps) {
                         <For each={codeLines()}>{line => <div>{highlightPythonLine(line)}</div>}</For>
                       </pre>
                       <textarea
+                        readOnly={chatSending()}
                         spellcheck={false}
                         value={selectedContent()}
                         wrap="off"
@@ -988,6 +1030,7 @@ export default function ProjectForm(props: ProjectFormProps) {
                         <For each={lineNumbers()}>{number => <div>{number}</div>}</For>
                       </div>
                       <textarea
+                        readOnly={chatSending()}
                         class="code-editor"
                         spellcheck={false}
                         value={selectedContent()}
@@ -1010,18 +1053,22 @@ export default function ProjectForm(props: ProjectFormProps) {
                 <aside class="project-llm-chat">
                   <div class="flex items-center gap-2 border-b border-gray-800 px-3 py-2 text-sm font-medium text-gray-200">
                     <FiMessageSquare size={14} stroke-width={2} aria-hidden="true" />
-                    <span>LLM</span>
+                    <span>Webuse Agent</span>
                   </div>
                   <div class="flex min-h-0 flex-1 flex-col p-3">
                     <LLMChat
                       messages={chatMessages()}
                       value={chatInput()}
                       pending={chatSending()}
+                      streamedText={chatText()}
+                      tools={chatTools()}
+                      pendingText={chatStatus()}
+                      onCancel={stopChat}
                       loading={chatLoading()}
                       disabled={!props.projectId}
                       placeholder={props.projectId ? "Ask about this project" : "Save the project before using LLM"}
                       emptyTitle="No messages yet"
-                      emptyDescription="Ask the assistant to inspect or edit this webuse project."
+                      emptyDescription="Ask the assistant to inspect, edit, and test this crawler. Python tools run on this computer."
                       assistantName="webuse"
                       onValueChange={value => {
                         setChatInput(value);
@@ -1059,7 +1106,7 @@ export default function ProjectForm(props: ProjectFormProps) {
           >
             Cancel
           </ButtonLink>
-          <Button class="!text-xs !leading-4" variant="primary" size="compact" type="submit" disabled={saving()}>
+          <Button class="!text-xs !leading-4" variant="primary" size="compact" type="submit" disabled={saving() || chatSending()}>
             {saving() ? "Saving..." : props.submitLabel}
           </Button>
         </div>

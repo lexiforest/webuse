@@ -11,6 +11,23 @@ from crawl_helpers import (
 )
 
 
+def test_request_limit_caps_seeds_with_concurrent_workers():
+    requests = []
+
+    class Client:
+        async def request(self, method, url, **kwargs):
+            requests.append(url)
+            await asyncio.sleep(0)
+            return Response(url=url, status_code=200, content=b"<h1>Page</h1>")
+
+    result = asyncio.run(acrawl(
+        [f"https://example.com/{index}" for index in range(10)],
+        client=Client(), max_requests=2, concurrency=5,
+    ))
+    assert result.stats.queued == 2
+    assert len(requests) == 2
+
+
 def test_acrawl_follow_rule_assigns_request_category():
     pages = {
         "https://example.com/": b"""

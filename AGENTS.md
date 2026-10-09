@@ -46,6 +46,14 @@ browsers, CAPTCHA vendor integration, and the extraction API are planned work;
 do not imply that they are already available.
 
 The Python provider helpers already discover local LM Studio and Ollama servers.
+Built-in Chat embeds Pi's coding-agent SDK with Webuse-specific draft file,
+HTTP inspection, Python, sample crawl, and run inspection tools. Pi owns the agent
+loop, streaming, session context, retries, and compaction; keep this integration
+small instead of rebuilding those mechanisms. The UI and Node orchestrator remain
+Webuse-owned. The bundled skill lives in `ui/skills/webuse-crawlers/SKILL.md`.
+Model endpoints must support streaming OpenAI-compatible tool calls. Local Python
+tools run as the UI user; their time limits are not a security sandbox. Pi session
+entries persist in SQLite. Do not load ambient Pi extensions, skills, or credentials.
 The UI Chat currently uses configured settings; automatic discovery there, LLM
 monitoring/advice, a metrics time-series database, and full data export still need
 implementation. Existing log views poll stored logs; streaming logs are a target.
@@ -178,9 +186,8 @@ The margin definition, vendor costs, and remaining allowances are still open.
 
 - Use `curl_cffi` for all HTTP requests in this project, including research scripts.
   Do not use `httpx` or `requests` unless explicitly requested.
-- Target Python 3.11+ for the development environment. Package metadata currently
-  declares Python 3.10 support; do not silently raise the package minimum or
-  introduce incompatible syntax without explicitly resolving that discrepancy.
+- Require Python 3.11+ for the package and development environment. Keep package
+  metadata, the docs workspace, and CI aligned with this minimum.
 - Prefer the standard library, minimal dependencies, and small focused helpers.
 - Keep top-level helpers easy to use and advanced `curl_cffi` transport options
   accessible. Preserve lazy response parsing.
@@ -218,7 +225,7 @@ The UI uses npm and requires Node.js 24 or newer. Run commands from `ui/`:
 - Install locked dependencies: `npm ci`.
 - Develop: `npm run dev`.
 - Check types: `npm run typecheck`.
-- Test orchestration: `npm test`.
+- Test orchestration and the Pi tool loop: `npm test`.
 - Build: `npm run build`.
 
 Python releases include the compiled UI: run `uv build` from the repository root

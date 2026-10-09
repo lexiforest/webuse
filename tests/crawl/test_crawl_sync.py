@@ -33,6 +33,16 @@ def test_crawl_accepts_request_queue_and_seen():
     assert result.stats.fetched == 0
 
 
+def test_request_limit_caps_seeds_with_concurrent_workers():
+    client = QueryClient()
+    result = crawl(
+        [f"https://example.com/{index}" for index in range(10)],
+        client=client, max_requests=2, concurrency=5,
+    )
+    assert result.stats.queued == 2
+    assert len(client.requests) == 2
+
+
 def test_crawl_dedupes_by_request_hash_but_fetches_real_url():
     client = QueryClient()
 
