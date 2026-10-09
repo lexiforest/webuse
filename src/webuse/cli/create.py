@@ -103,14 +103,15 @@ webuse fetch https://books.toscrape.com/ --css "article.product_pod h3 a" --attr
 `items.py` contains Pydantic models for scraped records.
 `pipelines.py` contains item cleanup and storage hooks.
 """,
-        ".gitignore": """selectors.json
+        ".gitignore": """.webuse/
+selectors.json
 output.jsonl
 *.sqlite
 *.sqlite-*
 """,
         "__init__.py": "",
         "spiders/__init__.py": "",
-        "webuse.toml": project_config_toml(project_name, include_custom_pipeline=True),
+        "webuse.yaml": project_config_yaml(project_name, include_custom_pipeline=True),
         "items.py": """from pydantic import BaseModel, Field
 
 

@@ -1,5 +1,7 @@
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from typing import Any
+from threading import BoundedSemaphore
+from contextlib import nullcontext
 from urllib.robotparser import RobotFileParser
 
 from ..client import Client
@@ -14,15 +16,20 @@ from .state import (
     RequestHasher,
     RequestQueue,
     RequestSeen,
+    state_info,
 )
 from .utils import (
     coerce_requests,
+    domain,
     extract_items,
     follow_allowed,
     follow_candidates,
     handle_callback_result,
     normalize_url,
     robots_allowed,
+    prepare_followup,
+    record_extraction,
+    record_error,
 )
 
 
@@ -34,6 +41,7 @@ def crawl(
     max_depth: int = 0,
     max_requests: int | None = None,
     concurrency: int = 10,
+    per_domain: int | None = None,
     dedupe: bool = True,
     allowed_domains: set[str] | None = None,
     robots_txt: bool = False,
@@ -47,32 +55,53 @@ def crawl(
     signals: SignalBus | None = None,
 ) -> CrawlResult:
     signal_bus = signals or SignalBus()
-    scheduler_queue = request_queue or MemoryRequestQueue()
+    if per_domain is not None and per_domain < 1:
+        raise ValueError("per_domain must be positive")
+    scheduler_queue = (
+        request_queue if request_queue is not None else MemoryRequestQueue()
+    )
     result = CrawlResult(stats=CrawlStats())
     signal_bus.send("crawl_started", result=result)
-    for seed in coerce_requests(seeds):
-        scheduler_queue.put(seed)
-        signal_bus.send("request_queued", request=seed, source="start")
     owned_client = client is None
     client = client or Client(**(request_defaults or {}))
-    seen = request_seen or MemoryRequestSeen()
+    seen = request_seen if request_seen is not None else MemoryRequestSeen()
     hasher = request_hasher or DefaultRequestHasher()
     robots_cache: dict[str, RobotFileParser] = {}
+    domain_limits: dict[str, BoundedSemaphore] = {}
+
+    def state_updated() -> None:
+        signal_bus.send("state_updated", **state_info(scheduler_queue, seen))
 
     def fetch(request: CrawlRequest):
-        response = client.request(
-            request.method, request.url, **request.options.to_request_kwargs()
+        limit = (
+            domain_limits.setdefault(domain(request.url), BoundedSemaphore(per_domain))
+            if per_domain
+            else nullcontext()
         )
+        with limit:
+            if result.close_reason is not None:
+                raise IgnoreRequest()
+            response = client.request(
+                request.method,
+                request.url,
+                **request.options.to_request_kwargs(),
+            )
         return request, response
 
     def close_spider(reason: str) -> None:
         result.close_reason = reason
         scheduler_queue.clear()
+        state_updated()
         for future in pending:
             future.cancel()
         pending.clear()
 
     try:
+        signal_bus.send("state_loaded", **state_info(scheduler_queue, seen))
+        for seed in coerce_requests(seeds):
+            scheduler_queue.put(seed)
+            signal_bus.send("request_queued", request=seed, source="start")
+            state_updated()
         with ThreadPoolExecutor(max_workers=max(1, concurrency)) as executor:
             pending = {}
             while not scheduler_queue.empty() or pending:
@@ -81,12 +110,14 @@ def crawl(
                 ):
                     if max_requests is not None and result.stats.queued >= max_requests:
                         scheduler_queue.clear()
+                        state_updated()
                         break
                     request = scheduler_queue.pop()
                     if request is None:
                         break
                     request_hash = hasher.hash(request)
                     is_new = seen.add(request_hash)
+                    state_updated()
                     if dedupe and not is_new:
                         result.stats.skipped_duplicates += 1
                         logger.info(
@@ -161,8 +192,8 @@ def crawl(
                         close_spider(exc.reason)
                         break
                     except Exception as exc:
-                        result.stats.errors += 1
-                        result.errors.append({"url": request.url, "error": str(exc)})
+                        record_error(result, request, exc)
+                        signal_bus.send("request_error", request=request, error=exc)
                         logger.warning(
                             "crawl request failed method={} url={} error={}",
                             request.method,
@@ -188,7 +219,7 @@ def crawl(
                     signal_bus.send(
                         "request_after_downloader", request=request, success=True
                     )
-                    response.request = request
+                    response.crawl_request = request
                     result.pages.append(response)
                     signal_bus.send(
                         "response_received", response=response, request=request
@@ -198,14 +229,12 @@ def crawl(
                             "parse_started", response=response, request=request
                         )
                         extracted = extract_items(response, extract)
-                        result.items.extend(extracted)
-                        result.stats.extracted_items += len(extracted)
+                        record_extraction(result, extracted)
                         if callable(extract):
                             extra_items, callback_followups = handle_callback_result(
                                 extract(response)
                             )
-                            result.items.extend(extra_items)
-                            result.stats.extracted_items += len(extra_items)
+                            record_extraction(result, extra_items)
                         else:
                             extra_items = []
                             callback_followups = []
@@ -217,6 +246,13 @@ def crawl(
                             followups=callback_followups,
                         )
                     except IgnoreRequest:
+                        signal_bus.send(
+                            "parse_finished",
+                            response=response,
+                            request=request,
+                            items=[],
+                            followups=[],
+                        )
                         result.stats.skipped_ignored += 1
                         logger.info(
                             "crawl request skipped method={} url={} reason=ignored",
@@ -228,6 +264,13 @@ def crawl(
                         )
                         continue
                     except CloseSpider as exc:
+                        signal_bus.send(
+                            "parse_finished",
+                            response=response,
+                            request=request,
+                            items=[],
+                            followups=[],
+                        )
                         close_spider(exc.reason)
                         break
                     except Exception as exc:
@@ -251,23 +294,9 @@ def crawl(
                             for candidate in follow_candidates(response, rule)
                         )
                     for candidate, matched_rule in discovered:
-                        next_request = (
-                            candidate
-                            if isinstance(candidate, CrawlRequest)
-                            else CrawlRequest(url=str(candidate))
+                        next_request = prepare_followup(
+                            candidate, request, matched_rule
                         )
-                        if (
-                            matched_rule
-                            and matched_rule.category
-                            and not next_request.category
-                        ):
-                            next_request.category = matched_rule.category
-                        next_request.depth = (
-                            request.depth + 1
-                            if next_request.depth == 0
-                            else next_request.depth
-                        )
-                        next_request.parent_url = request.url
                         if not follow_allowed(
                             next_request.url,
                             request,
@@ -286,6 +315,7 @@ def crawl(
                             )
                             continue
                         scheduler_queue.put(next_request)
+                        state_updated()
                         signal_bus.send(
                             "request_queued", request=next_request, source="follow"
                         )
@@ -295,8 +325,13 @@ def crawl(
                             and result.stats.queued >= max_requests
                         ):
                             scheduler_queue.clear()
+                            state_updated()
                             break
             signal_bus.send("scheduler_empty", result=result)
+    except Exception as exc:
+        result.close_reason = "error"
+        signal_bus.send("crawl_error", result=result, error=exc)
+        raise
     finally:
         if owned_client:
             client.close()

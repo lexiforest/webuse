@@ -1,11 +1,16 @@
+from __future__ import annotations
+
 import re
+from typing import TYPE_CHECKING
 
 from ..exceptions import SmartSelectorError
 from ..models import SmartSelectorRecord
-from ..parser import Document, Element
 from .resolver import LlmSmartResolver, SmartResolver
-from .selectors import generate_selector, generate_xpath
+from .selectors import generate_selector
 from .store import SmartSelectorStore, prompt_key
+
+if TYPE_CHECKING:
+    from ..parser import Document, Element
 
 
 def _tokenize(prompt: str) -> set[str]:
@@ -50,10 +55,6 @@ def resolve_smart(
             match = document.css_first(selector)
             if match:
                 return match
-        for selector in record.xpath_selectors:
-            match = document.xpath_first(selector)
-            if match:
-                return match
 
     prompt_tokens = _tokenize(prompt)
     ranked = sorted(
@@ -81,5 +82,4 @@ def _record_for_match(
         key=record_key,
         prompt=prompt,
         selectors=[generate_selector(match)],
-        xpath_selectors=[generate_xpath(match)],
     )

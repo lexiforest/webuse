@@ -2,7 +2,7 @@ import webuse
 
 
 class BooksSpider(webuse.Spider):
-    spider_config_path = "spiders/books.toml"
+    spider_config_path = "spiders/books.yaml"
     item_model = "items.BookItem"
 
 

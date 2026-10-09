@@ -10,6 +10,14 @@ Handler = Callable[..., Any]
 
 
 class SignalBus:
+    """Register handlers by signal name and dispatch keyword payloads in order.
+
+    Each dispatch uses a snapshot of the registered handlers. Payload keys are
+    filtered to each handler's accepted keyword arguments unless it accepts
+    ``**kwargs`` or its signature cannot be inspected. Handler exceptions
+    propagate to the caller and stop dispatch to remaining handlers.
+    """
+
     def __init__(self) -> None:
         self._handlers: dict[str, list[Handler]] = defaultdict(list)
 

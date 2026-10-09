@@ -1,95 +1,51 @@
-from html.parser import HTMLParser
+from __future__ import annotations
+
 import re as re_module
-from typing import Any, Iterable
+from typing import TYPE_CHECKING, Any, Iterable
 from urllib.parse import urljoin
 
-from lxml import etree
-from lxml import html as lxml_html
 from pydantic import BaseModel, ConfigDict
+from selectolax.lexbor import LexborHTMLParser, LexborNode
 
+from .smart import extract_smart, resolve_smart
 
-class _TextExtractor(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__(convert_charrefs=True)
-        self.parts: list[str] = []
-        self._skip_depth = 0
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        _ = attrs
-        if tag.lower() in {"script", "style", "noscript"}:
-            self._skip_depth += 1
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag.lower() in {"script", "style", "noscript"} and self._skip_depth:
-            self._skip_depth -= 1
-
-    def handle_data(self, data: str) -> None:
-        if self._skip_depth == 0:
-            self.parts.append(data)
-
-
-def _text_without_tree(content: str, separator: str = " ", strip: bool = True) -> str:
-    parser = _TextExtractor()
-    parser.feed(content)
-    text = " ".join(part.strip() if strip else part for part in parser.parts)
-    return (
-        separator.join(filter(None, text.split()))
-        if strip and separator == " "
-        else text
-    )
+if TYPE_CHECKING:
+    from .smart import SmartResolver, SmartSelectorStore
 
 
 class Element(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    element: Any
+    element: LexborNode
     base_url: str | None = None
 
-    def __init__(self, element: object, base_url: str | None = None):
+    def __init__(self, element: LexborNode, base_url: str | None = None):
         super().__init__(element=element, base_url=base_url)
 
     @property
     def tag(self) -> str:
-        return getattr(self.element, "tag", "")
+        return self.element.tag
 
     @property
     def attrs(self) -> dict[str, str]:
-        return dict(getattr(self.element, "attrib", {}) or {})
+        return {key: value or "" for key, value in self.element.attributes.items()}
 
     def attr(self, name: str, default: str | None = None) -> str | None:
         return self.attrs.get(name, default)
 
     def html(self) -> str:
-        return etree.tostring(self.element, encoding="unicode")
+        return self.element.html
 
     def text(self, separator: str = " ", strip: bool = True) -> str:
-        text = " ".join(
-            part.strip() if strip else part for part in self.element.itertext()
-        )
-        return (
-            separator.join(filter(None, text.split()))
-            if strip and separator == " "
-            else text
-        )
+        text = self.element.text(separator=separator, strip=strip)
+        return " ".join(text.split()) if strip and separator == " " else text
 
     def css(self, selector: str) -> list["Element"]:
-        return [
-            Element(node, self.base_url) for node in self.element.cssselect(selector)
-        ]
+        return [Element(node, self.base_url) for node in self.element.css(selector)]
 
     def css_first(self, selector: str) -> "Element | None":
-        results = self.css(selector)
-        return results[0] if results else None
-
-    def xpath(self, selector: str) -> list["Element"]:
-        results = self.element.xpath(selector)
-        return [
-            Element(node, self.base_url) for node in results if hasattr(node, "tag")
-        ]
-
-    def xpath_first(self, selector: str) -> "Element | None":
-        results = self.xpath(selector)
-        return results[0] if results else None
+        node = self.element.css_first(selector)
+        return Element(node, self.base_url) if node is not None else None
 
     def links(self, attr: str = "href") -> list[str]:
         urls: list[str] = []
@@ -113,64 +69,67 @@ class Element(BaseModel):
 
 
 class Document:
-    def __init__(self, content: str | bytes, base_url: str | None = None):
+    def __init__(self, content: str | bytes, url: str | None = None):
         self._raw = content
-        self.base_url = base_url
+        self.url = url
         self._tree = None
 
     @property
-    def raw_text(self) -> str:
+    def text(self) -> str:
         if isinstance(self._raw, bytes):
             return self._raw.decode("utf-8", errors="replace")
         return self._raw
 
-    def _get_tree(self):
+    def _get_tree(self) -> LexborHTMLParser:
         if self._tree is None:
-            self._tree = lxml_html.fromstring(self.raw_text or "")
-            if self.base_url:
-                self._tree.make_links_absolute(self.base_url, resolve_base_href=True)
+            self._tree = LexborHTMLParser(self.text)
+            base = self._tree.css_first("base[href]")
+            link_base = self.url or ""
+            if base is not None:
+                link_base = urljoin(link_base, base.attributes.get("href") or "")
+            if link_base:
+                for node in self._tree.root.traverse():
+                    for attr, value in node.attributes.items():
+                        if value and attr in {
+                            "href",
+                            "src",
+                            "action",
+                            "formaction",
+                            "poster",
+                            "cite",
+                            "background",
+                            "data",
+                            "longdesc",
+                        }:
+                            if attr == "data" and node.tag != "object":
+                                continue
+                            if node.tag == "base" and attr == "href":
+                                node.attrs[attr] = urljoin(self.url or "", value)
+                                continue
+                            node.attrs[attr] = urljoin(link_base, value)
         return self._tree
 
     def css(self, selector: str) -> list[Element]:
-        return [
-            Element(node, self.base_url)
-            for node in self._get_tree().cssselect(selector)
-        ]
+        return [Element(node, self.url) for node in self._get_tree().css(selector)]
 
     def css_first(self, selector: str) -> Element | None:
-        results = self.css(selector)
-        return results[0] if results else None
-
-    def xpath(self, selector: str) -> list[Element]:
-        results = self._get_tree().xpath(selector)
-        return [
-            Element(node, self.base_url) for node in results if hasattr(node, "tag")
-        ]
-
-    def xpath_first(self, selector: str) -> Element | None:
-        results = self.xpath(selector)
-        return results[0] if results else None
+        node = self._get_tree().css_first(selector)
+        return Element(node, self.url) if node is not None else None
 
     def text_content(self, separator: str = " ", strip: bool = True) -> str:
-        text = " ".join(
-            part.strip() if strip else part for part in self._get_tree().itertext()
-        )
-        return (
-            separator.join(filter(None, text.split()))
-            if strip and separator == " "
-            else text
-        )
+        text = self._get_tree().text(separator=separator, strip=strip)
+        return " ".join(text.split()) if strip and separator == " " else text
 
     def links(self, selector: str = "a[href]", attr: str = "href") -> list[str]:
         links: list[str] = []
         for element in self.css(selector):
             value = element.attr(attr)
             if value:
-                links.append(urljoin(self.base_url or "", value))
+                links.append(urljoin(self.url or "", value))
         return links
 
     def re(self, pattern: str | re_module.Pattern[str], flags: int = 0) -> list[Any]:
-        return re_module.findall(pattern, self.raw_text, flags)
+        return re_module.findall(pattern, self.text, flags)
 
     def re_first(
         self,
@@ -182,6 +141,32 @@ class Document:
         return matches[0] if matches else default
 
     def iter_elements(self) -> Iterable[Element]:
-        for node in self._get_tree().iter():
-            if hasattr(node, "tag"):
-                yield Element(node, self.base_url)
+        for node in self._get_tree().root.traverse():
+            yield Element(node, self.url)
+
+    def smart(self, prompt: str, **kwargs: Any) -> list[Any]:
+        return extract_smart(self, prompt, first=False, **kwargs)
+
+    def smart_first(self, prompt: str, **kwargs: Any) -> Any:
+        return extract_smart(self, prompt, first=True, **kwargs)
+
+    def smart_all(self, prompts: list[str], **kwargs: Any) -> dict[str, list[Any]]:
+        return {prompt: self.smart(prompt, **kwargs) for prompt in prompts}
+
+    def find_element(
+        self,
+        prompt: str,
+        *,
+        key: str | None = None,
+        use_llm: bool = False,
+        resolver: SmartResolver | None = None,
+        store: SmartSelectorStore | None = None,
+    ) -> Element:
+        return resolve_smart(
+            self,
+            prompt,
+            key=key,
+            use_llm=use_llm,
+            resolver=resolver,
+            store=store,
+        )

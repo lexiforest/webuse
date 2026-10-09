@@ -65,14 +65,12 @@ from .response import Response
 from .signals import SignalBus
 from .smart import LlmSmartResolver, SmartResolver, SmartSelectorStore
 from .spider import AsyncSpider, Spider
-from .websocket import AsyncWebSocketClient, WebSocketClient, aws_connect, ws_connect
 
 __version__ = "0.0.1"
 
 __all__ = [
     "AsyncClient",
     "AsyncSpider",
-    "AsyncWebSocketClient",
     "AssetDownloadPipeline",
     "Client",
     "CloseSpider",
@@ -114,7 +112,6 @@ __all__ = [
     "SmartSelectorError",
     "SmartSelectorStore",
     "WebuseError",
-    "WebSocketClient",
     "__version__",
     "acrawl",
     "adelete",
@@ -122,7 +119,6 @@ __all__ = [
     "apost",
     "aput",
     "arequest",
-    "aws_connect",
     "attach_metrics",
     "canonical_request_url",
     "configure_logger",
@@ -138,5 +134,4 @@ __all__ = [
     "post",
     "put",
     "request",
-    "ws_connect",
 ]

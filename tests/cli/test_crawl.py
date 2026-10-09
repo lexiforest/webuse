@@ -29,7 +29,10 @@ def test_project_request_limit_is_shared_across_spiders(tmp_path, monkeypatch, c
     monkeypatch.setattr(sync_module, "crawl", fake_crawl)
     monkeypatch.setattr(aio_module, "acrawl", fake_acrawl)
     assert cli.main(["crawl", str(config), "--max-requests", "2", *command]) == 0
-    assert observed == [(["https://example.com/first"], 2), (["https://example.com/second"], 1)]
+    assert observed == [
+        (["https://example.com/first"], 2),
+        (["https://example.com/second"], 1),
+    ]
 
 
 @pytest.mark.parametrize("command", [[], ["--async"]])
@@ -61,8 +64,8 @@ def test_crawl_command_runs_standalone_url_with_multiple_fields(
             "https://example.com/",
             "--css",
             "title=h1",
-            "--xpath",
-            "price=//p",
+            "--css",
+            "price=p",
             "-o",
             str(output),
         ]
@@ -202,7 +205,7 @@ def test_crawl_command_maps_standalone_request_options(monkeypatch, capsys):
     assert code == 0
     assert captured["start_urls"] == ["https://example.com/"]
     request_defaults = captured["options"]["request_defaults"]
-    assert request_defaults["impersonate"] == "chrome"
+    assert "impersonate" not in request_defaults
     assert request_defaults["headers"] == {"X-Test": "yes"}
     assert request_defaults["params"] == {"page": "1"}
     assert request_defaults["timeout"] == 3.5
@@ -225,8 +228,8 @@ def test_crawl_command_maps_standalone_follow_options(monkeypatch, capsys):
             "https://example.com/",
             "--follow-css",
             "a.next",
-            "--follow-xpath",
-            "//a",
+            "--follow-css",
+            "a",
             "--follow-attr",
             "data-href",
             "--same-domain",
@@ -246,7 +249,7 @@ def test_crawl_command_maps_standalone_follow_options(monkeypatch, capsys):
     assert options["allowed_domains"] == {"example.com"}
     assert len(options["follow"]) == 2
     assert options["follow"][0].css == "a.next"
-    assert options["follow"][1].xpath == "//a"
+    assert options["follow"][1].css == "a"
     assert all(rule.attr == "data-href" for rule in options["follow"])
     assert all(rule.same_domain for rule in options["follow"])
 

@@ -155,7 +155,6 @@ def test_cli_startup_detects_local_openai_defaults_for_llm(monkeypatch, capsys):
         "}"
     )
     assert captured["prompt"] == "Extract title"
-    assert captured["kwargs"]["translate_xpath"] is False
     assert captured["kwargs"]["model"] == "local-model"
     assert captured["kwargs"]["api_key"] == "lm-studio"
     assert captured["kwargs"]["base_url"] == "http://127.0.0.1:1234/v1"

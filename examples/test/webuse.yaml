@@ -1,0 +1,23 @@
+name: test
+user_agent: webuse/test
+robots_txt: false
+
+concurrency:
+  limit: 5
+  per_domain: 1
+
+items:
+  pipelines:
+    default:
+      - class: pipelines.CleanBookPipeline
+      - type: jsonl
+        path: output.jsonl
+
+spiders:
+  books:
+    path: spiders/books.py
+
+log:
+  level: info
+  file: stderr
+  append: true

@@ -1,4 +1,3 @@
-
 import pytest
 
 from webuse import cli
@@ -25,6 +24,48 @@ def test_fetch_command_with_selector(monkeypatch, capsys):
 
     assert code == 0
     assert '"Hello"' in out
+
+
+@pytest.mark.parametrize("first", [False, True])
+def test_fetch_finds_element_from_yaml_config(monkeypatch, capsys, tmp_path, first):
+    import json
+    import yaml
+    from webuse import Response
+
+    config = tmp_path / "fetch.yaml"
+    config.write_text(
+        yaml.safe_dump(
+            {
+                "fetch": {
+                    "url": "https://example.com/page",
+                    "find_element": "primary product link",
+                    "selector_store": str(tmp_path / "selectors.json"),
+                    "first": first,
+                }
+            }
+        )
+    )
+    monkeypatch.setattr(
+        cli,
+        "request",
+        lambda *args, **kwargs: Response(
+            url="https://example.com/page",
+            content=b'<a class="primary product" href="/buy">Buy</a>',
+        ),
+    )
+    assert cli.main(["fetch", "--config", str(config), "--attr", "href"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["match" if first else "matches"] == (
+        "https://example.com/buy" if first else ["https://example.com/buy"]
+    )
+
+
+def test_fetch_rejects_combined_smart_and_find_element():
+    with pytest.raises(SystemExit) as error:
+        cli.build_parser().parse_args(
+            ["fetch", "--smart", "title", "--find-element", "link"]
+        )
+    assert error.value.code == 2
 
 
 def test_fetch_command_with_smart_extraction(monkeypatch, capsys):
@@ -64,10 +105,10 @@ def test_fetch_command_with_smart_extraction(monkeypatch, capsys):
     assert code == 0
     assert out == '{\n  "product": "Alpha Gadget"\n}'
     assert captured["prompt"] == "Which product is first?"
-    assert captured["kwargs"]["translate_xpath"] is False
     assert captured["kwargs"]["model"] == "test-model"
     assert captured["kwargs"]["max_chars"] == 100
     assert captured["kwargs"]["temperature"] == 0.2
+    assert "first matching JSON value" in captured["kwargs"]["system_prompt"]
 
 
 def test_fetch_command_with_configured_smart_extraction(monkeypatch, capsys, tmp_path):
@@ -106,7 +147,6 @@ fetch:
     assert code == 0
     assert out == '{\n  "title": "Configured Title"\n}'
     assert captured["prompt"] == "Extract the primary title"
-    assert captured["kwargs"]["translate_xpath"] is False
     assert captured["kwargs"]["model"] == "configured-model"
     assert captured["kwargs"]["system_prompt"] == "Return only the title."
     assert captured["kwargs"]["base_url"] == "https://llm.example.com/v1"
@@ -139,24 +179,22 @@ def test_fetch_command_prints_smart_json_array(monkeypatch, capsys):
     )
 
 
-def test_fetch_command_with_smart_store_and_key(monkeypatch, capsys, tmp_path):
+def test_fetch_command_with_selector_store_and_key(monkeypatch, capsys, tmp_path):
     store_path = tmp_path / "selectors.json"
 
     class FakeResponse:
         url = "https://example.com"
 
-        def smart(
+        def find_element(
             self,
             prompt,
             *,
-            translate_xpath=False,
             key=None,
             store=None,
             use_llm=False,
             resolver=None,
         ):
             assert prompt == "product link"
-            assert translate_xpath is True
             assert key == "product"
             assert store is not None
             assert store.path == store_path
@@ -167,7 +205,7 @@ def test_fetch_command_with_smart_store_and_key(monkeypatch, capsys, tmp_path):
                 def text(self):
                     return "Open"
 
-            return [FakeElement()]
+            return FakeElement()
 
     monkeypatch.setattr(cli, "request", lambda *args, **kwargs: FakeResponse())
 
@@ -175,12 +213,11 @@ def test_fetch_command_with_smart_store_and_key(monkeypatch, capsys, tmp_path):
         [
             "fetch",
             "https://example.com",
-            "--smart",
+            "--find-element",
             "product link",
-            "--translate-xpath",
-            "--smart-store",
+            "--selector-store",
             str(store_path),
-            "--smart-key",
+            "--selector-key",
             "product",
         ]
     )
@@ -190,7 +227,7 @@ def test_fetch_command_with_smart_store_and_key(monkeypatch, capsys, tmp_path):
     assert '"Open"' in out
 
 
-def test_fetch_command_uses_configured_smart_store_and_key(
+def test_fetch_command_uses_configured_selector_store_and_key(
     monkeypatch, capsys, tmp_path
 ):
     store_path = tmp_path / "configured-selectors.json"
@@ -200,9 +237,8 @@ def test_fetch_command_uses_configured_smart_store_and_key(
             [
                 "[fetch]",
                 'url = "https://example.com"',
-                "translate_xpath = true",
-                f'smart_store = "{store_path}"',
-                'smart_key = "configured"',
+                f'selector_store = "{store_path}"',
+                'selector_key = "configured"',
             ]
         ),
         encoding="utf-8",
@@ -211,18 +247,16 @@ def test_fetch_command_uses_configured_smart_store_and_key(
     class FakeResponse:
         url = "https://example.com"
 
-        def smart(
+        def find_element(
             self,
             prompt,
             *,
-            translate_xpath=False,
             key=None,
             store=None,
             use_llm=False,
             resolver=None,
         ):
             assert prompt == "configured prompt"
-            assert translate_xpath is True
             assert key == "configured"
             assert store is not None
             assert store.path == store_path
@@ -233,12 +267,12 @@ def test_fetch_command_uses_configured_smart_store_and_key(
                 def text(self):
                     return "Configured"
 
-            return [FakeElement()]
+            return FakeElement()
 
     monkeypatch.setattr(cli, "request", lambda *args, **kwargs: FakeResponse())
 
     code = cli.main(
-        ["fetch", "--config", str(config_path), "--smart", "configured prompt"]
+        ["fetch", "--config", str(config_path), "--find-element", "configured prompt"]
     )
     out = capsys.readouterr().out.strip()
 
@@ -285,11 +319,11 @@ def test_fetch_config_passes_request_options(monkeypatch, capsys, tmp_path):
     assert captured["kwargs"]["headers"] == {"User-Agent": "webuse"}
     assert captured["kwargs"]["json"] == {"query": "alpha"}
     assert captured["kwargs"]["timeout"] == 5
-    assert captured["kwargs"]["follow_redirects"] is True
+    assert captured["kwargs"]["allow_redirects"] is True
     assert captured["kwargs"]["impersonate"] == "chrome"
 
 
-def test_fetch_command_defaults_to_chrome_impersonation(monkeypatch, capsys):
+def test_fetch_command_leaves_impersonation_default_to_client(monkeypatch, capsys):
     captured = {}
 
     class FakeResponse:
@@ -305,7 +339,7 @@ def test_fetch_command_defaults_to_chrome_impersonation(monkeypatch, capsys):
     _ = capsys.readouterr()
 
     assert code == 0
-    assert captured["kwargs"]["impersonate"] == "chrome"
+    assert "impersonate" not in captured["kwargs"]
 
 
 def test_fetch_command_supports_body_files_and_request_options(
@@ -361,7 +395,7 @@ def test_fetch_command_supports_body_files_and_request_options(
     assert captured["kwargs"]["cookies"] == {"session": "abc"}
     assert captured["kwargs"]["auth"] == ("user", "pass")
     assert captured["kwargs"]["verify"] is False
-    assert captured["kwargs"]["follow_redirects"] is True
+    assert captured["kwargs"]["allow_redirects"] is True
     assert captured["kwargs"]["max_redirects"] == 3
     assert captured["kwargs"]["http_version"] == "v2"
     assert captured["kwargs"]["ja3"] == "ja3-value"
@@ -593,18 +627,16 @@ def test_fetch_smart_llm_failure_can_emit_empty(monkeypatch, capsys, tmp_path):
     class FakeResponse:
         url = "https://example.com"
 
-        def smart(
+        def find_element(
             self,
             prompt,
             *,
-            translate_xpath=False,
             key=None,
             store=None,
             use_llm=False,
             resolver=None,
         ):
             assert prompt == "missing cta"
-            assert translate_xpath is True
             assert use_llm is True
             assert isinstance(resolver, FakeResolver)
             assert resolver.kwargs["model"] == "test-model"
@@ -631,11 +663,10 @@ fetch:
             "fetch",
             "--config",
             str(config_path),
-            "--smart",
+            "--find-element",
             "missing cta",
-            "--translate-xpath",
-            "--smart-use-llm",
-            "--smart-failure",
+            "--find-use-llm",
+            "--find-failure",
             "empty",
         ]
     )

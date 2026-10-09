@@ -1,9 +1,9 @@
 import argparse
-import sys
 from typing import Any
 
-from ..websocket import aws_connect as _default_aws_connect
-from ..websocket import ws_connect as _default_ws_connect
+from curl_cffi import AsyncSession
+from curl_cffi.requests.websockets import WebSocket
+
 from .common import (
     add_request_args,
     cli_request_options,
@@ -11,11 +11,6 @@ from .common import (
     load_config,
     print_jsonl,
 )
-
-
-def _cli_attr(name: str, default: Any) -> Any:
-    package = sys.modules.get("webuse.cli")
-    return getattr(package, name, default) if package else default
 
 
 def _websocket_payload(
@@ -44,14 +39,15 @@ def websocket_command(args: argparse.Namespace) -> int:
     options = cli_request_options(args, config)
     payload_type, payload = _websocket_payload(args, config)
     recv_count = args.recv if args.recv is not None else config.get("recv", 1)
-    with _cli_attr("ws_connect", _default_ws_connect)(url, **options) as websocket:
+    with WebSocket() as websocket:
+        websocket.connect(url, **options)
         if payload_type == "json":
             websocket.send_json(payload)
         elif payload_type == "text":
-            websocket.send_text(payload)
+            websocket.send_str(payload)
         messages = []
         for _ in range(max(0, recv_count)):
-            message = websocket.recv()
+            message, _ = websocket.recv()
             if isinstance(message, bytes):
                 message = message.decode("utf-8", errors="replace")
             messages.append({"url": url, "message": message})
@@ -67,19 +63,18 @@ async def awebsocket_command(args: argparse.Namespace) -> int:
     options = cli_request_options(args, config)
     payload_type, payload = _websocket_payload(args, config)
     recv_count = args.recv if args.recv is not None else config.get("recv", 1)
-    async with await _cli_attr("aws_connect", _default_aws_connect)(
-        url, **options
-    ) as websocket:
-        if payload_type == "json":
-            await websocket.send_json(payload)
-        elif payload_type == "text":
-            await websocket.send_text(payload)
-        messages = []
-        for _ in range(max(0, recv_count)):
-            message = await websocket.recv()
-            if isinstance(message, bytes):
-                message = message.decode("utf-8", errors="replace")
-            messages.append({"url": url, "message": message})
+    async with AsyncSession() as session:
+        async with session.ws_connect(url, **options) as websocket:
+            if payload_type == "json":
+                await websocket.send_json(payload)
+            elif payload_type == "text":
+                await websocket.send_str(payload)
+            messages = []
+            for _ in range(max(0, recv_count)):
+                message, _ = await websocket.recv()
+                if isinstance(message, bytes):
+                    message = message.decode("utf-8", errors="replace")
+                messages.append({"url": url, "message": message})
     print_jsonl(messages)
     return 0
 

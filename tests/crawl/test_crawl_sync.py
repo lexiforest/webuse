@@ -1,4 +1,3 @@
-
 import webuse
 from webuse.crawl import (
     DefaultRequestHasher,
@@ -37,7 +36,9 @@ def test_request_limit_caps_seeds_with_concurrent_workers():
     client = QueryClient()
     result = crawl(
         [f"https://example.com/{index}" for index in range(10)],
-        client=client, max_requests=2, concurrency=5,
+        client=client,
+        max_requests=2,
+        concurrency=5,
     )
     assert result.stats.queued == 2
     assert len(client.requests) == 2
@@ -102,7 +103,7 @@ def test_crawl_follow_rule_assigns_request_category():
     def parse(response):
         return {
             "title": response.css_first("h1").text(),
-            "category": response.request.category,
+            "category": response.crawl_request.category,
         }
 
     result = crawl(
@@ -239,9 +240,9 @@ def test_crawl_extracts_rich_rules(tmp_path, monkeypatch):
         "https://example.com",
         client=RichFakeClient(),
         extract={
-            "title": {"xpath": "//h1"},
+            "title": {"css": "h1"},
             "product_links": {"css": "a.product", "attr": "href", "all": True},
-            "primary_cta": {"smart": "buy now cta", "attr": "href"},
+            "primary_cta": {"find_element": "buy now cta", "attr": "href"},
         },
     )
 

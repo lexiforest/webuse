@@ -114,6 +114,11 @@ with webuse.Client(impersonate="chrome", timeout=20) as client:
 Use `AsyncClient` and `await client.get(...)` for async requests. XPath and regex
 selectors are also available. Plain selectors work without an LLM.
 
+Clients inherit curl_cffi sessions and accept its native HTTP arguments, such as
+`allow_redirects`. Responses retain native headers, cookies, streaming, and
+`raise_for_status()`, with Webuse's parsing methods added. Use
+`async with client.stream("GET", url)` for async streaming.
+
 The CLI supports the same basic workflow:
 
 ```bash
@@ -136,6 +141,7 @@ result = webuse.crawl(
     extract={"title": "h1"},
     max_depth=1,
     concurrency=5,
+    per_domain=1,
 )
 
 print(result.items)
@@ -146,7 +152,12 @@ Use `await webuse.acrawl(...)` for async crawling. Larger projects can use
 `webuse.Spider` or `webuse.AsyncSpider`, with custom parsing, request categories,
 Pydantic item models, and pipelines.
 
-For a declarative crawler, save this as `books.yaml`:
+Both engines record download failures in `result.errors` and propagate parsing
+or pipeline exceptions. Project concurrency defaults and per-domain limits apply
+to both engines; see [configuration](docs/config.rst) for precedence and logging.
+
+Use YAML for Webuse configuration: `webuse.yaml` for project settings and named
+spiders, or standalone files such as `books.yaml` for a declarative crawler:
 
 ```yaml
 name: books

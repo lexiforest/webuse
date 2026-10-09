@@ -1,8 +1,44 @@
+from __future__ import annotations
+
 import json
-from typing import Any
+from html.parser import HTMLParser
+from typing import TYPE_CHECKING, Any
 
 from ..llm import create_openai_client, openai_defaults
-from ..parser import Document, _text_without_tree
+
+if TYPE_CHECKING:
+    from ..parser import Document
+
+
+class _TextExtractor(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        _ = attrs
+        if tag.lower() in {"script", "style", "noscript"}:
+            self._skip_depth += 1
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in {"script", "style", "noscript"} and self._skip_depth:
+            self._skip_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth == 0:
+            self.parts.append(data)
+
+
+def _text_without_tree(content: str, separator: str = " ", strip: bool = True) -> str:
+    parser = _TextExtractor()
+    parser.feed(content)
+    text = " ".join(part.strip() if strip else part for part in parser.parts)
+    return (
+        separator.join(filter(None, text.split()))
+        if strip and separator == " "
+        else text
+    )
 
 
 SMART_EXTRACTION_SYSTEM_PROMPT = (
@@ -57,12 +93,16 @@ def extract_smart(
     temperature: float = 0,
     **kwargs: Any,
 ) -> Any:
+    if "translate_css" in kwargs:
+        raise TypeError(
+            "translate_css was removed; use find_element() for element lookup"
+        )
     defaults = openai_defaults()
     model = model or defaults.model or "gpt-4.1-mini"
     api_key = api_key or defaults.api_key
     base_url = base_url or defaults.base_url
-    html = document.raw_text
-    text = _text_without_tree(document.raw_text)
+    html = document.text
+    text = _text_without_tree(document.text)
     if max_chars is not None:
         html = html[:max_chars]
         text = text[:max_chars]

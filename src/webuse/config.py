@@ -8,6 +8,29 @@ from .exceptions import ConfigError
 
 LOCAL_CONFIG_NAME = ".webuserc.yaml"
 USER_CONFIG_PATH = Path("~/.config/webuse/config.yaml")
+
+
+def load_config_file(path: str | Path) -> dict[str, Any]:
+    config_path = Path(path)
+    if not config_path.exists():
+        raise ConfigError(f"Config file not found: {config_path}")
+    if config_path.suffix == ".toml":
+        import tomllib
+
+        value = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    elif config_path.suffix in {".yaml", ".yml"}:
+        import yaml
+
+        value = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    else:
+        raise ConfigError(f"Unsupported config format: {config_path.suffix}")
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ConfigError(f"Config file must contain a mapping: {config_path}")
+    return value
+
+
 def user_config_path() -> Path:
     return USER_CONFIG_PATH.expanduser()
 
@@ -19,14 +42,7 @@ def local_config_path(directory: Path | None = None) -> Path:
 def _read_yaml(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
-    import yaml
-
-    value = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if value is None:
-        return {}
-    if not isinstance(value, dict):
-        raise ConfigError(f"Config file must contain a mapping: {path}")
-    return value
+    return load_config_file(path)
 
 
 def _deep_merge(base: dict[str, Any], override: Mapping[str, Any]) -> dict[str, Any]:
@@ -84,10 +100,12 @@ def load_webuse_config(
     config = _deep_merge(config, env_config())
     return config
 
+
 __all__ = [
     "LOCAL_CONFIG_NAME",
     "USER_CONFIG_PATH",
     "env_config",
+    "load_config_file",
     "load_webuse_config",
     "local_config_path",
     "user_config_path",

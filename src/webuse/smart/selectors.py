@@ -1,6 +1,9 @@
-import json
+from __future__ import annotations
 
-from ..parser import Element
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..parser import Element
 
 
 def generate_selector(element: Element) -> str:
@@ -12,21 +15,3 @@ def generate_selector(element: Element) -> str:
     if classes:
         return f"{element.tag}." + ".".join(classes[:3])
     return element.tag
-
-
-def generate_xpath(element: Element) -> str:
-    attrs = element.attrs
-    element_id = attrs.get("id")
-    if element_id:
-        return f"//*[@id='{element_id}']"
-    classes = attrs.get("class", "").split()
-    if classes:
-        predicates = " and ".join(
-            f"contains(concat(' ', normalize-space(@class), ' '), ' {value} ')"
-            for value in classes[:3]
-        )
-        return f"//{element.tag}[{predicates}]"
-    href = attrs.get("href")
-    if href:
-        return f"//{element.tag}[@href={json.dumps(href)}]"
-    return f"//{element.tag}"

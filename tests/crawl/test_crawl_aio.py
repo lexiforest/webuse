@@ -20,10 +20,14 @@ def test_request_limit_caps_seeds_with_concurrent_workers():
             await asyncio.sleep(0)
             return Response(url=url, status_code=200, content=b"<h1>Page</h1>")
 
-    result = asyncio.run(acrawl(
-        [f"https://example.com/{index}" for index in range(10)],
-        client=Client(), max_requests=2, concurrency=5,
-    ))
+    result = asyncio.run(
+        acrawl(
+            [f"https://example.com/{index}" for index in range(10)],
+            client=Client(),
+            max_requests=2,
+            concurrency=5,
+        )
+    )
     assert result.stats.queued == 2
     assert len(requests) == 2
 
@@ -50,7 +54,7 @@ def test_acrawl_follow_rule_assigns_request_category():
     def parse(response):
         return {
             "title": response.css_first("h1").text(),
-            "category": response.request.category,
+            "category": response.crawl_request.category,
         }
 
     async def run_crawl():

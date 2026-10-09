@@ -1,0 +1,13 @@
+name: books
+start_urls:
+  - https://books.toscrape.com
+allowed_domains:
+  - books.toscrape.com
+max_depth: 1
+
+follow:
+  - css: a
+    same_domain: true
+
+extract:
+  title: title

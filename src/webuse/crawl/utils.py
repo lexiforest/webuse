@@ -2,41 +2,30 @@ import asyncio
 import inspect
 import re
 from collections.abc import Iterable
-from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
 from pydantic import BaseModel
 
 from ..exceptions import ConfigError
-from ..models import CrawlRequest, FollowRule
+from ..config import load_config_file as load_config_file
+from ..models import CrawlRequest, CrawlResult, FollowRule
+from ..parser import Document, Element
 
 
 UNSET = object()
 
 
-def load_config_file(path: str | Path) -> dict[str, Any]:
-    config_path = Path(path)
-    if not config_path.exists():
-        raise ConfigError(f"Config file not found: {config_path}")
-    if config_path.suffix == ".toml":
-        import tomllib
-
-        return tomllib.loads(config_path.read_text(encoding="utf-8"))
-    if config_path.suffix in {".yaml", ".yml"}:
-        import yaml
-
-        return yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    raise ConfigError(f"Unsupported config format: {config_path.suffix}")
-
-
-def allowed_domains(value: Any) -> set[str] | None:
+def coerce_domains(value: Any) -> set[str] | None:
     if value is None:
         return None
     if isinstance(value, str):
         return {value}
     return set(value) or None
+
+
+allowed_domains = coerce_domains
 
 
 def follow_rule_from_config(value: Any, *, same_domain: bool = False) -> FollowRule:
@@ -46,9 +35,10 @@ def follow_rule_from_config(value: Any, *, same_domain: bool = False) -> FollowR
         return FollowRule(css=value, same_domain=same_domain)
     if not isinstance(value, dict):
         raise ConfigError(f"Unsupported follow rule: {value!r}")
+    if "xpath" in value:
+        raise ConfigError("XPath is no longer supported; use a CSS follow rule")
     return FollowRule(
         css=value.get("css"),
-        xpath=value.get("xpath"),
         attr=value.get("attr", "href"),
         category=value.get("category"),
         include=value.get("include"),
@@ -203,21 +193,22 @@ def follow_rule_applies(response: Any, rule: FollowRule) -> bool:
     allowed = category_values(rule.source_category)
     if not allowed or "*" in allowed:
         return True
-    return request_category(getattr(response, "request", None)) in allowed
+    return request_category(getattr(response, "crawl_request", None)) in allowed
 
 
-def follow_candidates(response: Any, follow: Any) -> list[str]:
+def coerce_follow_result(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, (str, CrawlRequest)) or inspect.isawaitable(value):
+        return [value]
+    return list(value)
+
+
+def follow_candidates(response: Any, follow: Any) -> list[Any]:
     if follow is None:
         return []
     if callable(follow):
-        value = follow(response)
-        if inspect.isawaitable(value):
-            return [value]
-        if value is None:
-            return []
-        if isinstance(value, (str, CrawlRequest)):
-            return [value]
-        return list(value)
+        return coerce_follow_result(follow(response))
     rules = follow if isinstance(follow, list) else [follow]
     candidates: list[str] = []
     for rule in rules:
@@ -231,12 +222,34 @@ def follow_candidates(response: Any, follow: Any) -> list[str]:
                     value = element.attr(rule.attr)
                     if value:
                         candidates.append(value)
-            elif rule.xpath:
-                for element in response.xpath(rule.xpath):
-                    value = element.attr(rule.attr)
-                    if value:
-                        candidates.append(value)
     return candidates
+
+
+def prepare_followup(
+    candidate: Any, request: CrawlRequest, rule: FollowRule | None
+) -> CrawlRequest:
+    followup = (
+        candidate
+        if isinstance(candidate, CrawlRequest)
+        else CrawlRequest(url=str(candidate))
+    )
+    followup.url = urljoin(request.url, followup.url)
+    if rule and rule.category and not followup.category:
+        followup.category = rule.category
+    if followup.depth == 0:
+        followup.depth = request.depth + 1
+    followup.parent_url = request.url
+    return followup
+
+
+def record_extraction(result: CrawlResult, items: list[Any]) -> None:
+    result.items.extend(items)
+    result.stats.extracted_items += len(items)
+
+
+def record_error(result: CrawlResult, request: CrawlRequest, error: Exception) -> None:
+    result.stats.errors += 1
+    result.errors.append({"url": request.url, "error": str(error)})
 
 
 def follow_allowed(
@@ -278,48 +291,47 @@ def coerce_requests(seeds: str | list[str] | list[CrawlRequest]) -> list[CrawlRe
     return items
 
 
-def coerce_domains(domains: Any) -> set[str] | None:
-    if domains is None:
-        return None
-    if isinstance(domains, str):
-        return {domains}
-    return set(domains) or None
-
-
 def element_value(element: Any, attr: str | None) -> Any:
     if attr:
         return element.attr(attr)
     return element.text()
 
 
-def extract_by_selector(scope: Any, rule: dict[str, Any], selector_type: str) -> Any:
-    selector = rule[selector_type]
+def extract_by_selector(scope: Any, rule: dict[str, Any]) -> Any:
+    selector = rule["css"]
     attr = rule.get("attr")
     if selector in {".", "&"}:
         if rule.get("all"):
             return [element_value(scope, attr)]
         return element_value(scope, attr)
     if rule.get("all"):
-        matches = (
-            scope.css(selector) if selector_type == "css" else scope.xpath(selector)
-        )
+        matches = scope.css(selector)
         return [element_value(match, attr) for match in matches]
-    match = (
-        scope.css_first(selector)
-        if selector_type == "css"
-        else scope.xpath_first(selector)
-    )
+    match = scope.css_first(selector)
     return element_value(match, attr) if match else None
 
 
-def extract_by_smart(scope: Any, rule: dict[str, Any]) -> Any:
-    smart_first = getattr(scope, "smart_first", None)
-    if smart_first is None:
-        return None
-    match = smart_first(rule["smart"], key=rule.get("key"), translate_xpath=True)
-    if not match:
-        return None
+def extraction_document(scope: Any) -> Document:
+    if isinstance(scope, Element):
+        return Document(scope.html(), url=scope.base_url)
+    return scope
+
+
+def extract_by_find_element(scope: Any, rule: dict[str, Any]) -> Any:
+    match = extraction_document(scope).find_element(
+        rule["find_element"], key=rule.get("key")
+    )
     return element_value(match, rule.get("attr"))
+
+
+def extract_by_smart(scope: Any, rule: dict[str, Any]) -> Any:
+    if "attr" in rule or "key" in rule:
+        raise ConfigError(
+            "smart extracts values; use find_element for attr or selector keys"
+        )
+    document = extraction_document(scope)
+    extractor = document.smart if rule.get("all") else document.smart_first
+    return extractor(rule["smart"])
 
 
 def extract_item(scope: Any, fields: dict[str, Any]) -> dict[str, Any]:
@@ -329,24 +341,23 @@ def extract_item(scope: Any, fields: dict[str, Any]) -> dict[str, Any]:
             match = scope if rule in {".", "&"} else scope.css_first(rule)
             item[key] = match.text() if match else None
         elif isinstance(rule, dict):
+            if "xpath" in rule:
+                raise ConfigError("XPath is no longer supported; use CSS extraction")
             if "css" in rule:
-                item[key] = extract_by_selector(scope, rule, "css")
-            elif "xpath" in rule:
-                item[key] = extract_by_selector(scope, rule, "xpath")
+                item[key] = extract_by_selector(scope, rule)
             elif "smart" in rule:
                 item[key] = extract_by_smart(scope, rule)
+            elif "find_element" in rule:
+                item[key] = extract_by_find_element(scope, rule)
     return item
 
 
 def extraction_scopes(response: Any, extract: dict[str, Any]) -> list[Any]:
     item_css = extract.get("item_css")
-    item_xpath = extract.get("item_xpath")
-    if item_css and item_xpath:
-        raise ConfigError("extract cannot define both item_css and item_xpath")
+    if "item_xpath" in extract:
+        raise ConfigError("item_xpath is no longer supported; use item_css")
     if item_css:
         return response.css(item_css)
-    if item_xpath:
-        return response.xpath(item_xpath)
     return [response]
 
 
@@ -368,7 +379,9 @@ def looks_like_field_rule(value: Any) -> bool:
         return True
     if not isinstance(value, dict):
         return False
-    return any(key in value for key in ("css", "xpath", "smart"))
+    if "xpath" in value:
+        raise ConfigError("XPath is no longer supported; use CSS extraction")
+    return any(key in value for key in ("css", "smart", "find_element"))
 
 
 def looks_like_field_mapping(value: Any) -> bool:
@@ -382,8 +395,10 @@ def looks_like_field_mapping(value: Any) -> bool:
 def looks_like_extract_spec(value: Any) -> bool:
     if not isinstance(value, dict):
         return False
+    if "item_xpath" in value:
+        raise ConfigError("item_xpath is no longer supported; use item_css")
     return any(
-        key in value for key in ("fields", "item_css", "item_xpath")
+        key in value for key in ("fields", "item_css")
     ) or looks_like_field_mapping(value)
 
 
@@ -411,7 +426,7 @@ def extract_specs_for_response(
     if looks_like_extract_spec(extract):
         return [(None, extract)]
 
-    request = getattr(response, "request", None)
+    request = getattr(response, "crawl_request", None)
     category = getattr(request, "category", None)
     category_key = str(category) if category else "default"
     selected = extract.get(category_key)
@@ -474,13 +489,6 @@ def handle_callback_result(result: Any) -> tuple[list[Any], list[Any]]:
     if not isinstance(
         result, (str, bytes, dict, BaseModel, CrawlRequest)
     ) and isinstance(result, Iterable):
-        for entry in result:
-            if isinstance(entry, CrawlRequest) or isinstance(entry, str):
-                followups.append(entry)
-            else:
-                items.append(entry)
-        return items, followups
-    if isinstance(result, list):
         for entry in result:
             if isinstance(entry, CrawlRequest) or isinstance(entry, str):
                 followups.append(entry)

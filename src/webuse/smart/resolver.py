@@ -1,9 +1,13 @@
+from __future__ import annotations
+
 import json
 import re
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from ..llm import create_openai_client, openai_defaults
-from ..parser import Document, Element
+
+if TYPE_CHECKING:
+    from ..parser import Document, Element
 
 
 class SmartResolver(Protocol):
@@ -56,7 +60,7 @@ class LlmSmartResolver:
             return None
         payload = {
             "prompt": prompt,
-            "url": document.base_url,
+            "url": document.url,
             "candidates": [
                 _candidate_summary(element, index)
                 for index, element in enumerate(candidates)

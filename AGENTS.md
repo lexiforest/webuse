@@ -62,8 +62,8 @@ integrated cloud LLM API are not implemented; existing model-provider helpers
 and Chat calls are not those services.
 
 - `src/webuse/__init__.py`: public Python exports.
-- `src/webuse/client.py`: sync/async HTTP clients and top-level helpers.
-- `src/webuse/response.py`: response wrapper and lazy parsing entry point.
+- `src/webuse/client.py`: thin curl_cffi session subclasses and top-level helpers.
+- `src/webuse/response.py`: curl_cffi response subclass with lazy HTML parsing.
 - `src/webuse/parser.py`: document and element selectors.
 - `src/webuse/smart/`: smart extraction, selector persistence, and resolution.
 - `src/webuse/llm.py`: model configuration and client helpers.
@@ -73,7 +73,6 @@ and Chat calls are not those services.
 - `src/webuse/cli/`: project creation, generation, fetch, crawl, WebSocket commands,
   and the `webuse ui` launcher for the packaged Node control plane.
 - `setup.py`: release build hooks; compile the UI into generated `src/webuse/_ui/`.
-- `src/webuse/websocket.py`: sync/async WebSocket wrappers.
 - `src/webuse/config.py`, `models.py`, `exceptions.py`: configuration, shared models,
   and public exceptions.
 - `src/webuse/signals.py`, `metrics.py`, `ustats/`: events and metrics integration.
@@ -191,6 +190,13 @@ The margin definition, vendor costs, and remaining allowances are still open.
 - Prefer the standard library, minimal dependencies, and small focused helpers.
 - Keep top-level helpers easy to use and advanced `curl_cffi` transport options
   accessible. Preserve lazy response parsing.
+- Delegate HTTP/WebSocket transport, response decoding, cookies, retries, and
+  streaming to curl_cffi. Keep HTML parsing, extraction, and crawl policy in
+  Webuse. Extend responses through `response_class`; do not copy transport fields
+  into a second response object. Use `response.crawl_request` for crawl metadata
+  and preserve the native HTTP request in `response.request`.
+- Use curl_cffi directly for WebSockets. Keep the WebSocket CLI, but do not add
+  a separate Webuse Python WebSocket API or re-export curl_cffi socket types.
 - Wire request options consistently across sync, async, and CLI surfaces where
   applicable.
 - When a refactor is needed, ask whether backward compatibility is required unless
@@ -201,6 +207,9 @@ The margin definition, vendor costs, and remaining allowances are still open.
   of results, errors, and stats.
 - Preserve config-driven and Python-spider crawling. Do not mistake persistent
   queue implementations for a complete checkpointing or pause/resume product.
+- Use YAML for Webuse configuration in documentation, examples, and new project
+  scaffolds. TOML loading and explicit generation remain supported; Python
+  packaging metadata stays in `pyproject.toml`.
 - Plain selectors must work without an LLM. Keep deterministic selector matching
   before optional resolver/LLM fallback where applicable.
 - Keep smart-selector storage configurable; the default is

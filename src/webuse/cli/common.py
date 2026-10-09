@@ -1,9 +1,8 @@
 import argparse
 import json
-from pathlib import Path
 from typing import Any
 
-from ..exceptions import ConfigError
+from ..config import load_config_file
 from ..models import RequestOptions
 
 
@@ -15,18 +14,7 @@ _REQUEST_OPTION_NAMES = {
 def load_config(path: str | None) -> dict[str, Any]:
     if not path:
         return {}
-    config_path = Path(path)
-    if not config_path.exists():
-        raise ConfigError(f"Config file not found: {config_path}")
-    if config_path.suffix == ".toml":
-        import tomllib
-
-        return tomllib.loads(config_path.read_text(encoding="utf-8"))
-    if config_path.suffix in {".yaml", ".yml"}:
-        import yaml
-
-        return yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    raise ConfigError(f"Unsupported config format: {config_path.suffix}")
+    return load_config_file(path)
 
 
 def _pair(value: str, label: str) -> tuple[str, str]:
@@ -93,7 +81,7 @@ def _merge_json_pairs(
 def cli_request_options(
     args: argparse.Namespace, config: dict[str, Any]
 ) -> dict[str, Any]:
-    request_kwargs = RequestOptions().to_request_kwargs()
+    request_kwargs: dict[str, Any] = {}
     request_kwargs.update(_request_options_from_config(config))
     updates = {
         "headers": _merge_pairs(config.get("headers"), getattr(args, "header", None)),
@@ -145,6 +133,8 @@ def cli_request_options(
         {key: value for key, value in updates.items() if value is not None}
     )
     request_kwargs.pop("method", None)
+    if "follow_redirects" in request_kwargs:
+        request_kwargs["allow_redirects"] = request_kwargs.pop("follow_redirects")
     return {key: value for key, value in request_kwargs.items() if value is not None}
 
 

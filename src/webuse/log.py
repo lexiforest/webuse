@@ -14,6 +14,7 @@ def configure_logger(
     *,
     sink: Any = None,
     colorize: bool | None = None,
+    append: bool = True,
 ) -> None:
     """Configure the process-wide webuse logger.
 
@@ -23,9 +24,14 @@ def configure_logger(
     logger.remove()
     logger.add(
         sys.stderr if sink is None else sink,
-        level=level or os.environ.get("WEBUSE_LOG_LEVEL", DEFAULT_LOG_LEVEL),
+        level=(level or os.environ.get("WEBUSE_LOG_LEVEL", DEFAULT_LOG_LEVEL)).upper(),
         format=DEFAULT_LOG_FORMAT,
         colorize=colorize,
+        **(
+            {"mode": "a" if append else "w"}
+            if isinstance(sink, (str, os.PathLike))
+            else {}
+        ),
     )
 
 

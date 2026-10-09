@@ -4,11 +4,15 @@ from pathlib import Path
 from typing import Any
 
 from ..models import SmartSelectorRecord
+from ..config import load_webuse_config
 
 
 class SmartSelectorStore:
     def __init__(self, path: str | Path | None = None):
-        self.path = Path(path or "selectors.json")
+        configured = load_webuse_config().get("smart", {}) if path is None else {}
+        self.path = Path(
+            path or configured.get("selector_store") or ".webuse/selectors.json"
+        ).expanduser()
         self._records: dict[str, SmartSelectorRecord] | None = None
 
     def _load(self) -> dict[str, SmartSelectorRecord]:

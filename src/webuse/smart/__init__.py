@@ -6,7 +6,7 @@ from .extract import (
 )
 from .resolve import resolve_smart
 from .resolver import LlmSmartResolver, SmartResolver
-from .selectors import generate_selector, generate_xpath
+from .selectors import generate_selector
 from .store import SmartSelectorStore, prompt_key
 
 __all__ = [
@@ -18,7 +18,6 @@ __all__ = [
     "coerce_smart_output",
     "extract_smart",
     "generate_selector",
-    "generate_xpath",
     "prompt_key",
     "resolve_smart",
 ]

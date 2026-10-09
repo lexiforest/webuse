@@ -1,4 +1,3 @@
-
 import webuse
 from webuse.crawl import (
     DefaultRequestHasher,
@@ -56,10 +55,50 @@ def test_file_request_queue_persists_jsonl(tmp_path):
     request = CrawlRequest(url="https://example.com", category="detail")
 
     queue.put(request)
+    assert path.read_text(encoding="utf-8").count("\n") == 1
     loaded = FileRequestQueue(path)
 
     assert loaded.pop() == request
-    assert path.read_text(encoding="utf-8").count("\n") == 1
+    assert path.read_text(encoding="utf-8") == ""
+    assert FileRequestQueue(path).empty()
+
+
+def test_file_queue_persists_pending_order_and_clear(tmp_path):
+    path = tmp_path / "queue.jsonl"
+    queue = FileRequestQueue(path)
+    first = CrawlRequest(url="https://example.com/first")
+    second = CrawlRequest(url="https://example.com/second")
+    queue.put(first)
+    queue.put(second)
+    assert queue.pop() == first
+    queue = FileRequestQueue(path)
+    assert queue.pop() == second
+    queue.put(first)
+    queue.clear()
+    assert FileRequestQueue(path).pop() is None
+
+
+def test_file_queue_failed_replace_keeps_previous_state(tmp_path, monkeypatch):
+    import importlib
+
+    state = importlib.import_module("webuse.crawl.state")
+
+    path = tmp_path / "queue.jsonl"
+    queue = FileRequestQueue(path)
+    request = CrawlRequest(url="https://example.com")
+    queue.put(request)
+
+    def fail(*args):
+        raise OSError("disk error")
+
+    monkeypatch.setattr(state.os, "replace", fail)
+    import pytest
+
+    with pytest.raises(OSError):
+        queue.pop()
+    assert len(queue) == 1
+    assert len(FileRequestQueue(path)) == 1
+    assert list(tmp_path.iterdir()) == [path]
 
 
 def test_file_request_seen_persists_jsonl(tmp_path):

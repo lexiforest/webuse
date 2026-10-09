@@ -10,8 +10,14 @@ from ..client import request as _default_request
 from ..exceptions import SmartSelectorError
 from ..llm import openai_settings_from_config
 from ..smart import LlmSmartResolver as _DefaultLlmSmartResolver
-from ..smart import SMART_EXTRACTION_SYSTEM_PROMPT, SmartSelectorStore
+from ..smart import (
+    SMART_EXTRACTION_SYSTEM_PROMPT,
+    SMART_FIRST_EXTRACTION_SYSTEM_PROMPT,
+    SmartSelectorStore,
+)
 from .common import (
+    _pair,
+    _pairs,
     add_request_args,
     cli_request_options,
     json_arg,
@@ -23,24 +29,6 @@ from .common import (
 def _cli_attr(name: str, default: Any) -> Any:
     package = sys.modules.get("webuse.cli")
     return getattr(package, name, default) if package else default
-
-
-def _pair(value: str, label: str) -> tuple[str, str]:
-    if "=" not in value:
-        raise SystemExit(f"{label} argument must be KEY=VALUE: {value!r}")
-    key, item = value.split("=", 1)
-    key = key.strip()
-    if not key:
-        raise SystemExit(f"{label} argument has an empty key: {value!r}")
-    return key, item
-
-
-def _pairs(values: list[str] | None) -> dict[str, str]:
-    result: dict[str, str] = {}
-    for value in values or []:
-        key, item = _pair(value, "KEY=VALUE")
-        result[key] = item
-    return result
 
 
 def _body_options(args: argparse.Namespace, stack: ExitStack) -> dict[str, Any]:
@@ -175,10 +163,10 @@ def _print_fetch_csv(rows: list[Any]) -> None:
         writer.writerow({key: _csv_cell(value) for key, value in row.items()})
 
 
-def _smart_resolver(
+def _find_resolver(
     args: argparse.Namespace, config: dict[str, Any], llm_config: dict[str, Any]
 ) -> Any:
-    if not (getattr(args, "smart_use_llm", False) or config.get("smart_use_llm")):
+    if not (getattr(args, "find_use_llm", False) or config.get("find_use_llm")):
         return None
     resolver_class = _cli_attr("LlmSmartResolver", _DefaultLlmSmartResolver)
     settings = openai_settings_from_config(llm_config)
@@ -199,6 +187,14 @@ def _llm_value(args: argparse.Namespace, config: dict[str, Any], name: str) -> A
 def fetch_command(args: argparse.Namespace) -> int:
     root_config = load_config(args.config)
     config = root_config.get("fetch", {})
+    if "xpath" in config or "translate_xpath" in config:
+        raise SystemExit("XPath is no longer supported; use css or find_element")
+    if "translate_css" in config:
+        raise SystemExit("translate_css was removed; use find_element: PROMPT")
+    smart_prompt = args.smart or config.get("smart")
+    find_prompt = args.find_element or config.get("find_element")
+    if smart_prompt and find_prompt:
+        raise SystemExit("Use only one of smart or find_element")
     llm_config = root_config.get("llm", {})
     url = args.url or config.get("url")
     if not url:
@@ -235,31 +231,8 @@ def fetch_command(args: argparse.Namespace) -> int:
             first=first,
         )
         return 0
-    xpath_selector = args.xpath or config.get("xpath")
-    if xpath_selector:
-        matches = response.xpath(xpath_selector)
-        first = False if args.all_matches else args.first or config.get("first", False)
-        values = (
-            _element_value(matches[0], args.attr)
-            if first and matches
-            else [_element_value(element, args.attr) for element in matches]
-        )
-        _print_extraction(
-            args=args,
-            config=config,
-            response=response,
-            values=values,
-            selector=xpath_selector,
-            output_shape=args.output_shape or config.get("output_shape", "matches"),
-            field=args.field or config.get("field", "value"),
-            first=first,
-        )
-        return 0
-    smart_prompt = args.smart or config.get("smart")
     first = False if args.all_matches else args.first or config.get("first", False)
-    if smart_prompt and not (
-        getattr(args, "translate_xpath", False) or config.get("translate_xpath")
-    ):
+    if smart_prompt:
         settings = openai_settings_from_config(llm_config)
         llm_kwargs = {
             key: value
@@ -271,14 +244,18 @@ def fetch_command(args: argparse.Namespace) -> int:
                 "base_url": _llm_value(args, config, "llm_base_url")
                 or settings.base_url,
                 "system_prompt": _llm_value(args, config, "llm_system_prompt")
-                or SMART_EXTRACTION_SYSTEM_PROMPT,
+                or (
+                    SMART_FIRST_EXTRACTION_SYSTEM_PROMPT
+                    if first
+                    else SMART_EXTRACTION_SYSTEM_PROMPT
+                ),
                 "max_chars": _llm_value(args, config, "llm_max_chars"),
                 "temperature": _llm_value(args, config, "llm_temperature"),
             }.items()
             if value is not None
         }
         extractor = response.smart_first if first else response.smart
-        value = extractor(smart_prompt, translate_xpath=False, **llm_kwargs)
+        value = extractor(smart_prompt, **llm_kwargs)
         _print_extraction(
             args=args,
             config=config,
@@ -290,17 +267,15 @@ def fetch_command(args: argparse.Namespace) -> int:
             first=first,
         )
         return 0
-    if smart_prompt:
-        smart_store = args.smart_store or config.get("smart_store")
-        smart_key = args.smart_key or config.get("smart_key")
-        store = SmartSelectorStore(smart_store) if smart_store else None
-        resolver = _smart_resolver(args, config, llm_config)
+    if find_prompt:
+        selector_store = args.selector_store or config.get("selector_store")
+        selector_key = args.selector_key or config.get("selector_key")
+        store = SmartSelectorStore(selector_store) if selector_store else None
+        resolver = _find_resolver(args, config, llm_config)
         try:
-            extractor = response.smart_first if first else response.smart
-            match = extractor(
-                smart_prompt,
-                translate_xpath=True,
-                key=smart_key,
+            match = response.find_element(
+                find_prompt,
+                key=selector_key,
                 store=store,
                 use_llm=resolver is not None,
                 resolver=resolver,
@@ -308,10 +283,10 @@ def fetch_command(args: argparse.Namespace) -> int:
             value = (
                 _element_value(match, args.attr)
                 if first
-                else [_element_value(element, args.attr) for element in match]
+                else [_element_value(match, args.attr)]
             )
         except SmartSelectorError:
-            failure = args.smart_failure or config.get("smart_failure", "error")
+            failure = args.find_failure or config.get("find_failure", "error")
             if failure == "empty":
                 value = None if first else []
             else:
@@ -321,7 +296,7 @@ def fetch_command(args: argparse.Namespace) -> int:
             config=config,
             response=response,
             values=value,
-            selector=smart_prompt,
+            selector=find_prompt,
             output_shape=args.output_shape or config.get("output_shape", "matches"),
             field=args.field or config.get("field", "value"),
             first=first,
@@ -355,7 +330,6 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     fetch.add_argument("--form", action="append")
     fetch.add_argument("--file", action="append")
     fetch.add_argument("--css")
-    fetch.add_argument("--xpath")
     fetch.add_argument("--attr")
     fetch.add_argument("--first", action="store_true")
     fetch.add_argument("--all", dest="all_matches", action="store_true")
@@ -367,12 +341,13 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     fetch.add_argument("--llm-system-prompt")
     fetch.add_argument("--llm-max-chars", type=int)
     fetch.add_argument("--llm-temperature", type=float)
-    fetch.add_argument("--smart")
-    fetch.add_argument("--translate-xpath", action="store_true")
-    fetch.add_argument("--smart-store")
-    fetch.add_argument("--smart-key")
-    fetch.add_argument("--smart-use-llm", action="store_true")
-    fetch.add_argument("--smart-failure", choices=["error", "empty"])
+    extraction = fetch.add_mutually_exclusive_group()
+    extraction.add_argument("--smart")
+    extraction.add_argument("--find-element")
+    fetch.add_argument("--selector-store")
+    fetch.add_argument("--selector-key")
+    fetch.add_argument("--find-use-llm", action="store_true")
+    fetch.add_argument("--find-failure", choices=["error", "empty"])
     fetch.add_argument("--meta", action="store_true")
     fetch.add_argument("--json-output", action="store_true")
     output_format = fetch.add_mutually_exclusive_group()

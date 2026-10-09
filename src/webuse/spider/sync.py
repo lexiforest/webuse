@@ -19,6 +19,7 @@ from ..crawl.utils import (
 )
 from ..exceptions import ConfigError, PipelineError, SpiderError
 from ..models import CrawlRequest, CrawlResult
+from ..llm import use_openai_settings
 from ..pipelines import DropItem, Pipeline, resolve_pipelines
 from ..signals import SignalBus
 from .config import EffectiveSpiderSettings, ProjectConfig, SpiderConfig
@@ -42,7 +43,8 @@ class Spider:
     spider_config_path: str | Path | None = None
     max_depth: int = 0
     max_requests: int | None = None
-    concurrency: int = 10
+    concurrency: int | None = None
+    per_domain: int | None = None
     dedupe: bool = True
     robots_txt: bool | None = None
     user_agent: str | None = None
@@ -166,6 +168,7 @@ class Spider:
             "max_depth": self.max_depth,
             "max_requests": self.max_requests,
             "concurrency": self.concurrency,
+            "per_domain": self.per_domain,
             "dedupe": self.dedupe,
             "robots_txt": self.robots_txt,
             "user_agent": self.user_agent,
@@ -188,6 +191,11 @@ class Spider:
                 value = getattr(spider_config, key)
                 values[key] = value
 
+        concurrency_defaults = project_config.concurrency if project_config else {}
+        if values["concurrency"] is None:
+            values["concurrency"] = concurrency_defaults.get("limit", 10)
+        if values["per_domain"] is None:
+            values["per_domain"] = concurrency_defaults.get("per_domain")
         if values["robots_txt"] is None:
             values["robots_txt"] = (
                 project_config.robots_txt
@@ -364,6 +372,13 @@ class Spider:
                 except DropItem as exc:
                     if signal_bus is not None:
                         signal_bus.send(
+                            "pipeline_finished",
+                            pipeline=pipeline,
+                            item=current,
+                            response=response,
+                            spider=self,
+                        )
+                        signal_bus.send(
                             "item_dropped",
                             item=item,
                             response=response,
@@ -375,7 +390,8 @@ class Spider:
                     if signal_bus is not None:
                         signal_bus.send(
                             "pipeline_error",
-                            item=item,
+                            pipeline=pipeline,
+                            item=current,
                             response=response,
                             spider=self,
                             error=exc,
@@ -402,7 +418,7 @@ class Spider:
     def _extract_callback(
         self, response: Any, settings: EffectiveSpiderSettings
     ) -> Any:
-        request = getattr(response, "request", None)
+        request = getattr(response, "crawl_request", None)
         category = getattr(request, "category", None)
         try:
             handler = self._route_handler(category)
@@ -428,6 +444,7 @@ class Spider:
             "max_depth": settings.max_depth,
             "max_requests": settings.max_requests,
             "concurrency": settings.concurrency,
+            "per_domain": settings.per_domain,
             "dedupe": settings.dedupe,
             "robots_txt": settings.robots_txt,
             "user_agent": settings.user_agent,
@@ -442,9 +459,18 @@ class Spider:
         return options
 
     def run(self, **overrides: Any) -> CrawlResult:
+        project_config, project_base_dir = self._project_config()
+        with use_openai_settings(project_config.llm if project_config else None):
+            return self._run(project_config, project_base_dir, overrides)
+
+    def _run(
+        self,
+        project_config: ProjectConfig | None,
+        project_base_dir: Path | None,
+        overrides: dict[str, Any],
+    ) -> CrawlResult:
         pipeline_override = overrides.pop("pipelines", UNSET)
         signal_bus = overrides.pop("signals", None) or self.signals or SignalBus()
-        project_config, project_base_dir = self._project_config()
         settings, crawl_overrides = self._resolve_settings(
             overrides, project_config=project_config
         )

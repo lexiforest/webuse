@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+from pathlib import Path
 from collections.abc import AsyncIterable
 from typing import Any
 
@@ -9,9 +10,10 @@ from ..crawl.aio import acrawl
 from ..crawl.utils import UNSET, extract_handles_category, handle_callback_result
 from ..exceptions import SpiderError
 from ..models import CrawlResult
+from ..llm import use_openai_settings
 from ..pipelines import DropItem, Pipeline
 from ..signals import SignalBus
-from .config import EffectiveSpiderSettings
+from .config import EffectiveSpiderSettings, ProjectConfig
 from .sync import Spider
 
 
@@ -99,6 +101,13 @@ class AsyncSpider(Spider):
                 except DropItem as exc:
                     if signal_bus is not None:
                         await signal_bus.asend(
+                            "pipeline_finished",
+                            pipeline=pipeline,
+                            item=current,
+                            response=response,
+                            spider=self,
+                        )
+                        await signal_bus.asend(
                             "item_dropped",
                             item=item,
                             response=response,
@@ -110,7 +119,8 @@ class AsyncSpider(Spider):
                     if signal_bus is not None:
                         await signal_bus.asend(
                             "pipeline_error",
-                            item=item,
+                            pipeline=pipeline,
+                            item=current,
                             response=response,
                             spider=self,
                             error=exc,
@@ -137,7 +147,7 @@ class AsyncSpider(Spider):
     async def _aextract_callback(
         self, response: Any, settings: EffectiveSpiderSettings
     ) -> Any:
-        request = getattr(response, "request", None)
+        request = getattr(response, "crawl_request", None)
         category = getattr(request, "category", None)
         try:
             handler = self._route_handler(category)
@@ -157,9 +167,18 @@ class AsyncSpider(Spider):
         return items
 
     async def run(self, **overrides: Any) -> CrawlResult:  # type: ignore[override]
+        project_config, project_base_dir = self._project_config()
+        with use_openai_settings(project_config.llm if project_config else None):
+            return await self._arun(project_config, project_base_dir, overrides)
+
+    async def _arun(
+        self,
+        project_config: ProjectConfig | None,
+        project_base_dir: Path | None,
+        overrides: dict[str, Any],
+    ) -> CrawlResult:
         pipeline_override = overrides.pop("pipelines", UNSET)
         signal_bus = overrides.pop("signals", None) or self.signals or SignalBus()
-        project_config, project_base_dir = self._project_config()
         settings, crawl_overrides = self._resolve_settings(
             overrides, project_config=project_config
         )

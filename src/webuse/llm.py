@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Any
 
 from curl_cffi import requests
@@ -19,6 +21,9 @@ _LOCAL_OPENAI_ENDPOINTS = (
     ("ollama", "http://127.0.0.1:11434/v1", "ollama"),
 )
 _DEFAULT_SETTINGS: OpenAISettings | None = None
+_RUN_SETTINGS: ContextVar[OpenAISettings | None] = ContextVar(
+    "webuse_llm_settings", default=None
+)
 
 
 def openai_configured() -> bool:
@@ -119,4 +124,18 @@ def configure_openai_defaults(*, force: bool = False) -> OpenAISettings:
 
 
 def openai_defaults() -> OpenAISettings:
-    return configure_openai_defaults()
+    return _RUN_SETTINGS.get() or configure_openai_defaults()
+
+
+@contextmanager
+def use_openai_settings(config: dict[str, Any] | None):
+    """Apply project settings to this run without changing other async runs."""
+    if not config:
+        yield
+        return
+    settings = openai_settings_from_config(config)
+    token = _RUN_SETTINGS.set(settings)
+    try:
+        yield
+    finally:
+        _RUN_SETTINGS.reset(token)

@@ -14,7 +14,7 @@ class UStatsMetrics:
         self._crawl_started_at: float | None = None
         self._request_started_at: dict[int, float] = {}
         self._parse_started_at: dict[int, float] = {}
-        self._pipeline_started_at: dict[tuple[int, str], float] = {}
+        self._pipeline_started_at: dict[tuple[int, int], float] = {}
 
     def bind(self, signals: SignalBus) -> "UStatsMetrics":
         signals.connect("crawl_started", self.crawl_started)
@@ -62,6 +62,14 @@ class UStatsMetrics:
         self.client.incr("crawl_in_flight", 1, tags=self._tags())
 
     def crawl_finished(self, reason: str | None = None, **kwargs: Any) -> None:
+        # Cancellation or a fatal callback can bypass per-request completion.
+        for bucket, starts in (
+            ("request", self._request_started_at),
+            ("parse", self._parse_started_at),
+        ):
+            if starts:
+                self.client.decr(f"{bucket}_in_flight", len(starts), tags=self._tags())
+                starts.clear()
         self._counter("crawl_finished", reason=reason or "finished")
         self.client.decr("crawl_in_flight", 1, tags=self._tags())
         if self._crawl_started_at is not None:
@@ -89,11 +97,17 @@ class UStatsMetrics:
             self._gauge("state_seen_size", seen_size, backend=backend)
 
     def state_updated(
-        self, backend: str | None = None, queue_size: int | None = None, **kwargs: Any
+        self,
+        backend: str | None = None,
+        queue_size: int | None = None,
+        seen_size: int | None = None,
+        **kwargs: Any,
     ) -> None:
         self._counter("state_updated", backend=backend)
         if queue_size is not None:
             self._gauge("state_queue_size", queue_size, backend=backend)
+        if seen_size is not None:
+            self._gauge("state_seen_size", seen_size, backend=backend)
 
     def request_queued(self, source: str | None = None, **kwargs: Any) -> None:
         self._counter("request_queued", source=source)
@@ -161,16 +175,20 @@ class UStatsMetrics:
             if started_at is not None:
                 self._timer("parse_duration", perf_counter() - started_at)
 
-    def parse_error(self, error: Exception | None = None, **kwargs: Any) -> None:
+    def parse_error(
+        self, error: Exception | None = None, response: Any = None, **kwargs: Any
+    ) -> None:
+        if response is not None and id(response) in self._parse_started_at:
+            started = self._parse_started_at.pop(id(response))
+            self.client.decr("parse_in_flight", 1, tags=self._tags())
+            self._timer("parse_duration", perf_counter() - started)
         self._counter("parse_error", error=error.__class__.__name__ if error else None)
 
     def pipeline_started(
         self, pipeline: Any = None, item: Any = None, **kwargs: Any
     ) -> None:
         if pipeline is not None and item is not None:
-            self._pipeline_started_at[(id(item), pipeline.__class__.__name__)] = (
-                perf_counter()
-            )
+            self._pipeline_started_at[(id(item), id(pipeline))] = perf_counter()
         self.client.incr(
             "pipeline_in_flight",
             1,
@@ -181,20 +199,24 @@ class UStatsMetrics:
         self, pipeline: Any = None, item: Any = None, **kwargs: Any
     ) -> None:
         pipeline_name = pipeline.__class__.__name__ if pipeline else None
-        self.client.decr(
-            "pipeline_in_flight", 1, tags=self._tags(pipeline=pipeline_name)
-        )
+        self._end_pipeline(pipeline)
         self._counter("pipeline_finished", pipeline=pipeline_name)
+
+    def _end_pipeline(self, pipeline: Any) -> None:
+        pipeline_name = pipeline.__class__.__name__ if pipeline else None
         if pipeline is not None:
             key = next(
                 (
                     candidate
                     for candidate in self._pipeline_started_at
-                    if candidate[1] == pipeline.__class__.__name__
+                    if candidate[1] == id(pipeline)
                 ),
                 None,
             )
             if key is not None:
+                self.client.decr(
+                    "pipeline_in_flight", 1, tags=self._tags(pipeline=pipeline_name)
+                )
                 started_at = self._pipeline_started_at.pop(key)
                 self._timer(
                     "pipeline_duration",
@@ -205,6 +227,7 @@ class UStatsMetrics:
     def pipeline_error(
         self, pipeline: Any = None, error: Exception | None = None, **kwargs: Any
     ) -> None:
+        self._end_pipeline(pipeline)
         self._counter(
             "pipeline_error",
             pipeline=pipeline.__class__.__name__ if pipeline else None,

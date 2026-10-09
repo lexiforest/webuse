@@ -1,4 +1,3 @@
-
 from pydantic import BaseModel
 from webuse.response import Response
 
@@ -160,6 +159,9 @@ class FakeRedis:
 
     def sismember(self, key, value):
         return value in self.sets.get(key, set())
+
+    def scard(self, key):
+        return len(self.sets.get(key, set()))
 
 
 class QueryClient:

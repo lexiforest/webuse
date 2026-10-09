@@ -1,7 +1,7 @@
-
 import pytest
 
 from webuse import cli
+from webuse.config import load_config_file
 
 
 def test_create_command_scaffolds_project(tmp_path, capsys):
@@ -12,7 +12,7 @@ def test_create_command_scaffolds_project(tmp_path, capsys):
 
     assert code == 0
     assert '"project": "books"' in out
-    assert (project / "webuse.toml").exists()
+    assert (project / "webuse.yaml").exists()
     assert (project / "README.md").exists()
     assert (project / ".gitignore").exists()
     assert (project / "items.py").exists()
@@ -21,17 +21,18 @@ def test_create_command_scaffolds_project(tmp_path, capsys):
     assert (project / "spiders" / "__init__.py").exists()
     assert (project / ".webuse").is_dir()
     assert (project / "spiders").is_dir()
-    config_text = (project / "webuse.toml").read_text(encoding="utf-8")
+    config = load_config_file(project / "webuse.yaml")
     items_text = (project / "items.py").read_text(encoding="utf-8")
     pipelines_text = (project / "pipelines.py").read_text(encoding="utf-8")
-    assert 'name = "books"' in config_text
-    assert "books.toscrape.com" not in config_text
-    assert "[crawl]" not in config_text
-    assert "[llm]" in config_text
-    assert "[concurrency]" in config_text
-    assert "[items.pipelines]" in config_text
-    assert '{ class = "pipelines.CleanBookPipeline" }' in config_text
-    assert '{ type = "jsonl", path = "output.jsonl" }' in config_text
+    assert config["name"] == "books"
+    assert "books.toscrape.com" not in str(config)
+    assert "crawl" not in config
+    assert config["llm"] == {}
+    assert config["concurrency"] == {"limit": 5, "per_domain": 1}
+    assert config["items"]["pipelines"]["default"] == [
+        {"class": "pipelines.CleanBookPipeline"},
+        {"type": "jsonl", "path": "output.jsonl"},
+    ]
     assert "from pydantic import BaseModel" in items_text
     assert "class BookItem(BaseModel)" in items_text
     assert "class CleanBookPipeline(webuse.Pipeline)" in pipelines_text

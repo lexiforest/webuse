@@ -1,6 +1,10 @@
 import json
 import queue as queue_module
 import hashlib
+import os
+import tempfile
+import threading
+from collections import deque
 from pathlib import Path
 from typing import Any, Iterable, Protocol
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
@@ -121,6 +125,9 @@ class MemoryRequestQueue:
         while self.pop() is not None:
             pass
 
+    def __len__(self) -> int:
+        return self._queue.qsize()
+
 
 class MemoryRequestSeen:
     def __init__(
@@ -137,31 +144,71 @@ class MemoryRequestSeen:
     def contains(self, request_hash: str) -> bool:
         return request_hash in self._hashes
 
+    def __len__(self) -> int:
+        return len(self._hashes)
+
 
 class FileRequestQueue:
+    """Single-owner pending queue; mutations atomically replace a JSONL snapshot.
+
+    Popping claims a request permanently. This is not an acknowledgement queue
+    and does not recover work already claimed when a process crashes.
+    """
+
     def __init__(self, path: str | Path) -> None:
         self.path = Path(path)
-        self._queue = MemoryRequestQueue()
+        self._queue: deque[CrawlRequest] = deque()
+        self._lock = threading.Lock()
         if self.path.exists():
             for line in self.path.read_text(encoding="utf-8").splitlines():
                 if line.strip():
-                    self._queue.put(CrawlRequest.model_validate_json(line))
+                    self._queue.append(CrawlRequest.model_validate_json(line))
+
+    def _save(self, requests: Iterable[CrawlRequest]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=self.path.parent,
+                prefix=f".{self.path.name}.",
+                delete=False,
+            ) as file:
+                temporary = Path(file.name)
+                for request in requests:
+                    file.write(request.model_dump_json() + "\n")
+                file.flush()
+                os.fsync(file.fileno())
+            os.replace(temporary, self.path)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
     def put(self, request: CrawlRequest) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        with self.path.open("a", encoding="utf-8") as file:
-            file.write(request.model_dump_json())
-            file.write("\n")
-        self._queue.put(request)
+        with self._lock:
+            pending = [*self._queue, request]
+            self._save(pending)
+            self._queue.append(request)
 
     def pop(self) -> CrawlRequest | None:
-        return self._queue.pop()
+        with self._lock:
+            if not self._queue:
+                return None
+            self._save(list(self._queue)[1:])
+            return self._queue.popleft()
 
     def empty(self) -> bool:
-        return self._queue.empty()
+        return len(self) == 0
 
     def clear(self) -> None:
-        self._queue.clear()
+        with self._lock:
+            self._save([])
+            self._queue.clear()
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._queue)
 
 
 class FileRequestSeen:
@@ -192,6 +239,9 @@ class FileRequestSeen:
 
     def contains(self, request_hash: str) -> bool:
         return request_hash in self._hashes
+
+    def __len__(self) -> int:
+        return len(self._hashes)
 
 
 def _redis_client(redis_url: str | None = None, client: Any | None = None) -> Any:
@@ -232,6 +282,9 @@ class RedisRequestQueue:
     def clear(self) -> None:
         self.client.delete(self.key)
 
+    def __len__(self) -> int:
+        return int(self.client.llen(self.key))
+
 
 class RedisRequestSeen:
     def __init__(
@@ -249,6 +302,17 @@ class RedisRequestSeen:
 
     def contains(self, request_hash: str) -> bool:
         return bool(self.client.sismember(self.key, request_hash))
+
+    def __len__(self) -> int:
+        return int(self.client.scard(self.key))
+
+
+def state_info(queue: Any, seen: Any) -> dict[str, Any]:
+    return {
+        "backend": type(queue).__name__,
+        "queue_size": len(queue) if hasattr(queue, "__len__") else None,
+        "seen_size": len(seen) if hasattr(seen, "__len__") else None,
+    }
 
 
 __all__ = [

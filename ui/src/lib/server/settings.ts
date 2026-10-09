@@ -18,7 +18,7 @@ export const defaults: SettingsValue = {
     baseUrl: process.env.WEBUSE_LLM_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
     model: process.env.WEBUSE_LLM_MODEL || process.env.OPENAI_MODEL || "gpt-4.1-mini",
   },
-  smart: { selectorStore: process.env.WEBUSE_SELECTOR_STORE || "selectors.json" },
+  smart: { selectorStore: process.env.WEBUSE_SELECTOR_STORE || ".webuse/selectors.json" },
 };
 
 function section(value: unknown) { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }

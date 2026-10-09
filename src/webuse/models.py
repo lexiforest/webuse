@@ -4,11 +4,6 @@ from typing import Any, Callable
 from pydantic import BaseModel, ConfigDict, Field
 
 
-ExtractCallback = Callable[[Any], Any]
-FollowCallback = Callable[[Any], Any]
-ErrorCallback = Callable[[Exception, "CrawlRequest"], None]
-
-
 class WebuseModel(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -36,7 +31,7 @@ class RequestOptions(WebuseModel):
     proxies: dict[str, str] | None = None
     proxy_auth: tuple[str, str] | None = None
     verify: bool | str | None = None
-    impersonate: str | list[str] | None = "chrome"
+    impersonate: str | list[str] | None = None
     ja3: str | None = None
     akamai: str | None = None
     extra_fp: dict[str, Any] | None = None
@@ -57,7 +52,6 @@ class RequestOptions(WebuseModel):
             "files": self.files,
             "auth": self.auth,
             "timeout": self.timeout,
-            "follow_redirects": self.follow_redirects,
             "allow_redirects": self.follow_redirects,
             "max_redirects": self.max_redirects,
             "proxy": self.proxy,
@@ -74,11 +68,16 @@ class RequestOptions(WebuseModel):
             "cert": self.cert,
             "referer": self.referer,
         }
-        return {
+        kwargs = {
             key: value
             for key, value in {**values, **self.extra_kwargs}.items()
             if value is not None
         }
+        # Webuse's public spelling is follow_redirects; curl_cffi uses
+        # allow_redirects. Normalize direct kwargs as well as model fields.
+        if "follow_redirects" in kwargs:
+            kwargs["allow_redirects"] = kwargs.pop("follow_redirects")
+        return kwargs
 
 
 class CrawlRequest(WebuseModel):
@@ -92,8 +91,9 @@ class CrawlRequest(WebuseModel):
 
 
 class FollowRule(WebuseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+
     css: str | None = None
-    xpath: str | None = None
     attr: str = "href"
     source_category: str | list[str] | set[str] | tuple[str, ...] | None = None
     category: str | None = None
@@ -109,7 +109,6 @@ class SmartSelectorRecord(WebuseModel):
     key: str
     prompt: str
     selectors: list[str] = Field(default_factory=list)
-    xpath_selectors: list[str] = Field(default_factory=list)
 
 
 class CrawlStats(WebuseModel):

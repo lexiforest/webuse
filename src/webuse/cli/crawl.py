@@ -21,7 +21,8 @@ from ..pipelines import CsvPipeline, JsonlPipeline, Pipeline, SQLitePipeline
 from ..spider import AsyncSpider, Spider
 from ..spider.config import ProjectConfig, SpiderConfig
 from ..crawl.utils import load_config_file
-from .common import add_request_args, cli_request_options
+from ..log import configure_logger
+from .common import _pair, add_request_args, cli_request_options
 
 
 _CONFIG_NAMES = ("webuse.toml", "webuse.yaml", "webuse.yml")
@@ -129,21 +130,12 @@ def _project_root_for_config(path: Path) -> Path | None:
     return None
 
 
-def _spider_from_config_path(path: Path) -> Spider:
-    spider = Spider(spider_config_path=path.resolve())
+def _spider_from_config_path(path: Path, spider_class: type[Spider] = Spider) -> Spider:
+    spider = spider_class(spider_config_path=path.resolve())
     project_dir = _project_root_for_config(path)
     if project_dir is not None:
         spider.project_dir = project_dir
     return spider
-
-
-def _spider_files_from_project(project_dir: Path) -> list[Path]:
-    spiders_dir = project_dir / "spiders"
-    if not spiders_dir.is_dir():
-        raise SystemExit(f"project has no spiders directory: {project_dir}")
-    return sorted(
-        path for path in spiders_dir.glob("*.py") if path.name != "__init__.py"
-    )
 
 
 def _project_config_path(project_dir: Path) -> Path:
@@ -164,6 +156,20 @@ def _project_config(project_dir: Path) -> ProjectConfig:
         return ProjectConfig.model_validate(load_config_file(path))
     except ValidationError as exc:
         raise SystemExit(f"invalid project config: {path}: {exc}") from exc
+
+
+def _configure_project_logging(project_dir: Path | None) -> None:
+    if project_dir is None or not _has_project_config(project_dir):
+        return
+    config = _project_config(project_dir).log
+    if not config:
+        return
+    destination = config.get("file", "stderr")
+    sink = {"stderr": sys.stderr, "stdout": sys.stdout}.get(destination)
+    if sink is None:
+        sink = project_dir / destination
+        sink.parent.mkdir(parents=True, exist_ok=True)
+    configure_logger(config.get("level"), sink=sink, append=config.get("append", True))
 
 
 def _inline_spider_target(name: str, value: Any) -> _InlineSpiderTarget:
@@ -306,20 +312,14 @@ def _load_spider(
         )
         for candidate in candidates:
             if candidate.exists():
-                return _spider_from_config_path(candidate)
+                return _spider_from_config_path(candidate, spider_class)
     if path.exists() and path.suffix in _SPIDER_CONFIG_SUFFIXES:
-        return _spider_from_config_path(path)
+        return _spider_from_config_path(path, spider_class)
     return _spider_from_module(_module_from_target(target, project_dir=project_dir))
 
 
 def _attribute_pair(value: str) -> tuple[str, str]:
-    if "=" not in value:
-        raise SystemExit(f"--attribute argument must be KEY=VALUE: {value!r}")
-    key, item = value.split("=", 1)
-    key = key.strip()
-    if not key:
-        raise SystemExit(f"--attribute argument has an empty key: {value!r}")
-    return key, item
+    return _pair(value, "--attribute")
 
 
 def _attributes(values: list[str] | None) -> dict[str, str]:
@@ -357,18 +357,18 @@ def _standalone_option_used(args: argparse.Namespace) -> bool:
     return any(
         (
             args.css,
-            args.xpath,
             args.smart,
+            args.find_element,
             args.item_css,
             args.attr,
             args.all_fields,
             args.follow_css,
-            args.follow_xpath,
             args.follow_attr,
             args.same_domain,
             args.allowed_domain,
             args.max_depth is not None,
             args.concurrency is not None,
+            args.per_domain is not None,
             args.dedupe is not None,
             args.robots_txt is not None,
             args.user_agent,
@@ -399,11 +399,11 @@ def _extract_rules(args: argparse.Namespace) -> dict[str, Any] | None:
     fields: dict[str, dict[str, Any]] = {}
     for option_name, selector_type in (
         ("css", "css"),
-        ("xpath", "xpath"),
         ("smart", "smart"),
+        ("find_element", "find_element"),
     ):
         for value in getattr(args, option_name) or []:
-            field, selector = _field_pair(value, f"--{option_name}")
+            field, selector = _field_pair(value, f"--{option_name.replace('_', '-')}")
             if field in fields:
                 raise SystemExit(f"duplicate extract field: {field}")
             fields[field] = {selector_type: selector}
@@ -439,10 +439,6 @@ def _follow_rules(args: argparse.Namespace) -> list[FollowRule] | None:
         FollowRule(css=selector, attr=attr, same_domain=bool(args.same_domain))
         for selector in args.follow_css or []
     ]
-    rules.extend(
-        FollowRule(xpath=selector, attr=attr, same_domain=bool(args.same_domain))
-        for selector in args.follow_xpath or []
-    )
     return rules or None
 
 
@@ -460,6 +456,8 @@ def _standalone_spider(
         spider.max_requests = args.max_requests
     if args.concurrency is not None:
         spider.concurrency = args.concurrency
+    if args.per_domain is not None:
+        spider.per_domain = args.per_domain
     if args.dedupe is not None:
         spider.dedupe = args.dedupe
     if args.robots_txt is not None:
@@ -575,7 +573,7 @@ def _run_single_spider(
         **_state_options(
             state,
             target=target.name if isinstance(target, _InlineSpiderTarget) else target,
-        )
+        ),
     )
     if inspect.isawaitable(result):
         result = asyncio.run(result)
@@ -633,6 +631,7 @@ def crawl_command(args: argparse.Namespace) -> int:
     targets, project_dir = _spider_targets_from_crawl_target(
         args.directory, args.spider
     )
+    _configure_project_logging(project_dir)
     attributes = _attributes(args.attribute)
     results = []
     remaining = args.max_requests
@@ -640,8 +639,11 @@ def crawl_command(args: argparse.Namespace) -> int:
         if remaining is not None and remaining <= 0:
             break
         current = _run_single_spider(
-            target, project_dir=project_dir, attributes=attributes,
-            state=args.state, max_requests=remaining,
+            target,
+            project_dir=project_dir,
+            attributes=attributes,
+            state=args.state,
+            max_requests=remaining,
         )
         results.append(current)
         if remaining is not None:
@@ -665,6 +667,7 @@ async def acrawl_command(args: argparse.Namespace) -> int:
     targets, project_dir = _spider_targets_from_crawl_target(
         args.directory, args.spider
     )
+    _configure_project_logging(project_dir)
     attributes = _attributes(args.attribute)
     results = []
     remaining = args.max_requests
@@ -672,8 +675,11 @@ async def acrawl_command(args: argparse.Namespace) -> int:
         if remaining is not None and remaining <= 0:
             break
         current = await _arun_single_spider(
-            target, project_dir=project_dir, attributes=attributes,
-            state=args.state, max_requests=remaining,
+            target,
+            project_dir=project_dir,
+            attributes=attributes,
+            state=args.state,
+            max_requests=remaining,
         )
         results.append(current)
         if remaining is not None:
@@ -692,19 +698,19 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     crawl_parser.add_argument("--state")
     crawl_parser.add_argument("--async", dest="use_async", action="store_true")
     crawl_parser.add_argument("--css", action="append")
-    crawl_parser.add_argument("--xpath", action="append")
     crawl_parser.add_argument("--smart", action="append")
+    crawl_parser.add_argument("--find-element", action="append")
     crawl_parser.add_argument("--item-css")
     crawl_parser.add_argument("--attr", action="append")
     crawl_parser.add_argument("--all", dest="all_fields", action="append")
     crawl_parser.add_argument("--follow-css", action="append")
-    crawl_parser.add_argument("--follow-xpath", action="append")
     crawl_parser.add_argument("--follow-attr")
     crawl_parser.add_argument("--same-domain", action="store_true")
     crawl_parser.add_argument("--allowed-domain", action="append")
     crawl_parser.add_argument("--max-depth", type=int)
     crawl_parser.add_argument("--max-requests", type=int)
     crawl_parser.add_argument("--concurrency", type=int)
+    crawl_parser.add_argument("--per-domain", type=int)
     crawl_parser.add_argument(
         "--dedupe", dest="dedupe", action="store_true", default=None
     )
