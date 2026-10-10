@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
-import { createReadStream, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { createReadStream, existsSync, mkdirSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 
-import { store, type ProjectFile } from "./store";
+import { store } from "./store";
+import { materializeVersion } from "./workspace";
 
 type Settings = {
   runtime?: { workDirectory?: string; concurrency?: string };
@@ -20,45 +21,6 @@ let ticking = false;
 function settings() { return store.getSettings() as Settings; }
 function workDirectory() { return resolve(settings().runtime?.workDirectory || process.env.WEBUSE_WORK_DIR || "./runs"); }
 function concurrency() { return Math.max(1, Number(settings().runtime?.concurrency || process.env.WEBUSE_CONCURRENCY || 1) || 1); }
-
-function safeProjectPath(root: string, path: string) {
-  const target = resolve(root, path);
-  const inside = relative(root, target);
-  if (!path || isAbsolute(path) || inside.startsWith(`..${sep}`) || inside === "..") throw new Error(`Unsafe project file path: ${path}`);
-  return target;
-}
-
-function materializeFiles(files: ProjectFile[], directory: string) {
-  mkdirSync(directory, { recursive: true });
-  for (const file of files) {
-    const target = safeProjectPath(directory, file.path);
-    mkdirSync(dirname(target), { recursive: true });
-    writeFileSync(target, file.content, "utf8");
-  }
-}
-
-function runProcess(jobId: number, command: string, args: string[], cwd: string) {
-  return new Promise<void>((resolvePromise, reject) => {
-    const child = spawn(command, args, { cwd, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
-    active.set(jobId, child);
-    let stderr = "";
-    child.stderr.on("data", chunk => { stderr += String(chunk); });
-    child.once("error", error => { active.delete(jobId); reject(error); });
-    child.once("exit", code => { active.delete(jobId); code === 0 ? resolvePromise() : reject(new Error(stderr.trim() || `${command} exited with code ${code}`)); });
-  });
-}
-
-async function checkoutProject(jobId: number, project: NonNullable<ReturnType<typeof store.getProject>>, directory: string) {
-  if (!project.target) throw new Error("Git project is missing a repository URL.");
-  if (existsSync(join(directory, ".git"))) {
-    await runProcess(jobId, "git", ["remote", "set-url", "origin", project.target], directory);
-    await runProcess(jobId, "git", ["pull", "--ff-only"], directory);
-  } else {
-    if (existsSync(directory)) rmSync(directory, { recursive: true });
-    mkdirSync(dirname(directory), { recursive: true });
-    await runProcess(jobId, "git", ["clone", project.target, directory], workDirectory());
-  }
-}
 
 export function pythonCommand() {
   if (process.env.WEBUSE_PYTHON_COMMAND) return process.env.WEBUSE_PYTHON_COMMAND;
@@ -95,26 +57,19 @@ async function importJsonl(jobId: number, path: string) {
 }
 
 async function runJob(job: NonNullable<ReturnType<typeof store.getJob>>) {
-  const project = store.getProject(job.projectId);
-  if (!project) { store.finishJob(job.id, "failed", { reason: "project_not_found" }); return; }
   const root = workDirectory();
   const jobDirectory = join(root, String(job.id));
-  let projectDirectory = join(jobDirectory, "project");
+  const projectDirectory = join(jobDirectory, "project");
   let sampleTimeout: ReturnType<typeof setTimeout> | undefined;
   mkdirSync(jobDirectory, { recursive: true });
   try {
-    const sample = job.metadata as { assistantSample?: { files: ProjectFile[]; maxRequests: number; deadline: number } };
+    const sample = job.metadata as { sourceVersion: string; assistantSample?: { maxRequests: number; deadline: number } };
     if (sample.assistantSample) {
       if (sample.assistantSample.deadline <= Date.now()) {
         store.finishJob(job.id, "cancelled", { reason: "sample_timeout" }); return;
       }
-      materializeFiles(sample.assistantSample.files, projectDirectory);
-    } else if (project.type === "git") {
-      projectDirectory = join(root, "projects", String(project.id), "repo");
-      await checkoutProject(job.id, project, projectDirectory);
-    } else {
-      materializeFiles(project.files, projectDirectory);
     }
+    materializeVersion(job.projectId, sample.sourceVersion, projectDirectory);
     const config = ["webuse.toml", "webuse.yaml", "webuse.yml"].map(name => join(projectDirectory, name)).find(existsSync);
     const target = config || projectDirectory;
     const output = join(jobDirectory, "items.jsonl");

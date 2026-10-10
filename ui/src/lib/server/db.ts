@@ -6,6 +6,11 @@ export const databasePath = resolve(process.env.WEBUSE_DB_PATH || "./webuse-ui.s
 mkdirSync(dirname(databasePath), { recursive: true });
 
 export const sqlite = new DatabaseSync(databasePath);
+const projectColumns = sqlite.prepare("PRAGMA table_info(projects)").all() as { name: string }[];
+if (projectColumns.length && !projectColumns.some(column => column.name === "workspace_path")) {
+  sqlite.close();
+  throw new Error("This is a legacy Webuse UI database. Use a new --data-dir or WEBUSE_DB_PATH for disk workspaces. The existing database has not been migrated or deleted.");
+}
 sqlite.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;");
 
 export function transaction<Args extends unknown[], Result>(callback: (...args: Args) => Result) {
@@ -29,6 +34,8 @@ sqlite.exec(`
     type text NOT NULL,
     git_url text,
     config text,
+    workspace_path text NOT NULL,
+    saved_version text,
     cron text,
     next_run_at integer,
     created_at integer NOT NULL,
@@ -36,17 +43,6 @@ sqlite.exec(`
   );
   CREATE INDEX IF NOT EXISTS projects_type_idx ON projects (type);
   CREATE INDEX IF NOT EXISTS projects_created_at_idx ON projects (created_at);
-
-  CREATE TABLE IF NOT EXISTS project_files (
-    id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
-    project_id integer NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    path text NOT NULL,
-    content text NOT NULL,
-    created_at integer NOT NULL,
-    updated_at integer NOT NULL,
-    UNIQUE(project_id, path)
-  );
-  CREATE INDEX IF NOT EXISTS project_files_project_id_idx ON project_files (project_id);
 
   CREATE TABLE IF NOT EXISTS jobs (
     id integer PRIMARY KEY AUTOINCREMENT NOT NULL,

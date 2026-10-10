@@ -42,6 +42,12 @@ export type ProjectFormValue = {
   cron?: string;
   config?: Record<string, unknown>;
   files?: ProjectFile[];
+  revision?: string;
+  workspacePath?: string;
+  savedVersion?: string | null;
+  changes?: { path: string; status: string }[];
+  omitted?: string[];
+  publishedFiles?: ProjectFile[];
 };
 
 type ProjectFormProps = {
@@ -158,10 +164,7 @@ function isConfigObject(value: unknown): value is Record<string, unknown> {
 }
 
 function initialFiles(value: ProjectFormValue): ProjectFile[] {
-  if (value.type === "git") {
-    return [];
-  }
-  if (value.files && value.files.length > 0) {
+  if (value.files) {
     return value.files;
   }
   return [
@@ -367,6 +370,12 @@ export default function ProjectForm(props: ProjectFormProps) {
   const [target, setTarget] = createSignal(props.initialValue.target);
   const [cron, setCron] = createSignal(props.initialValue.cron ?? "");
   const [files, setFiles] = createSignal<ProjectFile[]>(initialFileState);
+  const [revision, setRevision] = createSignal(props.initialValue.revision);
+  const [publishedVersion, setPublishedVersion] = createSignal(props.initialValue.savedVersion);
+  const [publishedFiles, setPublishedFiles] = createSignal(props.initialValue.publishedFiles ?? []);
+  const [changes, setChanges] = createSignal(props.initialValue.changes ?? []);
+  const [omitted, setOmitted] = createSignal(props.initialValue.omitted ?? []);
+  const [externalChange, setExternalChange] = createSignal(false);
   const [selectedPath, setSelectedPath] = createSignal(files()[0]?.path ?? "webuse.yaml");
   const [saving, setSaving] = createSignal(false);
   const [error, setError] = createSignal<string>();
@@ -386,7 +395,7 @@ export default function ProjectForm(props: ProjectFormProps) {
   let chatRequest: AbortController | undefined;
   onCleanup(() => chatRequest?.abort());
   const [activeTab, setActiveTab] = createSignal<ProjectFormTab>(
-    props.initialValue.type === "git" ? "settings" : (props.defaultTab ?? "settings"),
+    props.defaultTab ?? "settings",
   );
   const [savedSnapshot, setSavedSnapshot] = createSignal(
     projectSnapshot({ ...props.initialValue, files: initialFileState }),
@@ -403,6 +412,49 @@ export default function ProjectForm(props: ProjectFormProps) {
     }),
   );
   const isDirty = createMemo(() => currentSnapshot() !== savedSnapshot());
+  const acceptWorkspace = (project: ProjectFormValue) => {
+    setFiles(project.files ?? []);
+    setRevision(project.revision);
+    setChanges(project.changes ?? []);
+    setOmitted(project.omitted ?? []);
+    setPublishedVersion(project.savedVersion);
+    setPublishedFiles(project.publishedFiles ?? []);
+    setSavedSnapshot(projectSnapshot({ ...project, files: project.files ?? [] }));
+    setExternalChange(false);
+  };
+  const reloadWorkspace = async (explicit = false) => {
+    if (!props.projectId || chatSending() || saving()) return;
+    if (explicit && isDirty() && !window.confirm("Discard unsaved editor changes and reload files from disk?")) return;
+    const loadedRevision = revision();
+    try {
+      const response = await fetch(props.endpoint);
+      if (!response.ok) throw new Error(await readError(response, "Could not reload workspace."));
+      const data = await response.json() as ProjectSaveResponse;
+      if (!data.project || chatSending() || saving() || loadedRevision !== revision()) return;
+      if (!explicit && isDirty()) {
+        if (data.project.revision !== revision()) setExternalChange(true);
+        return;
+      }
+      if (!isDirty()) {
+        setName(data.project.name); setType(data.project.type);
+        setTarget(data.project.target); setCron(data.project.cron ?? "");
+      }
+      acceptWorkspace(data.project);
+      if (explicit) setError(undefined);
+    } catch (err) { if (explicit) setError(err instanceof Error ? err.message : String(err)); }
+  };
+  const saveFiles = async (revert = false) => {
+    if (!props.projectId || chatSending() || saving()) return;
+    if (revert && !window.confirm("Restore project files to the published version? Unpublished source changes will be discarded. Environments and excluded files are kept.")) return;
+    setSaving(true); setError(undefined);
+    try {
+      const response = await fetch(props.endpoint, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ files: files(), revision: revision(), action: revert ? "revert" : "save" }) });
+      if (!response.ok) throw new Error(await readError(response, "Could not save workspace."));
+      const data = await response.json() as ProjectSaveResponse;
+      if (data.project) acceptWorkspace(data.project);
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
+    finally { setSaving(false); }
+  };
   const isGitProject = createMemo(() => type() === "git");
   const fileTree = createMemo(() => buildFileTree(files()));
   const cronDescription = createMemo(() => {
@@ -460,7 +512,7 @@ export default function ProjectForm(props: ProjectFormProps) {
     const syncTabFromPath = () => {
       const nextTab = tabFromPath(window.location.pathname);
       if (nextTab) {
-        setActiveTab(isGitProject() && nextTab === "files" ? "visual" : nextTab);
+        setActiveTab(nextTab);
       }
     };
 
@@ -477,6 +529,10 @@ export default function ProjectForm(props: ProjectFormProps) {
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     onCleanup(() => window.removeEventListener("beforeunload", handleBeforeUnload));
+    const refresh = () => void reloadWorkspace();
+    const poll = setInterval(refresh, 5000);
+    window.addEventListener("focus", refresh);
+    onCleanup(() => { clearInterval(poll); window.removeEventListener("focus", refresh); });
 
     const projectId = props.projectId;
     if (projectId) {
@@ -510,7 +566,7 @@ export default function ProjectForm(props: ProjectFormProps) {
 
   const changeTab = (value: string) => {
     const requestedTab = normalizeTab(value) ?? "settings";
-    const nextTab = isGitProject() && requestedTab === "files" ? "visual" : requestedTab;
+    const nextTab = requestedTab;
     setActiveTab(nextTab);
     if (props.tabBasePath) {
       window.history.pushState(null, "", `${props.tabBasePath}/${nextTab}`);
@@ -569,7 +625,7 @@ export default function ProjectForm(props: ProjectFormProps) {
   };
 
   const updateSelectedFile = (patch: Partial<ProjectFile>) => {
-    if (chatSending()) return;
+    if (chatSending() || saving()) return;
     const currentPath = selectedFile()?.path;
     if (!currentPath) {
       return;
@@ -589,7 +645,7 @@ export default function ProjectForm(props: ProjectFormProps) {
   };
 
   const addFile = () => {
-    if (chatSending()) return;
+    if (chatSending() || saving()) return;
     const path = window.prompt("New file path", "spiders/new_spider.py")?.trim();
     if (!path) {
       return;
@@ -604,7 +660,7 @@ export default function ProjectForm(props: ProjectFormProps) {
   };
 
   const renameFile = (path: string, nextPathValue: string) => {
-    if (chatSending()) return;
+    if (chatSending() || saving()) return;
     const nextPath = nextPathValue.trim();
     if (!nextPath) {
       return;
@@ -634,7 +690,7 @@ export default function ProjectForm(props: ProjectFormProps) {
   };
 
   const deleteFile = (path: string) => {
-    if (chatSending()) return;
+    if (chatSending() || saving()) return;
     if (files().length <= 1) {
       return;
     }
@@ -647,7 +703,7 @@ export default function ProjectForm(props: ProjectFormProps) {
   };
 
   const sendChatMessage = async (initialPrompt?: string) => {
-    if (chatSending()) return;
+    if (chatSending() || saving()) return;
     const prompt = (initialPrompt ?? chatInput()).trim();
     if (!prompt) {
       return;
@@ -674,6 +730,7 @@ export default function ProjectForm(props: ProjectFormProps) {
           sessionId: chatSessionId(),
           message: prompt,
           files: files(),
+          revision: revision(),
           selectedPath: selectedPath(),
         }),
       });
@@ -688,7 +745,7 @@ export default function ProjectForm(props: ProjectFormProps) {
       let buffer = "";
       let completed = false;
       const receive = (line: string) => {
-        const data = JSON.parse(line) as { type: string; text?: string; tool?: ToolActivity; error?: string; session?: { id: number }; messages?: LLMChatMessage[]; files?: ProjectFile[]; selectedPath?: string };
+        const data = JSON.parse(line) as { type: string; text?: string; tool?: ToolActivity; error?: string; session?: { id: number }; messages?: LLMChatMessage[]; files?: ProjectFile[]; selectedPath?: string; revision?: string; changes?: { path: string; status: string }[]; omitted?: string[] };
         if (data.type === "text") setChatText(current => current + (data.text || ""));
         if (data.type === "status") setChatStatus(data.text || "");
         if (data.type === "tool" && data.tool) {
@@ -704,6 +761,12 @@ export default function ProjectForm(props: ProjectFormProps) {
           if (data.error) setChatError(data.error);
           if (data.files) {
             setFiles(data.files);
+            setRevision(data.revision);
+            setChanges(data.changes ?? []);
+            setOmitted(data.omitted ?? []);
+            const saved = JSON.parse(savedSnapshot()) as ProjectFormValue;
+            setSavedSnapshot(projectSnapshot({ ...saved, files: data.files }));
+            setExternalChange(false);
             setSelectedPath(data.selectedPath && data.files.some(file => file.path === data.selectedPath) ? data.selectedPath : data.files[0]?.path ?? "");
           }
         }
@@ -724,6 +787,8 @@ export default function ProjectForm(props: ProjectFormProps) {
     } finally {
       setChatSending(false);
       chatRequest = undefined;
+      // Recover persistent edits even when the stream disconnected before its final event.
+      void reloadWorkspace();
     }
   };
 
@@ -805,7 +870,7 @@ export default function ProjectForm(props: ProjectFormProps) {
 
   const submitProject = async (event: SubmitEvent) => {
     event.preventDefault();
-    if (chatSending()) return;
+    if (chatSending() || saving()) return;
     setError(undefined);
     setSaving(true);
 
@@ -821,7 +886,8 @@ export default function ProjectForm(props: ProjectFormProps) {
           target: target(),
           cron: cron().trim(),
           config: parsedConfig,
-          files: isGitProject() ? [] : files(),
+          files: files(),
+          revision: revision(),
         }),
       });
 
@@ -831,7 +897,7 @@ export default function ProjectForm(props: ProjectFormProps) {
       }
 
       const data = (await response.json()) as ProjectSaveResponse;
-      setSavedSnapshot(currentSnapshot());
+      if (data.project) acceptWorkspace(data.project);
       if (props.method === "POST" && data.project?.id) {
         navigate(`/projects/${data.project.id}/files`);
       }
@@ -854,15 +920,36 @@ export default function ProjectForm(props: ProjectFormProps) {
           {error()}
         </div>
       )}
+      <Show when={props.projectId}>
+        <div class="mb-3 text-xs text-gray-400">
+          <div class="break-all">Workspace: {props.initialValue.workspacePath}</div>
+          <div>Files saved here are available to local editors and Chat. Publish a version to update manual and scheduled runs.</div>
+          <Show when={publishedVersion()}><div>Published version: <code>{publishedVersion()?.slice(0, 12)}</code></div></Show>
+          <Show when={externalChange()}><div class="text-amber-300">Files changed on disk. Reload before saving; your editor changes have been kept.</div></Show>
+          <Show when={omitted().length}><div>{omitted().length} binary or large files are available on disk but omitted from this editor.</div></Show>
+          <Show when={changes().length}>
+            <details class="mt-2">
+              <summary class="cursor-pointer">Review {changes().length} unpublished file changes</summary>
+              <For each={changes()}>{change => (
+                <details class="ml-3 mt-2">
+                  <summary class="cursor-pointer">{change.status}: {change.path}</summary>
+                  <div class="grid gap-2 md:grid-cols-2">
+                    <div>Published<pre class="max-h-56 overflow-auto whitespace-pre-wrap bg-gray-950 p-2">{publishedFiles().find(file => file.path === change.path)?.content ?? "(Absent or not previewable)"}</pre></div>
+                    <div>Working file<pre class="max-h-56 overflow-auto whitespace-pre-wrap bg-gray-950 p-2">{files().find(file => file.path === change.path)?.content ?? "(Absent or not previewable)"}</pre></div>
+                  </div>
+                </details>
+              )}</For>
+            </details>
+          </Show>
+        </div>
+      </Show>
 
       <div class="flex min-h-0 flex-1 flex-col gap-4">
         <Tabs value={activeTab()} onChange={changeTab} class="min-h-0 flex-1">
           <Show when={!expanded()}>
             <TabsList>
               <TabsTrigger value="settings">Settings</TabsTrigger>
-              <Show when={!isGitProject()}>
-                <TabsTrigger value="files">Files</TabsTrigger>
-              </Show>
+              <TabsTrigger value="files">Files</TabsTrigger>
               <TabsTrigger value="visual">Visual</TabsTrigger>
             </TabsList>
           </Show>
@@ -999,7 +1086,7 @@ export default function ProjectForm(props: ProjectFormProps) {
                         <For each={codeLines()}>{line => <div>{highlightYamlLine(line)}</div>}</For>
                       </pre>
                       <textarea
-                        readOnly={chatSending()}
+                        readOnly={chatSending() || saving()}
                         spellcheck={false}
                         value={selectedContent()}
                         wrap="off"
@@ -1016,7 +1103,7 @@ export default function ProjectForm(props: ProjectFormProps) {
                         <For each={codeLines()}>{line => <div>{highlightPythonLine(line)}</div>}</For>
                       </pre>
                       <textarea
-                        readOnly={chatSending()}
+                        readOnly={chatSending() || saving()}
                         spellcheck={false}
                         value={selectedContent()}
                         wrap="off"
@@ -1030,7 +1117,7 @@ export default function ProjectForm(props: ProjectFormProps) {
                         <For each={lineNumbers()}>{number => <div>{number}</div>}</For>
                       </div>
                       <textarea
-                        readOnly={chatSending()}
+                        readOnly={chatSending() || saving()}
                         class="code-editor"
                         spellcheck={false}
                         value={selectedContent()}
@@ -1093,6 +1180,11 @@ export default function ProjectForm(props: ProjectFormProps) {
         </Tabs>
 
         <div class="flex justify-end gap-2">
+          <Show when={props.projectId}>
+            <Button type="button" size="compact" disabled={saving() || chatSending()} onClick={() => void reloadWorkspace(true)}>Reload files</Button>
+            <Button type="button" size="compact" disabled={saving() || chatSending() || !publishedVersion()} onClick={() => void saveFiles(true)}>Revert files</Button>
+            <Button type="button" size="compact" disabled={saving() || chatSending()} onClick={() => void saveFiles()}>Save files</Button>
+          </Show>
           <ButtonLink
             class="!text-xs !leading-4"
             href="/projects"

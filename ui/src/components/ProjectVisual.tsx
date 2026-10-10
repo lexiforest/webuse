@@ -70,12 +70,9 @@ function node(
   };
 }
 
-function cssOrXpath(rule: Record<string, unknown>) {
+function followSelector(rule: Record<string, unknown>) {
   if (typeof rule.css === "string") {
     return `css: ${rule.css}`;
-  }
-  if (typeof rule.xpath === "string") {
-    return `xpath: ${rule.xpath}`;
   }
   return "follow rule";
 }
@@ -163,7 +160,7 @@ function yamlGraph(files: ProjectFile[], target: string): VisualGraph | undefine
         const followId = `follow-${prefix}-${pageIndex}-${ruleIndex}`;
         const targetCategory = scalar(rule.category) || "page";
         const pageId = `page-${prefix}-${targetCategory}`;
-        nodes.push(node(followId, "Follow", cssOrXpath(rule), "follow"));
+        nodes.push(node(followId, "Follow", followSelector(rule), "follow"));
         nodes.push(
           node(
             pageId,
@@ -468,18 +465,18 @@ export default function ProjectVisual(props: ProjectVisualProps) {
   let renderVersion = 0;
 
   const visual = createMemo(() => {
-    if (props.type === "git") {
+    if (props.type === "git" && props.files.length === 0) {
       return graph(
         [
           node("git", "Git checkout", truncate(props.target), "start"),
-          node("worker", "Worker run", "clone/pull under work directory", "python"),
-          node("project", "Project files", "read from checkout", "route"),
+          node("worker", "Workspace", "editable local checkout", "python"),
+          node("project", "Published version", "captured source for runs", "route"),
         ],
         [
           { from: "git", to: "worker" },
           { from: "worker", to: "project" },
         ],
-        ["Git-linked projects are not editable in the UI; the workflow is resolved from the checkout at run time."],
+        ["Git is cloned once into the workspace. Publish a version after editing or updating the checkout."],
       );
     }
     if (props.type === "python") {

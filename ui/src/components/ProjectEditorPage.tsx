@@ -61,12 +61,12 @@ export default function ProjectEditorPage(props: ProjectEditorPageProps) {
         >
           {value => (
             <ProjectForm
-              defaultTab={value().type === "git" && props.defaultTab === "files" ? "visual" : props.defaultTab}
+              defaultTab={props.defaultTab}
               endpoint={`/api/projects?id=${value().id}`}
               initialValue={value()}
               method="PUT"
               projectId={value().id}
-              submitLabel="Save"
+              submitLabel="Publish version"
               tabBasePath={`/projects/${value().id}`}
             />
           )}

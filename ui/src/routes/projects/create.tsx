@@ -121,7 +121,7 @@ export default function CreateProject() {
           throw new Error(data.error || `Failed to create project (${response.status})`);
         }
 
-        navigate(`/projects/${data.project.id}/${type === "git" ? "settings" : "files"}`);
+        navigate(`/projects/${data.project.id}/files`);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to create project");
       } finally {
@@ -169,7 +169,7 @@ export default function CreateProject() {
                 onInput={event => setGitUrl(event.currentTarget.value)}
               />
               <span class="text-xs text-gray-400">
-                Files stay in the checkout under the orchestrator work directory and are not editable in the UI.
+                Clone into an editable local workspace. Runs use a published version; future remote changes are not pulled automatically.
               </span>
             </label>
             <Button

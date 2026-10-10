@@ -1,8 +1,9 @@
 import { databasePath, sqlite, transaction } from "./db";
 import { nextCronTime } from "./cron";
+import { assertWorkspaceIdle, captureVersion, initializeWorkspace, projectDirectory, readWorkspace, restoreVersion, versionDirectory, workspaceChanges, writeWorkspace, type ProjectFile } from "./workspace";
+export type { ProjectFile } from "./workspace";
 
 type Row = Record<string, unknown>;
-export type ProjectFile = { path: string; content: string };
 export type ProjectInput = {
   name: string;
   type: "yaml" | "python" | "git";
@@ -10,6 +11,7 @@ export type ProjectInput = {
   cron?: string;
   config?: Record<string, unknown>;
   files?: ProjectFile[];
+  revision?: string;
 };
 
 const sampleFiles: ProjectFile[] = [{
@@ -64,6 +66,8 @@ function projectRow(row: Row) {
     nextRunAt: displayDate(row.next_run_at),
     status: (row.status as string) || "Ready",
     updatedAt: displayDate(row.updated_at),
+    workspacePath: row.workspace_path as string,
+    savedVersion: (row.saved_version as string | null) ?? null,
   };
 }
 
@@ -78,16 +82,9 @@ function jobRow(row: Row) {
     finishedAt: displayDate(row.finished_at),
     duration: displayDuration(row.started_at, row.finished_at),
     items: Number(row.items || 0),
-    metadata: parseJson(row.metadata, {}),
+    metadata: parseJson<Record<string, unknown>>(row.metadata, {}),
   };
 }
-
-const replaceFiles = transaction((projectId: number, files: ProjectFile[]) => {
-  sqlite.prepare("DELETE FROM project_files WHERE project_id = ?").run(projectId);
-  const insert = sqlite.prepare("INSERT INTO project_files (project_id, path, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?)");
-  const now = Date.now();
-  for (const file of files) insert.run(projectId, file.path, file.content, now, now);
-});
 
 export const store = {
   databasePath,
@@ -97,30 +94,68 @@ export const store = {
   getProject(id: number) {
     const row = sqlite.prepare("SELECT * FROM projects WHERE id = ?").get(id) as Row | undefined;
     if (!row) return undefined;
-    const files = sqlite.prepare("SELECT path, content FROM project_files WHERE project_id = ? ORDER BY path").all(id) as ProjectFile[];
-    return { ...projectRow(row), config: parseJson<Record<string, unknown> | undefined>(row.config, undefined), files: row.type === "git" ? [] : files };
+    const project = projectRow(row);
+    return { ...project, config: parseJson<Record<string, unknown> | undefined>(row.config, undefined), ...readWorkspace(project.workspacePath), publishedFiles: project.savedVersion ? readWorkspace(versionDirectory(id, project.savedVersion)).files : [], changes: workspaceChanges(id, project.workspacePath, project.savedVersion) };
   },
   createProject(input?: ProjectInput) {
     const value = input || { name: "Books to Scrape", type: "yaml" as const, target: "https://books.toscrape.com/", files: sampleFiles };
     const now = Date.now();
     const cron = value.cron?.trim() || null;
-    const result = sqlite.prepare(`INSERT INTO projects (name, type, git_url, config, cron, next_run_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    // Allocate the ID durably before filesystem work. A failed creation must not
+    // reuse an ID whose directory might contain recoverable files.
+    const result = sqlite.prepare(`INSERT INTO projects (name, type, git_url, config, cron, next_run_at, created_at, updated_at, workspace_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '')`).run(
       value.name, value.type, value.target, value.config ? JSON.stringify(value.config) : null, cron, cron ? nextCronTime(cron, now) : null, now, now,
     );
-    replaceFiles(Number(result.lastInsertRowid), value.type === "git" ? [] : (value.files || []));
-    return this.getProject(Number(result.lastInsertRowid))!;
+    const id = Number(result.lastInsertRowid);
+    try {
+      const root = initializeWorkspace(id, value.files || []);
+      const version = value.type === "git" ? null : captureVersion(id, root);
+      sqlite.prepare("UPDATE projects SET workspace_path = ?, saved_version = ? WHERE id = ?").run(root, version, id);
+    } catch (error) {
+      sqlite.prepare("DELETE FROM projects WHERE id = ?").run(id);
+      throw error;
+    }
+    return this.getProject(id)!;
   },
   updateProject(id: number, input: ProjectInput) {
+    assertWorkspaceIdle(id);
+    const current = this.getProject(id);
+    if (!current) return undefined;
+    if ((current.type === "git" || input.type === "git") && (input.type !== current.type || input.target !== current.target)) throw new Error("Create a new Git import to change repositories. Existing workspace files are kept.");
+    const workspace = writeWorkspace(current.workspacePath, input.files || [], input.revision || "");
+    const version = captureVersion(id, current.workspacePath, workspace.revision);
     const now = Date.now();
     const cron = input.cron?.trim() || null;
-    const result = sqlite.prepare(`UPDATE projects SET name = ?, type = ?, git_url = ?, config = ?, cron = ?, next_run_at = ?, updated_at = ? WHERE id = ?`).run(
-      input.name, input.type, input.target, input.config ? JSON.stringify(input.config) : null, cron, cron ? nextCronTime(cron, now) : null, now, id,
+    const result = sqlite.prepare(`UPDATE projects SET name = ?, type = ?, git_url = ?, config = ?, cron = ?, next_run_at = ?, updated_at = ?, saved_version = ? WHERE id = ?`).run(
+      input.name, input.type, input.target, input.config ? JSON.stringify(input.config) : null, cron, cron ? nextCronTime(cron, now) : null, now, version, id,
     );
     if (!result.changes) return undefined;
-    replaceFiles(id, input.type === "git" ? [] : (input.files || []));
+    return this.getProject(id);
+  },
+  saveWorkspace(id: number, files: ProjectFile[], revision: string) {
+    assertWorkspaceIdle(id);
+    const project = this.getProject(id);
+    if (!project) return undefined;
+    writeWorkspace(project.workspacePath, files, revision);
+    return this.getProject(id);
+  },
+  publishWorkspace(id: number, revision: string) {
+    assertWorkspaceIdle(id);
+    const project = this.getProject(id);
+    if (!project) return undefined;
+    const version = captureVersion(id, project.workspacePath, revision);
+    sqlite.prepare("UPDATE projects SET saved_version = ?, updated_at = ? WHERE id = ?").run(version, Date.now(), id);
+    return this.getProject(id);
+  },
+  revertWorkspace(id: number, revision: string) {
+    assertWorkspaceIdle(id);
+    const project = this.getProject(id);
+    if (!project?.savedVersion) throw new Error("No published version to restore.");
+    restoreVersion(id, project.workspacePath, project.savedVersion, revision);
     return this.getProject(id);
   },
   deleteProject(id: number) {
+    assertWorkspaceIdle(id);
     if (sqlite.prepare("SELECT 1 FROM jobs WHERE project_id = ? AND status = 'running'").get(id)) throw new Error("Cancel the running project before deleting it.");
     transaction(() => {
       for (const row of sqlite.prepare("SELECT id FROM jobs WHERE project_id = ?").all(id) as { id: number }[]) {
@@ -140,9 +175,12 @@ export const store = {
     return row ? jobRow(row) : undefined;
   },
   createJob(projectId: number, metadata: Record<string, unknown> = {}) {
-    if (!this.getProject(projectId)) return undefined;
+    const project = sqlite.prepare("SELECT saved_version FROM projects WHERE id = ?").get(projectId) as Row | undefined;
+    if (!project) return undefined;
+    const sourceVersion = metadata.assistantSample ? captureVersion(projectId, projectDirectory(projectId)) : project.saved_version;
+    if (!sourceVersion) throw new Error("Publish a project version before starting a run.");
     const now = Date.now();
-    const result = sqlite.prepare("INSERT INTO jobs (project_id, status, command, metadata, created_at, updated_at) VALUES (?, 'queued', ?, ?, ?, ?)").run(projectId, `python -m webuse.cli crawl project:${projectId}`, JSON.stringify(metadata), now, now);
+    const result = sqlite.prepare("INSERT INTO jobs (project_id, status, command, metadata, created_at, updated_at) VALUES (?, 'queued', ?, ?, ?, ?)").run(projectId, `python -m webuse.cli crawl project:${projectId}`, JSON.stringify({ ...metadata, sourceVersion }), now, now);
     return this.getJob(Number(result.lastInsertRowid));
   },
   claimJob() {
@@ -155,7 +193,7 @@ export const store = {
     })();
   },
   updateJobCommand(id: number, command: string) { sqlite.prepare("UPDATE jobs SET command = ?, updated_at = ? WHERE id = ?").run(command, Date.now(), id); },
-  finishJob(id: number, status: string, metadata: Record<string, unknown> = {}) { const now = Date.now(); sqlite.prepare("UPDATE jobs SET status = ?, finished_at = ?, metadata = ?, updated_at = ? WHERE id = ?").run(status, now, JSON.stringify(metadata), now, id); },
+  finishJob(id: number, status: string, metadata: Record<string, unknown> = {}) { const now = Date.now(); sqlite.prepare("UPDATE jobs SET status = ?, finished_at = ?, metadata = ?, updated_at = ? WHERE id = ?").run(status, now, JSON.stringify({ ...this.getJob(id)?.metadata, ...metadata }), now, id); },
   cancelQueuedJob(id: number) { const now = Date.now(); return sqlite.prepare("UPDATE jobs SET status = 'cancelled', finished_at = ?, updated_at = ? WHERE id = ? AND status = 'queued'").run(now, now, id).changes > 0; },
   appendLog(jobId: number, stream: "stdout" | "stderr", message: string) { sqlite.prepare("INSERT INTO logs (job_id, stream, message, created_at) VALUES (?, ?, ?, ?)").run(jobId, stream, message, Date.now()); },
   listLogs(jobId?: number, limit = 100, offset = 0) {
@@ -174,7 +212,7 @@ export const store = {
     return rows.map(row => ({ id: row.id, jobId: row.job_id, url: row.url || "", item: parseJson(row.item, {}), createdAt: displayDate(row.created_at) }));
   },
   enqueueDueJobs(now = Date.now()) {
-    const due = sqlite.prepare("SELECT id, cron FROM projects WHERE cron IS NOT NULL AND cron != '' AND next_run_at <= ? ORDER BY next_run_at, id").all(now) as { id: number; cron: string }[];
+    const due = sqlite.prepare("SELECT id, cron FROM projects WHERE saved_version IS NOT NULL AND cron IS NOT NULL AND cron != '' AND next_run_at <= ? ORDER BY next_run_at, id").all(now) as { id: number; cron: string }[];
     for (const project of due) {
       sqlite.prepare("UPDATE projects SET next_run_at = ?, updated_at = ? WHERE id = ?").run(nextCronTime(project.cron, now), now, project.id);
       if (!sqlite.prepare("SELECT 1 FROM jobs WHERE project_id = ? AND status IN ('queued', 'running')").get(project.id)) this.createJob(project.id, { scheduled: true, cron: project.cron, scheduledAt: now });

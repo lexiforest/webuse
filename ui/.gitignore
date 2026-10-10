@@ -27,6 +27,8 @@ webuse.sqlite
 webuse.sqlite-*
 webuse-ui.sqlite
 webuse-ui.sqlite-*
+workspaces/
+runs/
 
 # System Files
 .DS_Store

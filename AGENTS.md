@@ -46,12 +46,16 @@ browsers, CAPTCHA vendor integration, and the extraction API are planned work;
 do not imply that they are already available.
 
 The Python provider helpers already discover local LM Studio and Ollama servers.
-Built-in Chat embeds Pi's coding-agent SDK with Webuse-specific draft file,
-HTTP inspection, Python, sample crawl, and run inspection tools. Pi owns the agent
+Built-in Chat embeds Pi's coding-agent SDK with native filesystem and shell tools
+in persistent project directories, plus Webuse HTTP inspection, Python, sample
+crawl, and run inspection tools. Working source is stored on disk; SQLite owns
+metadata and published-version references. Chat edits persist immediately, while
+manual and scheduled jobs pin a published source snapshot at enqueue time.
+Sample jobs capture working files without publishing. Pi owns the agent
 loop, streaming, session context, retries, and compaction; keep this integration
 small instead of rebuilding those mechanisms. The UI and Node orchestrator remain
 Webuse-owned. The bundled skill lives in `ui/skills/webuse-crawlers/SKILL.md`.
-Model endpoints must support streaming OpenAI-compatible tool calls. Local Python
+Model endpoints must support streaming OpenAI-compatible tool calls. Local shell/Python
 tools run as the UI user; their time limits are not a security sandbox. Pi session
 entries persist in SQLite. Do not load ambient Pi extensions, skills, or credentials.
 The UI Chat currently uses configured settings; automatic discovery there, LLM
@@ -63,8 +67,9 @@ and Chat calls are not those services.
 
 - `src/webuse/__init__.py`: public Python exports.
 - `src/webuse/client.py`: thin curl_cffi session subclasses and top-level helpers.
-- `src/webuse/response.py`: curl_cffi response subclass with lazy HTML parsing.
-- `src/webuse/parser.py`: document and element selectors.
+- `src/webuse/response.py`: HTTP-to-document bridge, follow-up requests, and crawl metadata.
+- `src/webuse/parser.py`: lazy selectolax/Lexbor parsing, CSS selectors, and
+  Document's smart-extraction convenience methods.
 - `src/webuse/smart/`: smart extraction, selector persistence, and resolution.
 - `src/webuse/llm.py`: model configuration and client helpers.
 - `src/webuse/crawl/`: function-based sync/async crawl engines and crawl state.
@@ -202,7 +207,7 @@ The margin definition, vendor costs, and remaining allowances are still open.
 - When a refactor is needed, ask whether backward compatibility is required unless
   the user has already specified the compatibility requirements for that work.
 - Keep crawl logic function-based, with lightweight Spider and Pipeline idioms.
-- Preserve one or many seeds, queue discovery, depth tracking, CSS/XPath/callback
+- Preserve one or many seeds, queue discovery, depth tracking, CSS/callback
   follow rules, URL normalization before dedupe, scope filtering, and aggregation
   of results, errors, and stats.
 - Preserve config-driven and Python-spider crawling. Do not mistake persistent
@@ -212,6 +217,10 @@ The margin definition, vendor costs, and remaining allowances are still open.
   packaging metadata stays in `pyproject.toml`.
 - Plain selectors must work without an LLM. Keep deterministic selector matching
   before optional resolver/LLM fallback where applicable.
+- Use selectolax's Lexbor backend for HTML parsing. Support CSS selectors and
+  regex extraction, not XPath. `smart*()` extracts values through an LLM;
+  `find_element()` resolves one element and persists CSS selectors only.
+  Keep those operations separate across Python, CLI, and configuration.
 - Keep smart-selector storage configurable; the default is
   `.webuse/selectors.json`. Never commit generated selector state.
 - Preserve machine-friendly CLI output, including JSONL workflows, and align

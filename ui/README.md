@@ -28,8 +28,10 @@ stops with Ctrl+C. npm is not required. Use `--no-open`, `--port`, `--host`, and
 `--data-dir` as needed. The default bind address is `127.0.0.1`.
 
 Data defaults to `~/.webuse/ui` (or `WEBUSE_UI_DATA_DIR`): `webuse-ui.sqlite`
-stores projects/settings and `runs/` stores run files. `WEBUSE_DB_PATH` and
-`WEBUSE_WORK_DIR` override these paths. Crawlers use the launcher's active Python
+stores metadata/settings, `workspaces/` stores source and versions, and `runs/`
+stores run copies and outputs. `WEBUSE_DB_PATH`, `WEBUSE_WORKSPACE_DIR`, and
+`WEBUSE_WORK_DIR` override these paths. The workspace root defaults to a
+`workspaces` directory beside the database. Crawlers use the launcher's active Python
 interpreter unless `WEBUSE_PYTHON_COMMAND` is set.
 
 ## Develop from source
@@ -75,24 +77,64 @@ tool calls. Pi manages the tool loop, context compaction, retries, and cancellat
 Session entries and tool history are stored in the UI's SQLite database; ambient
 Pi configuration, extensions, and credentials are not loaded.
 
-Webuse provides `workspace_info`, `read_file`, `write_file`, `edit_file`,
-`delete_file`, `fetch_page`, `run_python`, `run_crawl`, and `inspect_run`.
-The bundled [crawler skill](skills/webuse-crawlers/SKILL.md) is readable through
-`read_file`. Page fetching uses Python/curl_cffi. Python checks run against
-temporary draft snapshots; source changes must use the file tools to persist.
+Pi's native `read`, `write`, `edit`, `bash`, `grep`, `find`, and `ls` tools operate
+in each project's persistent workspace. Webuse adds `workspace_info`,
+`fetch_page`, `run_python`, `run_crawl`, and `inspect_run`. The bundled
+[crawler skill](skills/webuse-crawlers/SKILL.md) is installed outside project
+source and readable through `read`; its path is provided in the prompt and
+discovery. Page fetching uses Python/curl_cffi. Python checks use the same
+workspace, so generated files remain available to later calls and local editors.
 Sample crawls enter the normal queue, and their logs and records appear in the
-dashboard. Neither edits nor samples change the saved project until the user
-clicks Save. The editor is read-only during a turn to prevent conflicting edits.
+dashboard. No web-search provider or browser tool is configured.
+
+### Working files and published versions
+
+The Files view displays the workspace path for opening it in an external editor.
+Chat edits persist immediately. Save files writes editor buffers to disk; Publish
+version saves the files and selects a source snapshot for manual and scheduled
+runs. Samples capture working files without publishing. Every job pins its source
+version when enqueued and executes an independent copy, so later edits or runtime
+writes do not change that job's source. New projects publish their initial files.
+Git imports clone once into an editable workspace; runs do not pull remote changes.
+Update the checkout explicitly, review it, then publish the new version.
+
+The editor polls for disk changes, reloads clean buffers, and preserves dirty
+buffers with a conflict notice. Saves and Chat submissions carry a content
+revision; stale submissions return HTTP 409. Reload files discards editor buffers
+after confirmation. Review shows published and working text; Revert files restores
+the published source after confirmation. API writes are blocked during a Chat turn.
+External tools should finish edits before publishing; this is a single-process
+local control plane, not a distributed editing service.
+
+Storage layout beneath `WEBUSE_WORKSPACE_DIR`:
+
+```text
+<project-id>/working/          # editable project files
+<project-id>/versions/<hash>/  # captured source, never edited by Webuse
+skills/webuse-crawlers/        # bundled skill, outside project snapshots
+```
+
+Snapshots preserve binary files and executable modes, support 100 MB and 10,000
+files, and exclude `.git`, `.venv`, `venv`, `node_modules`, `__pycache__`,
+`.pytest_cache`, `.ruff_cache`, `.mypy_cache`, `.DS_Store`, `.env`, `.env.*`
+(except `.env.example`), and `.webuse/selectors.json`. Supply credentials through
+runtime configuration; these filename exclusions are not secret detection.
+Symlinks and special files are rejected. Excluded files remain untouched by revert.
+Large and binary files omitted from the editor are preserved by editor saves.
+Back up both SQLite and the workspace tree. Deleting a project removes its database
+records but retains source directories for recovery; source/version cleanup is manual.
 
 The UI streams text/tool activity and offers Stop. A turn is limited to five
 minutes and 30 tool calls; Python checks have a 30-second limit and bounded
 output. Each turn can request three sample crawls, each limited to 10 requests
-and 60 seconds including queue time. Chat accepts at most 100 text files, 256 KB
-per file and 2 MB total. These limits bound routine local agent work; Python
-executes with the UI user's access and is not sandboxed. Cloud isolation,
+and 60 seconds including queue time. The browser editor previews at most 100 text
+files, 256 KB per file and 2 MB total; native tools can access larger files on disk.
+The editor is read-only during a Chat turn. Shell and Python execute with the UI
+user's access and are not sandboxed. Cloud isolation,
 resource accounting, and managed crawling services remain separate work.
 
-Run `npm test` for orchestration and mocked Pi tool-loop checks. The installed
+Run `npm test` for workspace/version behavior, orchestration, and mocked Pi native
+tool-loop checks. The installed
 wheel test in `scripts/smoke_ui.py` exercises Pi with a local mock model and real
 HTTP/Python/crawl tools; no external model calls are needed.
 
@@ -108,7 +150,9 @@ Both the wheel and source distribution carry the compiled UI. Building a wheel
 from the published source distribution requires no Node/npm build tools. Node is
 still required to run the UI. SQLite uses Node's built-in `node:sqlite`, so the
 bundle has no platform-specific SQLite addon. No legacy UI database/settings
-migration is provided.
+migration is provided. A database from before disk workspaces is rejected with
+an explanatory error; use a fresh `--data-dir` (or `WEBUSE_DB_PATH`). Existing
+database files are not migrated or deleted automatically.
 
 ## Local and cloud roadmap
 

@@ -21,10 +21,11 @@ assert.ok(project.nextRunAt);
 store.saveSettings({ llm: { model: "local-test" } });
 assert.equal((store.getSettings().llm as { model: string }).model, "local-test");
 assert.throws(transaction(() => {
-  sqlite.prepare("DELETE FROM project_files WHERE project_id = ?").run(project.id);
+  sqlite.prepare("UPDATE projects SET name = 'rollback' WHERE id = ?").run(project.id);
   throw new Error("rollback test");
 }), /rollback test/);
 assert.equal(store.getProject(project.id)!.files.length, 1);
+assert.equal(store.getProject(project.id)!.name, "Smoke");
 assert.equal(sqlite.isTransaction, false);
 const run = store.createJob(project.id);
 assert.ok(run);

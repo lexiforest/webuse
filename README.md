@@ -74,11 +74,14 @@ These are three views of the same crawler project:
 - **Dashboard** makes execution status, logs, and extracted records visible.
 
 Chat is powered by [Pi](https://pi.dev/), with Webuse tools and a bundled crawler
-skill. It can inspect pages, read and edit project drafts, execute Python checks,
+skill. It can inspect pages, read and edit project files, execute Python checks,
 run small crawls, and inspect their logs and records. Responses and tool activity
-stream into Chat; Stop cancels the current turn. Review the resulting files and
-Save to update the project. Sample crawls use drafts without changing its saved
-version or schedule. Python tools execute on your computer as the UI user.
+stream into Chat; Stop cancels the current turn. Chat edits persist in a local
+workspace that can also be opened in an external editor. Save files writes editor
+changes to that directory; Publish version captures the source used by manual
+and scheduled runs. Sample crawls capture working files without changing the
+published version. Review or revert unpublished changes in the editor. Pi file,
+shell, and Python tools execute on your computer as the UI user.
 
 Configure a streaming, tool-capable OpenAI-compatible model in Settings. Pi
 conversation context persists locally; no Pi account or separate Pi installation
@@ -111,7 +114,7 @@ with webuse.Client(impersonate="chrome", timeout=20) as client:
         print(link.attr("href"), link.text())
 ```
 
-Use `AsyncClient` and `await client.get(...)` for async requests. XPath and regex
+Use `AsyncClient` and `await client.get(...)` for async requests. Regex
 selectors are also available. Plain selectors work without an LLM.
 
 Clients inherit curl_cffi sessions and accept its native HTTP arguments, such as
@@ -123,7 +126,7 @@ The CLI supports the same basic workflow:
 
 ```bash
 uv run webuse fetch https://example.com --css "title"
-uv run webuse fetch https://example.com --xpath "//a" --jsonl
+uv run webuse fetch https://example.com --css "a" --jsonl
 ```
 
 See [smart selectors](docs/smart-selectors.rst) for model-backed extraction and

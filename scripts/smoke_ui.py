@@ -37,9 +37,9 @@ class Page(BaseHTTPRequestHandler):
         assert request["model"] == "smoke-model"
         assert request["stream"] is True
         calls = [
-            ("read_file", {"path": ".webuse/skills/webuse-crawlers/SKILL.md"}),
+            ("read", {"path": "webuse.yaml"}),
             ("fetch_page", {"url": f"http://127.0.0.1:{self.server.server_port}/"}),
-            ("write_file", {"path": "note.txt", "content": "Pi edited this draft."}),
+            ("write", {"path": "note.txt", "content": "Pi edited this workspace."}),
             ("run_python", {"code": "from pathlib import Path; print(Path('note.txt').read_text())"}),
             ("run_crawl", {"maxRequests": 1}),
         ]
@@ -137,7 +137,7 @@ def check_ui(directory: Path, target: str):
                 }}})
                 result = client.post(base + "/api/assistant-project", json={
                     "projectId": project["id"], "message": "Inspect, edit, and test this crawler.",
-                    "files": project["files"], "selectedPath": "webuse.yaml",
+                    "files": project["files"], "revision": project["revision"], "selectedPath": "webuse.yaml",
                 }, timeout=60)
                 result.raise_for_status()
                 events = [json.loads(line) for line in result.text.splitlines() if line]
@@ -150,16 +150,42 @@ def check_ui(directory: Path, target: str):
                 assert len(Page.model_requests) == 6, Page.model_requests
                 tool_messages = [message for message in Page.model_requests[-1]["messages"] if message["role"] == "tool"]
                 page_result = json.loads(tool_messages[1]["content"])
-                assert page_result["exitCode"] == 0, page_result
-                assert "Packaged UI smoke" in page_result["output"], page_result
+                assert page_result["status"] == 200, page_result
+                assert "Packaged UI smoke" in page_result["html"], page_result
                 python_result = json.loads(tool_messages[3]["content"])
                 assert python_result["exitCode"] == 0, python_result
-                assert "Pi edited this draft" in python_result["output"], python_result
+                assert "Pi edited this workspace" in python_result["output"], python_result
+                refreshed = api("GET", f"/api/projects?id={project['id']}")["project"]
+                assert refreshed["savedVersion"] == project["savedVersion"]
+                assert (Path(refreshed["workspacePath"]) / "note.txt").read_text() == "Pi edited this workspace."
                 crawl_result = json.loads(tool_messages[4]["content"])
                 assert crawl_result["status"] == "succeeded", crawl_result
                 assert crawl_result["records"][0]["title"] == "Packaged UI smoke", crawl_result
                 history = api("GET", f"/api/assistant-project?project_id={project['id']}")
                 assert history["messages"][-1]["metadata"]["toolResults"], history
+                # Exercise the public workspace API, including conflicts and publication.
+                stale = client.patch(base + f"/api/projects?id={project['id']}", json={
+                    "files": project["files"], "revision": project["revision"],
+                }, timeout=5)
+                assert stale.status_code == 409, stale.text
+                workspace_file = Path(refreshed["workspacePath"]) / "note.txt"
+                assert workspace_file.exists()
+                saved = api("PATCH", f"/api/projects?id={project['id']}", json={
+                    "files": refreshed["files"] + [{"path": "editor.txt", "content": "saved on disk"}],
+                    "revision": refreshed["revision"],
+                })["project"]
+                assert saved["savedVersion"] == project["savedVersion"]
+                assert (Path(saved["workspacePath"]) / "editor.txt").read_text() == "saved on disk"
+                published = api("PUT", f"/api/projects?id={project['id']}", json=saved)["project"]
+                assert published["savedVersion"] != project["savedVersion"]
+                workspace_file.write_text("external editor")
+                changed = api("GET", f"/api/projects?id={project['id']}")["project"]
+                assert changed["revision"] != published["revision"]
+                reverted = api("PATCH", f"/api/projects?id={project['id']}", json={
+                    "action": "revert", "revision": changed["revision"],
+                })["project"]
+                assert not reverted["changes"]
+                assert workspace_file.read_text() == "Pi edited this workspace."
                 assert (directory / "state" / "webuse-ui.sqlite").is_file()
         except BaseException:
             print(log.read_text(), file=sys.stderr)

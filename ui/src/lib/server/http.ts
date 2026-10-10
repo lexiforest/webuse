@@ -1,5 +1,5 @@
 import type { APIEvent } from "@solidjs/start/server";
-import { isAbsolute, normalize, sep } from "node:path";
+import { validFilePath } from "./workspace";
 import { validCron } from "./cron";
 import type { ProjectFile, ProjectInput } from "./store";
 
@@ -17,10 +17,8 @@ export function projectFiles(value: unknown): ProjectFile[] | undefined {
   for (const entry of value) {
     if (!entry || typeof entry !== "object") return undefined;
     const { path, content } = entry as Record<string, unknown>;
-    if (typeof path !== "string" || typeof content !== "string" || !path || isAbsolute(path)) return undefined;
-    const clean = normalize(path);
-    if (clean === ".." || clean.startsWith(`..${sep}`) || seen.has(clean)) return undefined;
-    seen.add(clean); files.push({ path: clean, content });
+    if (typeof path !== "string" || typeof content !== "string" || !validFilePath(path) || seen.has(path)) return undefined;
+    seen.add(path); files.push({ path, content });
   }
   return files;
 }
@@ -30,8 +28,8 @@ export function projectInput(value: Record<string, unknown> | undefined): { inpu
   if (typeof value.target !== "string" || !value.target.trim()) return { error: "Project target is required." };
   const cron = typeof value.cron === "string" ? value.cron.trim() : "";
   if (cron && !validCron(cron)) return { error: "Project cron must be a valid five-field cron expression." };
+  if (!Array.isArray(value.files)) return { error: "Project files must be an array." };
   const files = projectFiles(value.files);
   if (!files) return { error: "Project files contain an invalid or duplicate path." };
-  if (value.type !== "git" && files.length === 0) return { error: "A local project must contain at least one file." };
-  return { input: { name: value.name.trim(), type: value.type, target: value.target.trim(), cron, config: value.config && typeof value.config === "object" && !Array.isArray(value.config) ? value.config as Record<string, unknown> : undefined, files } };
+  return { input: { name: value.name.trim(), type: value.type, target: value.target.trim(), cron, config: value.config && typeof value.config === "object" && !Array.isArray(value.config) ? value.config as Record<string, unknown> : undefined, files, revision: typeof value.revision === "string" ? value.revision : undefined } };
 }

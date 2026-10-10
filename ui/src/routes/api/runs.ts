@@ -11,8 +11,10 @@ export function GET(event: APIEvent) {
 export async function POST(event: APIEvent) {
   ensureOrchestrator(); const value = await body(event); const projectId = Number(value?.projectId);
   if (!Number.isInteger(projectId) || projectId < 1) return json({ error: "A valid projectId is required." }, 400);
-  const run = store.createJob(projectId); if (!run) return json({ error: "Project not found." }, 404);
-  ensureOrchestrator(); return json({ run }, 201);
+  try {
+    const run = store.createJob(projectId); if (!run) return json({ error: "Project not found." }, 404);
+    ensureOrchestrator(); return json({ run }, 201);
+  } catch (error) { return json({ error: error instanceof Error ? error.message : String(error) }, 409); }
 }
 export function DELETE(event: APIEvent) {
   ensureOrchestrator(); const id = queryInt(event, "id"); if (!id) return json({ error: "A valid run id is required." }, 400);

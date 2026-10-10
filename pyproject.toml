@@ -20,12 +20,11 @@ classifiers = [
 ]
 dependencies = [
   "curl_cffi>=0.16.0",
-  "lxml>=5.0.0",
-  "cssselect>=1.2.0",
   "PyYAML>=6.0.0",
   "openai>=2.40.0",
   "pydantic>=2.13.4",
   "loguru>=0.7.3",
+  "selectolax>=1.0.0",
 ]
 
 [project.optional-dependencies]
