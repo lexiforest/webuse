@@ -15,12 +15,19 @@ def test_missing_bundle_has_source_build_instructions(monkeypatch, tmp_path):
         ui._bundle_entrypoint()
 
 
-@pytest.mark.parametrize("version", ["v18.20.0", "v22.15.0", "unexpected"])
+@pytest.mark.parametrize("version", ["v18.20.0", "v22.15.0", "v22.18.0", "v22.19", "v22.19.0-rc.1", "unexpected"])
 def test_reject_unsupported_node(monkeypatch, version):
     monkeypatch.setattr(ui.shutil, "which", lambda _: "/bin/node")
     monkeypatch.setattr(ui.subprocess, "run", lambda *a, **kw: SimpleNamespace(stdout=version))
-    with pytest.raises(SystemExit, match=r"Node.js 24\+"):
+    with pytest.raises(SystemExit, match=r"Node.js 22\.19\+"):
         ui._node_command()
+
+
+@pytest.mark.parametrize("version", ["v22.19.0", "v22.20.0", "v24.0.0", "v26.0.0"])
+def test_accept_supported_node(monkeypatch, version):
+    monkeypatch.setattr(ui.shutil, "which", lambda _: "/bin/node")
+    monkeypatch.setattr(ui.subprocess, "run", lambda *a, **kw: SimpleNamespace(stdout=version))
+    assert ui._node_command() == "/bin/node"
 
 
 def test_missing_node_is_actionable(monkeypatch):

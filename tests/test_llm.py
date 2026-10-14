@@ -133,15 +133,15 @@ def test_cli_startup_detects_local_openai_defaults_for_llm(monkeypatch, capsys):
     class FakeResponse:
         url = "https://example.com"
 
-        def smart(self, prompt, **kwargs):
+        def llm_extract(self, prompt, **kwargs):
             captured["prompt"] = prompt
             captured["kwargs"] = kwargs
             return ["Local answer"]
 
     monkeypatch.setattr(llm.requests, "get", fake_get)
-    monkeypatch.setattr(cli, "request", lambda *args, **kwargs: FakeResponse())
+    monkeypatch.setattr("webuse.cli.fetch.request", lambda *args, **kwargs: FakeResponse())
 
-    code = cli.main(["fetch", "https://example.com", "--smart", "Extract title"])
+    code = cli.main(["fetch", "https://example.com", "--llm-extract", "Extract title"])
     out = capsys.readouterr().out.strip()
 
     assert code == 0

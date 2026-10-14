@@ -1,7 +1,7 @@
 import asyncio
 
 from webuse.models import FollowRule
-from webuse.response import Response
+from webuse.http import Response
 from webuse.spider import AsyncSpider
 
 from crawl_helpers import (
@@ -13,7 +13,7 @@ def test_async_spider_run_is_async_entrypoint():
     class ExampleSpider(AsyncSpider):
         start_urls = ["https://example.com"]
         follow = [FollowRule(css="a.next", same_domain=True)]
-        extract = {"title": "h1"}
+        extract = {"default": {"page": {"fields": {"title": "h1"}}}}
         max_depth = 1
 
         async def parse(self, response):
@@ -151,7 +151,7 @@ def test_async_spider_parse_can_yield_items_and_follow_requests():
         max_depth = 1
 
         async def parse(self, response):
-            yield {"title": response.css_first("h1").text()}
+            yield {"title": response.css_find("h1").text()}
             if response.url == "https://example.com/":
                 yield response.follow("/page-1")
 
@@ -173,7 +173,7 @@ def test_async_spider_routes_follow_request_by_category():
             yield response.follow("/page-1", category="detail")
 
         async def parse_detail(self, response):
-            yield {"detail": response.css_first("h1").text()}
+            yield {"detail": response.css_find("h1").text()}
 
     async def run_spider():
         return await ExampleSpider().run(client=AsyncFakeClient())

@@ -22,7 +22,7 @@ def _bundle_entrypoint() -> Path:
     if not entrypoint.is_file() or not (root / "public").is_dir():
         raise SystemExit(
             "The compiled UI is missing. Install a released webuse package, or "
-            "run `uv build` from a source checkout with Node.js 24+ and npm. "
+            "run `uv build` from a source checkout with Node.js 22.19+ and npm. "
             "For UI development, run `npm run dev` in ui/."
         )
     return entrypoint
@@ -31,16 +31,16 @@ def _bundle_entrypoint() -> Path:
 def _node_command() -> str:
     command = shutil.which("node")
     if not command:
-        raise SystemExit("webuse ui requires Node.js 24+ on PATH. npm is not required to run the packaged UI.")
+        raise SystemExit("webuse ui requires Node.js 22.19+ on PATH. npm is not required to run the packaged UI.")
     try:
         result = subprocess.run(
             [command, "--version"], capture_output=True, text=True, check=True
         )
     except (OSError, subprocess.CalledProcessError) as error:
         raise SystemExit(f"Could not run Node.js: {error}") from error
-    version = re.match(r"v?(\d+)\.", result.stdout.strip())
-    if version is None or int(version.group(1)) < 24:
-        raise SystemExit(f"webuse ui requires Node.js 24+; found {result.stdout.strip()!r}.")
+    version = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", result.stdout.strip())
+    if version is None or tuple(map(int, version.groups())) < (22, 19, 0):
+        raise SystemExit(f"webuse ui requires Node.js 22.19+; found {result.stdout.strip()!r}.")
     return command
 
 

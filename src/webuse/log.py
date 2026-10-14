@@ -27,6 +27,7 @@ def configure_logger(
         level=(level or os.environ.get("WEBUSE_LOG_LEVEL", DEFAULT_LOG_LEVEL)).upper(),
         format=DEFAULT_LOG_FORMAT,
         colorize=colorize,
+        diagnose=False,
         **(
             {"mode": "a" if append else "w"}
             if isinstance(sink, (str, os.PathLike))

@@ -1,10 +1,120 @@
+import csv
+import json
 import sqlite3
 
 import pytest
 
 from webuse import cli
 from webuse.models import CrawlResult, CrawlStats
-from webuse.response import Response
+from webuse.http import Response
+
+
+@pytest.mark.parametrize("asynchronous", [False, True])
+@pytest.mark.parametrize("extension", ["jsonl", "csv", "sqlite"])
+def test_output_streams_processed_items_across_spiders(
+    tmp_path, monkeypatch, asynchronous, extension
+):
+    import importlib
+    from pydantic import BaseModel
+    from webuse import AsyncSpider, Spider
+    from webuse.exceptions import DropItem
+    from webuse.pipelines import ItemPipeline
+    from webuse.spider import aio, sync
+
+    command = importlib.import_module("webuse.cli.crawl")
+    (tmp_path / "webuse.yaml").write_text(
+        "spiders:\n  first: first.py\n  second: second.py\n"
+    )
+    monkeypatch.chdir(tmp_path)
+    output = tmp_path / f"items.{extension}"
+
+    class Item(BaseModel):
+        title: str
+
+    class Clean(ItemPipeline):
+        def process_item(self, item):
+            if item.title == "drop":
+                raise DropItem("excluded")
+            return item.model_copy(update={"title": item.title.upper()})
+
+    class Example(AsyncSpider if asynchronous else Spider):
+        item_model = Item
+        pipelines = [Clean()]
+
+        def parse(self, response):
+            return [{"title": response.text}, {"title": "drop"}]
+
+    monkeypatch.setattr(command, "_load_spider", lambda *args, **kwargs: Example())
+    processed_count = 0
+
+    def read_records():
+        if extension == "jsonl":
+            return [json.loads(line) for line in output.read_text().splitlines()]
+        if extension == "csv":
+            with output.open() as file:
+                return list(csv.DictReader(file))
+        with sqlite3.connect(output) as connection:
+            return [
+                json.loads(row[0])
+                for row in connection.execute("SELECT data FROM items ORDER BY id")
+            ]
+
+    def check_output(parsed):
+        nonlocal processed_count
+        processed_count += 1
+        assert read_records() == [{"title": "KEPT"}] * processed_count
+        return CrawlResult(items=parsed.items)
+
+    def fake_crawl(seeds, **options):
+        return check_output(options["extract"](Response(content=b"kept")))
+
+    async def fake_acrawl(seeds, **options):
+        return check_output(await options["extract"](Response(content=b"kept")))
+
+    monkeypatch.setattr(sync, "crawl", fake_crawl)
+    monkeypatch.setattr(aio, "acrawl", fake_acrawl)
+    args = ["crawl", "-o", str(output)]
+    if asynchronous:
+        args.append("--async")
+    assert cli.main(args) == 0
+    assert read_records() == [{"title": "KEPT"}, {"title": "KEPT"}]
+
+
+@pytest.mark.parametrize("base", ["Spider", "AsyncSpider"])
+@pytest.mark.parametrize("explicit_class", [False, True])
+@pytest.mark.parametrize("command", [[], ["--async"]])
+def test_crawl_loads_both_spider_types(tmp_path, capsys, base, explicit_class, command):
+    path = tmp_path / "example.py"
+    run_prefix = "async " if base == "AsyncSpider" else ""
+    path.write_text(
+        "from webuse.spider import Spider, AsyncSpider\n"
+        "from webuse.spider.base import BaseSpider\n"
+        "from webuse.models import CrawlResult, CrawlStats\n\n"
+        f"class ExampleSpider({base}):\n"
+        f"    {run_prefix}def run(self, **overrides):\n"
+        "        return CrawlResult(items=[{'title': 'Loaded'}], stats=CrawlStats())\n"
+    )
+    target = f"{path}:ExampleSpider" if explicit_class else str(path)
+    (tmp_path / "webuse.yaml").write_text(f"spiders:\n  example: '{target}'\n")
+    output = tmp_path / "items.jsonl"
+
+    assert cli.main(
+        ["crawl", str(tmp_path), "--spider", "example", "-o", str(output), *command]
+    ) == 0
+    assert capsys.readouterr().out == ""
+    assert output.read_text() == '{"title": "Loaded"}\n'
+
+
+@pytest.mark.parametrize("explicit_class", [False, True])
+def test_crawl_rejects_base_spider_as_execution_target(tmp_path, explicit_class):
+    from webuse.cli.crawl import _load_spider
+
+    path = tmp_path / "base_only.py"
+    path.write_text("from webuse.spider.base import BaseSpider\n")
+    target = f"{path}:BaseSpider" if explicit_class else str(path)
+
+    with pytest.raises(SystemExit, match="webuse.Spider or webuse.AsyncSpider"):
+        _load_spider(target, project_dir=tmp_path)
 
 
 @pytest.mark.parametrize("command", [[], ["--async"]])
@@ -28,7 +138,7 @@ def test_project_request_limit_is_shared_across_spiders(tmp_path, monkeypatch, c
 
     monkeypatch.setattr(sync_module, "crawl", fake_crawl)
     monkeypatch.setattr(aio_module, "acrawl", fake_acrawl)
-    assert cli.main(["crawl", str(config), "--max-requests", "2", *command]) == 0
+    assert cli.main(["crawl", str(tmp_path), "--max-requests", "2", *command]) == 0
     assert observed == [
         (["https://example.com/first"], 2),
         (["https://example.com/second"], 1),
@@ -39,240 +149,6 @@ def test_project_request_limit_is_shared_across_spiders(tmp_path, monkeypatch, c
 def test_request_limit_must_be_positive(command):
     with pytest.raises(SystemExit, match="must be positive"):
         cli.main(["crawl", "https://example.com", "--max-requests", "0", *command])
-
-
-def test_crawl_command_runs_standalone_url_with_multiple_fields(
-    tmp_path, monkeypatch, capsys
-):
-    from webuse.spider import sync as sync_module
-
-    output = tmp_path / "items.jsonl"
-
-    def fake_crawl(start_urls, **options):
-        response = Response(
-            url=start_urls[0],
-            status_code=200,
-            content=b"<html><body><h1>Home</h1><p>$1.00</p></body></html>",
-        )
-        return CrawlResult(items=options["extract"](response), stats=CrawlStats())
-
-    monkeypatch.setattr(sync_module, "crawl", fake_crawl)
-
-    code = cli.main(
-        [
-            "crawl",
-            "https://example.com/",
-            "--css",
-            "title=h1",
-            "--css",
-            "price=p",
-            "-o",
-            str(output),
-        ]
-    )
-    out = capsys.readouterr().out
-
-    assert code == 0
-    assert out == ""
-    assert output.read_text(encoding="utf-8") == '{"title": "Home", "price": "$1.00"}\n'
-
-
-def test_crawl_command_runs_standalone_url_with_item_css(tmp_path, monkeypatch, capsys):
-    from webuse.spider import sync as sync_module
-
-    output = tmp_path / "items.jsonl"
-
-    def fake_crawl(start_urls, **options):
-        response = Response(
-            url=start_urls[0],
-            status_code=200,
-            content=b"""
-<html><body>
-  <article class="product">
-    <h3><a title="One">One</a></h3>
-    <p class="price">$1.00</p>
-  </article>
-  <article class="product">
-    <h3><a title="Two">Two</a></h3>
-  </article>
-</body></html>
-""",
-        )
-        return CrawlResult(items=options["extract"](response), stats=CrawlStats())
-
-    monkeypatch.setattr(sync_module, "crawl", fake_crawl)
-
-    code = cli.main(
-        [
-            "crawl",
-            "https://example.com/",
-            "--item-css",
-            ".product",
-            "--css",
-            "title=h3 a",
-            "--attr",
-            "title=title",
-            "--css",
-            "price=.price",
-            "-o",
-            str(output),
-        ]
-    )
-    out = capsys.readouterr().out
-
-    assert code == 0
-    assert out == ""
-    assert output.read_text(encoding="utf-8").splitlines() == [
-        '{"title": "One", "price": "$1.00"}',
-        '{"title": "Two", "price": null}',
-    ]
-
-
-def test_crawl_command_runs_standalone_url_with_attr_and_all(
-    tmp_path, monkeypatch, capsys
-):
-    from webuse.spider import sync as sync_module
-
-    output = tmp_path / "items.jsonl"
-
-    def fake_crawl(start_urls, **options):
-        response = Response(
-            url=start_urls[0],
-            status_code=200,
-            content=b"""
-<html><body>
-  <a href="/one">One</a>
-  <a href="/two">Two</a>
-</body></html>
-""",
-        )
-        return CrawlResult(items=options["extract"](response), stats=CrawlStats())
-
-    monkeypatch.setattr(sync_module, "crawl", fake_crawl)
-
-    code = cli.main(
-        [
-            "crawl",
-            "https://example.com/",
-            "--css",
-            "links=a",
-            "--attr",
-            "links=href",
-            "--all",
-            "links",
-            "-o",
-            str(output),
-        ]
-    )
-    out = capsys.readouterr().out
-
-    assert code == 0
-    assert out == ""
-    assert (
-        output.read_text(encoding="utf-8")
-        == '{"links": ["https://example.com/one", "https://example.com/two"]}\n'
-    )
-
-
-def test_crawl_command_maps_standalone_request_options(monkeypatch, capsys):
-    from webuse.spider import sync as sync_module
-
-    captured = {}
-
-    def fake_crawl(start_urls, **options):
-        captured["start_urls"] = start_urls
-        captured["options"] = options
-        return CrawlResult(stats=CrawlStats())
-
-    monkeypatch.setattr(sync_module, "crawl", fake_crawl)
-
-    code = cli.main(
-        [
-            "crawl",
-            "https://example.com/",
-            "--css",
-            "title=h1",
-            "--header",
-            "X-Test=yes",
-            "--param",
-            "page=1",
-            "--timeout",
-            "3.5",
-        ]
-    )
-    _ = capsys.readouterr()
-
-    assert code == 0
-    assert captured["start_urls"] == ["https://example.com/"]
-    request_defaults = captured["options"]["request_defaults"]
-    assert "impersonate" not in request_defaults
-    assert request_defaults["headers"] == {"X-Test": "yes"}
-    assert request_defaults["params"] == {"page": "1"}
-    assert request_defaults["timeout"] == 3.5
-
-
-def test_crawl_command_maps_standalone_follow_options(monkeypatch, capsys):
-    from webuse.spider import sync as sync_module
-
-    captured = {}
-
-    def fake_crawl(start_urls, **options):
-        captured["options"] = options
-        return CrawlResult(stats=CrawlStats())
-
-    monkeypatch.setattr(sync_module, "crawl", fake_crawl)
-
-    code = cli.main(
-        [
-            "crawl",
-            "https://example.com/",
-            "--follow-css",
-            "a.next",
-            "--follow-css",
-            "a",
-            "--follow-attr",
-            "data-href",
-            "--same-domain",
-            "--allowed-domain",
-            "example.com",
-            "--robots-txt",
-            "--max-depth",
-            "1",
-        ]
-    )
-    _ = capsys.readouterr()
-
-    assert code == 0
-    options = captured["options"]
-    assert options["max_depth"] == 1
-    assert options["robots_txt"] is True
-    assert options["allowed_domains"] == {"example.com"}
-    assert len(options["follow"]) == 2
-    assert options["follow"][0].css == "a.next"
-    assert options["follow"][1].css == "a"
-    assert all(rule.attr == "data-href" for rule in options["follow"])
-    assert all(rule.same_domain for rule in options["follow"])
-
-
-def test_crawl_command_rejects_spider_with_url_target():
-    with pytest.raises(SystemExit) as exc:
-        cli.main(["crawl", "https://example.com/", "--spider", "books"])
-
-    assert "--spider" in str(exc.value)
-
-
-def test_crawl_command_rejects_standalone_options_without_url_target(cli_project):
-    with pytest.raises(SystemExit) as exc:
-        cli.main(["crawl", str(cli_project.root), "--css", "title=h1"])
-
-    assert "URL crawl target" in str(exc.value)
-
-
-def test_crawl_command_rejects_malformed_css_field():
-    with pytest.raises(SystemExit) as exc:
-        cli.main(["crawl", "https://example.com/", "--css", "missing-equals"])
-
-    assert "KEY=VALUE" in str(exc.value)
 
 
 def test_crawl_command_runs_spider_name_from_project_to_output_file(
@@ -327,37 +203,7 @@ def test_crawl_command_passes_attributes_to_spider(cli_project, monkeypatch, cap
     )
 
 
-def test_crawl_command_passes_file_state_to_spider(
-    tmp_path, cli_project, monkeypatch, capsys
-):
-    cli_project.write_default_spider(
-        item_fields="queue: str\n    seen: str",
-        run_body=(
-            'queue = kwargs["request_queue"]\n'
-            '        seen = kwargs["request_seen"]\n'
-            "        return CrawlResult("
-            "items=[Item(queue=queue.__class__.__name__, seen=seen.__class__.__name__)], "
-            "stats=CrawlStats())"
-        ),
-    )
-    output = cli_project.root / "test.jsonl"
-    state = tmp_path / "state"
-    monkeypatch.chdir(cli_project.root)
-
-    code = cli.main(
-        ["crawl", "--spider", "books", "--state", str(state), "-o", str(output)]
-    )
-    out = capsys.readouterr().out
-
-    assert code == 0
-    assert out == ""
-    assert (
-        output.read_text(encoding="utf-8")
-        == '{"queue": "FileRequestQueue", "seen": "FileRequestSeen"}\n'
-    )
-
-
-def test_crawl_command_rejects_state_with_async(tmp_path, cli_project, monkeypatch):
+def test_crawl_command_rejects_state_with_async(cli_project, monkeypatch):
     cli_project.write_spider(
         """import webuse
 
@@ -376,7 +222,7 @@ class BooksSpider(webuse.AsyncSpider):
                 "books",
                 "--async",
                 "--state",
-                str(tmp_path / "state"),
+                "redis://localhost:6379/0",
             ]
         )
 
@@ -536,7 +382,7 @@ def test_crawl_command_does_not_search_upwards_for_project(cli_project, monkeypa
     with pytest.raises(SystemExit) as exc:
         cli.main(["crawl", "--spider", "books"])
 
-    assert "cannot find spider" in str(exc.value)
+    assert "cannot find webuse.yaml" in str(exc.value)
 
 
 def test_crawl_command_runs_importable_spider_module(
@@ -549,7 +395,8 @@ def test_crawl_command_runs_importable_spider_module(
     output = tmp_path / "test.jsonl"
     monkeypatch.chdir(tmp_path)
 
-    code = cli.main(["crawl", "--spider", "project.spiders.books", "-o", str(output)])
+    (cli_project.root / "webuse.toml").write_text('spiders = {books = {module = "project.spiders.books"}}\n')
+    code = cli.main(["crawl", str(cli_project.root), "--spider", "books", "-o", str(output)])
     out = capsys.readouterr().out
 
     assert code == 0
@@ -576,7 +423,7 @@ def test_crawl_command_runs_async_spider_target_to_output_file(
     assert output.read_text(encoding="utf-8") == '{"title": "Async One"}\n'
 
 
-def test_crawl_command_runs_standalone_yaml_config_to_output_file(
+def test_crawl_command_runs_registered_yaml_config_to_output_file(
     tmp_path, monkeypatch, capsys
 ):
     from webuse.spider import sync as sync_module
@@ -605,11 +452,12 @@ pages:
             status_code=200,
             content=b"<html><body><h1>Home</h1></body></html>",
         )
-        return CrawlResult(items=options["extract"](response), stats=CrawlStats())
+        return CrawlResult(items=options["extract"](response).items, stats=CrawlStats())
 
     monkeypatch.setattr(sync_module, "crawl", fake_crawl)
 
-    code = cli.main(["crawl", str(config), "-o", str(output)])
+    (tmp_path / "webuse.yaml").write_text("spiders:\n  books:\n    config: books.yaml\n")
+    code = cli.main(["crawl", str(tmp_path), "-o", str(output)])
     out = capsys.readouterr().out
 
     assert code == 0
@@ -617,7 +465,7 @@ pages:
     assert output.read_text(encoding="utf-8") == '{"title": "Home", "_type": "page"}\n'
 
 
-def test_crawl_command_runs_standalone_config_from_directory_and_spider_name(
+def test_crawl_command_runs_registered_config_from_directory_and_spider_name(
     tmp_path, monkeypatch, capsys
 ):
     from webuse.spider import sync as sync_module
@@ -645,12 +493,13 @@ pages:
             status_code=200,
             content=b"<html><body><h1>Home</h1></body></html>",
         )
-        return CrawlResult(items=options["extract"](response), stats=CrawlStats())
+        return CrawlResult(items=options["extract"](response).items, stats=CrawlStats())
 
     monkeypatch.setattr(sync_module, "crawl", fake_crawl)
 
+    (tmp_path / "webuse.yaml").write_text("spiders:\n  books: books.yaml\n")
     code = cli.main(
-        ["crawl", str(tmp_path), "--spider", "books.yaml", "-o", str(output)]
+        ["crawl", str(tmp_path), "--spider", "books", "-o", str(output)]
     )
     out = capsys.readouterr().out
 

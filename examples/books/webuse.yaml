@@ -1,0 +1,4 @@
+name: books
+spiders:
+  books:
+    path: spiders/books.py

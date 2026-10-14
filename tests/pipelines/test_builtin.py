@@ -8,7 +8,7 @@ import webuse
 from webuse.pipelines import (
     AssetDownloadPipeline,
     WebhookPipeline,
-    resolve_pipeline,
+    create_pipeline,
 )
 from webuse.spider import Spider
 
@@ -26,7 +26,7 @@ from crawl_helpers import (
 def test_builtin_csv_pipeline(tmp_path):
     class CsvSpider(Spider):
         start_urls = ["https://example.com"]
-        extract = {"title": "h1"}
+        extract = {"default": {"page": {"fields": {"title": "h1"}}}}
         item_model = SampleItem
         pipelines = [{"type": "csv", "path": tmp_path / "items.csv"}]
 
@@ -42,7 +42,7 @@ def test_builtin_sqlite_pipeline(tmp_path):
     class SQLiteSpider(Spider):
         name = "sqlite-spider"
         start_urls = ["https://example.com"]
-        extract = {"title": "h1"}
+        extract = {"default": {"page": {"fields": {"title": "h1"}}}}
         item_model = SampleItem
         pipelines = [
             {"type": "sqlite", "path": tmp_path / "items.sqlite", "table": "records"}
@@ -85,7 +85,7 @@ def test_builtin_asset_download_pipeline_downloads_assets(tmp_path):
 def test_builtin_asset_download_pipeline_resolves_from_config_spec(tmp_path):
     url = "https://cdn.example.com/files/spec.pdf"
     session = FakeAssetSession(FakeAssetResponse(content=b"pdf"))
-    pipeline = resolve_pipeline(
+    pipeline = create_pipeline(
         {
             "type": "assets",
             "directory": tmp_path / "downloads",
@@ -127,7 +127,7 @@ def test_builtin_webhook_pipeline_sends_each_item():
 
     class WebhookSpider(Spider):
         start_urls = ["https://example.com"]
-        extract = {"title": "h1"}
+        extract = {"default": {"page": {"fields": {"title": "h1"}}}}
         item_model = SampleItem
         pipelines = [
             WebhookPipeline(
@@ -156,7 +156,7 @@ def test_builtin_webhook_pipeline_sends_each_item():
 
 def test_builtin_webhook_pipeline_resolves_from_config_spec():
     session = FakeWebhookSession()
-    pipeline = resolve_pipeline(
+    pipeline = create_pipeline(
         {
             "type": "webhook",
             "url": "https://webhook.example/items",

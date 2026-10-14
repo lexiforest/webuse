@@ -65,26 +65,40 @@ Current scheduling uses fixed cron expressions. Agentic scheduling and the
 integrated cloud LLM API are not implemented; existing model-provider helpers
 and Chat calls are not those services.
 
+Separately, `AgenticSpider` / `agentic_crawl()` use the goal to drive follow-up
+requests and extraction through Python tools. Reuse `RequestQueue`, `RequestSeen`,
+and `RequestHasher`. The model uses `queue_push`, `queue_pop`, `seen_add`, and
+`seen_exist`; `queue_pop` releases the current request and downloads the next one.
+The engine stops on an empty queue with no active request, without an LLM finish
+decision. Declared output models, cross-page drafts, and the total token budget
+remain supported. This uses the existing Python project/CLI/pipeline
+workflow, independently of Chat. Keep it distinct from future LLM scheduling.
+Model-written Python, browser actions, durable resume, and a dedicated trace UI
+are not implemented. Custom project tools are trusted code, not sandboxed tools.
+
 - `src/webuse/__init__.py`: public Python exports.
-- `src/webuse/client.py`: thin curl_cffi session subclasses and top-level helpers.
-- `src/webuse/response.py`: HTTP-to-document bridge, follow-up requests, and crawl metadata.
-- `src/webuse/parser.py`: lazy selectolax/Lexbor parsing, CSS selectors, and
+- `src/webuse/http/client.py`: thin curl_cffi session subclasses and top-level helpers.
+- `src/webuse/http/response.py`: HTTP-to-document bridge, follow-up requests, and crawl metadata.
+- `src/webuse/extract/parser.py`: lazy selectolax/Lexbor parsing, CSS selectors, and
   Document's smart-extraction convenience methods.
-- `src/webuse/smart/`: smart extraction, selector persistence, and resolution.
+- `src/webuse/extract/`: HTML parsing, declarative extraction, response-handler result adapters,
+  LLM value extraction, and element resolution.
 - `src/webuse/llm.py`: model configuration and client helpers.
-- `src/webuse/crawl/`: function-based sync/async crawl engines and crawl state.
-- `src/webuse/spider/`: sync/async Spider classes.
-- `src/webuse/pipelines/`: pipeline interfaces and built-in item destinations.
+- `src/webuse/engine/`: function-based sync/async crawl engines and crawl state.
+- `src/webuse/spider/`: shared configuration, per-run state, and sync/async Spider classes.
+- `src/webuse/pipelines/`: ItemPipeline, internal execution helpers, and built-in item destinations.
 - `src/webuse/cli/`: project creation, generation, fetch, crawl, WebSocket commands,
   and the `webuse ui` launcher for the packaged Node control plane.
 - `setup.py`: release build hooks; compile the UI into generated `src/webuse/_ui/`.
 - `src/webuse/config.py`, `models.py`, `exceptions.py`: configuration, shared models,
   and public exceptions.
-- `src/webuse/signals.py`, `metrics.py`, `ustats/`: events and metrics integration.
+- `src/webuse/signals.py`, `metrics/`: events, metrics integration, and StatsD-style emission.
 - `ui/`: SolidStart UI and Node control plane; owns SQLite, APIs, scheduling,
   the run queue, and Python crawler subprocesses.
 - `tests/`, `ui/tests/`: Python tests and control-plane smoke tests.
-- `docs/`, `examples/`: detailed documentation and examples.
+- `docs/`: Astro/Starlight documentation site with Markdown pages in
+  `docs/src/content/docs/`; use Node.js 22.19+ and npm to build it.
+- `examples/`: crawler examples.
 
 ## Product and architecture rules
 
@@ -114,7 +128,7 @@ and Chat calls are not those services.
 - LLM monitoring should provide evidence-based advice from metrics, logs, failed
   responses, and data checks. Do not turn advice into unrequested code deployment.
 - Build a simple metrics emitter, a StatsD-like wire protocol, and a time-series
-  database for the dashboard. Reuse the existing `webuse.ustats` emitter where
+  database for the dashboard. Reuse the existing `webuse.metrics` emitter where
   appropriate; the database and dashboard ingestion are not implemented yet.
 - Keep CLI/API discovery consistent. MCP is an optional integration proposal from
   earlier discussion, not a requirement in the current HUMAN.md; its inclusion,
@@ -191,7 +205,7 @@ The margin definition, vendor costs, and remaining allowances are still open.
 - Use `curl_cffi` for all HTTP requests in this project, including research scripts.
   Do not use `httpx` or `requests` unless explicitly requested.
 - Require Python 3.11+ for the package and development environment. Keep package
-  metadata, the docs workspace, and CI aligned with this minimum.
+  metadata, Python examples in the docs, and CI aligned with this minimum.
 - Prefer the standard library, minimal dependencies, and small focused helpers.
 - Keep top-level helpers easy to use and advanced `curl_cffi` transport options
   accessible. Preserve lazy response parsing.
@@ -204,25 +218,41 @@ The margin definition, vendor costs, and remaining allowances are still open.
   a separate Webuse Python WebSocket API or re-export curl_cffi socket types.
 - Wire request options consistently across sync, async, and CLI surfaces where
   applicable.
-- When a refactor is needed, ask whether backward compatibility is required unless
-  the user has already specified the compatibility requirements for that work.
-- Keep crawl logic function-based, with lightweight Spider and Pipeline idioms.
+- Webuse has not released its first version. Keep only the current APIs and
+  formats: do not add compatibility aliases, migration helpers, legacy schema
+  branches, or tests for superseded interfaces. Update callers and docs directly.
+- Keep crawl logic function-based in `engine/`, with lightweight Spider and
+  ItemPipeline idioms. Spider compiles configuration, the engine owns crawl
+  policy, and spiders run pipelines using internal helpers in `pipelines/utils.py`.
+- Keep `items.pipelines` in spider configuration, including inline spider entries,
+  rather than project defaults. Shared implementations may live in `pipelines.py`;
+  configured pipeline paths resolve relative to the project root.
+- Project creation does not generate root `items.py` or `pipelines.py`. Spider
+  generation defines its starter model and pipeline classes in `spiders/<name>.py`.
 - Preserve one or many seeds, queue discovery, depth tracking, CSS/callback
   follow rules, URL normalization before dedupe, scope filtering, and aggregation
   of results, errors, and stats.
 - Preserve config-driven and Python-spider crawling. Do not mistake persistent
   queue implementations for a complete checkpointing or pause/resume product.
+- Keep one CLI/harness execution workflow: `webuse crawl` runs a project
+  directory and registered spider names; `webuse gen` requires an existing
+  project. Keep creation and generation focused on project scaffolding.
+  Direct Python library APIs
+  remain usable without a project; Scrapy/arbitrary-script adapters are planned.
 - Use YAML for Webuse configuration in documentation, examples, and new project
   scaffolds. TOML loading and explicit generation remain supported; Python
   packaging metadata stays in `pyproject.toml`.
-- Plain selectors must work without an LLM. Keep deterministic selector matching
-  before optional resolver/LLM fallback where applicable.
+- In documentation examples, enter the project with `cd PROJECT` and run
+  generation and crawl commands from there using their current-directory defaults.
+- Plain selectors must work without an LLM. `css_find()` selects the first CSS
+  match; `llm_find()` always invokes the resolver without keyword scoring.
+- Declarative extraction requires category -> named item -> `fields`, with optional
+  `item_css`. Validate before crawling; keep selector-string field shorthand and
+  Python callbacks, without inferring alternative dictionary shapes.
 - Use selectolax's Lexbor backend for HTML parsing. Support CSS selectors and
-  regex extraction, not XPath. `smart*()` extracts values through an LLM;
-  `find_element()` resolves one element and persists CSS selectors only.
+  regex extraction, not XPath. `llm_extract*()` extracts values through an LLM;
+  `llm_find()` resolves one element from the current document without caching.
   Keep those operations separate across Python, CLI, and configuration.
-- Keep smart-selector storage configurable; the default is
-  `.webuse/selectors.json`. Never commit generated selector state.
 - Preserve machine-friendly CLI output, including JSONL workflows, and align
   config-file naming with Python API naming. Document command-specific formats
   accurately rather than claiming every command emits JSONL by default.
@@ -238,7 +268,7 @@ Use `uv` for Python dependency management; do not use `pip install` directly.
 - Compile: `uv run python3 -m compileall src tests`.
 - Test: `uv run pytest -q`.
 
-The UI uses npm and requires Node.js 24 or newer. Run commands from `ui/`:
+The UI uses npm and requires Node.js 22.19 or newer. Run commands from `ui/`:
 
 - Install locked dependencies: `npm ci`.
 - Develop: `npm run dev`.
@@ -247,13 +277,13 @@ The UI uses npm and requires Node.js 24 or newer. Run commands from `ui/`:
 - Build: `npm run build`.
 
 Python releases include the compiled UI: run `uv build` from the repository root
-with Node.js 24+ and npm available. The build installs locked npm dependencies
+with Node.js 22.19+ and npm available. The build installs locked npm dependencies
 and packages the Node server and browser assets into both sdist and wheel.
 Editable Python installs skip this build. Never edit or commit `src/webuse/_ui/`.
 Use Node's built-in SQLite; do not introduce native Node addons into the portable
-bundle. Legacy UI database/settings compatibility is not required for this change.
+bundle.
 
-`webuse ui` opens the bundled UI on loopback port 2951 using Node.js 24+ without
+`webuse ui` opens the bundled UI on loopback port 2951 using Node.js 22.19+ without
 npm. Store runtime data outside the installed package (default `~/.webuse/ui`)
 and run crawlers with the launcher's Python interpreter unless explicitly
 overridden. Verify release artifacts in a fresh Python environment with

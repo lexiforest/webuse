@@ -3,6 +3,8 @@ from typing import Any, Callable
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .agent import AgentRunInfo
+
 
 class WebuseModel(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -25,7 +27,7 @@ class RequestOptions(WebuseModel):
     files: Any = None
     auth: tuple[str, str] | None = None
     timeout: float | tuple[float, float] | None = None
-    follow_redirects: bool | None = None
+    allow_redirects: bool | None = None
     max_redirects: int | None = None
     proxy: str | None = None
     proxies: dict[str, str] | None = None
@@ -52,7 +54,7 @@ class RequestOptions(WebuseModel):
             "files": self.files,
             "auth": self.auth,
             "timeout": self.timeout,
-            "allow_redirects": self.follow_redirects,
+            "allow_redirects": self.allow_redirects,
             "max_redirects": self.max_redirects,
             "proxy": self.proxy,
             "proxies": self.proxies,
@@ -73,10 +75,6 @@ class RequestOptions(WebuseModel):
             for key, value in {**values, **self.extra_kwargs}.items()
             if value is not None
         }
-        # Webuse's public spelling is follow_redirects; curl_cffi uses
-        # allow_redirects. Normalize direct kwargs as well as model fields.
-        if "follow_redirects" in kwargs:
-            kwargs["allow_redirects"] = kwargs.pop("follow_redirects")
         return kwargs
 
 
@@ -105,22 +103,14 @@ class FollowRule(WebuseModel):
     predicate: Callable[[str, Any], bool] | None = None
 
 
-class SmartSelectorRecord(WebuseModel):
-    key: str
-    prompt: str
-    selectors: list[str] = Field(default_factory=list)
-
-
 class CrawlStats(WebuseModel):
     queued: int = 0
     fetched: int = 0
-    extracted_items: int = 0
     followed_links: int = 0
     skipped_duplicates: int = 0
     skipped_rules: int = 0
     skipped_robots: int = 0
     skipped_ignored: int = 0
-    errors: int = 0
 
 
 class CrawlResult(WebuseModel):
@@ -130,3 +120,4 @@ class CrawlResult(WebuseModel):
     stats: CrawlStats = Field(default_factory=CrawlStats)
     visited: set[str] = Field(default_factory=set)
     close_reason: str | None = None
+    agent: AgentRunInfo | None = None

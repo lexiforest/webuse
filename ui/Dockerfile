@@ -1,4 +1,4 @@
-FROM node:24-bookworm-slim
+FROM node:22-bookworm-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1

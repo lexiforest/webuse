@@ -1,16 +1,15 @@
+import json
 import re as re_module
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from selectolax.lexbor import LexborHTMLParser
 
-from webuse import FollowRule, cli
-from webuse.crawl.utils import extract_items, follow_rule_from_config
-from webuse.exceptions import ConfigError
-from webuse.parser import Document
-from webuse.response import Response
-from webuse.smart import LlmSmartResolver, SmartSelectorStore
+from webuse.extract import extract_items
+from webuse.exceptions import ConfigError, SmartSelectorError
+from webuse.extract import Document
+from webuse.http import Response
+from webuse.extract import LlmSmartResolver
 
 
 HTML = b"""
@@ -38,9 +37,9 @@ def test_response_css_and_links():
 
     cards = response.css(".product-card")
     assert len(cards) == 2
-    assert cards[0].css_first("h2").text() == "Alpha Gadget"
+    assert cards[0].css_find("h2").text() == "Alpha Gadget"
 
-    link = response.css_first("a.product-link")
+    link = response.css_find("a.product-link")
     assert link is not None
     assert link.attr("href") == "https://example.com/products/alpha"
     assert response.links() == [
@@ -81,7 +80,7 @@ def test_element_re_matches_element_html():
     response = Response(
         url="https://example.com/catalog", status_code=200, content=HTML
     )
-    card = response.css_first(".product-card")
+    card = response.css_find(".product-card")
     assert card is not None
 
     assert card.re(r"/products/([a-z]+)") == ["alpha"]
@@ -105,7 +104,7 @@ def test_smart_passes_prompt_and_text_to_model():
         url="https://example.com/catalog", status_code=200, content=HTML
     )
 
-    result = response.smart(
+    result = response.llm_extract(
         "Which product is first?", model="test-model", client=client
     )
 
@@ -137,7 +136,7 @@ def test_smart_first_returns_first_model_match():
         url="https://example.com/catalog", status_code=200, content=HTML
     )
 
-    assert response.smart_first("First title", client=client) == "Alpha"
+    assert response.llm_extract_first("First title", client=client) == "Alpha"
 
 
 def test_smart_includes_html_attributes_without_building_tree():
@@ -159,7 +158,7 @@ def test_smart_includes_html_attributes_without_building_tree():
         content=b'<a title="Alpha Full Title">Alpha...</a>',
     )
 
-    result = response.smart_first("Extract title attribute", client=client)
+    result = response.llm_extract_first("Extract title attribute", client=client)
 
     assert result == "Alpha Full Title"
     assert response._tree is None
@@ -182,7 +181,7 @@ def test_smart_can_limit_text_length():
         url="https://example.com/catalog", status_code=200, content=b"<p>abcdef</p>"
     )
 
-    response.smart("Read text", client=client, max_chars=3)
+    response.llm_extract("Read text", client=client, max_chars=3)
 
     assert (
         "Document text:\nabc\n\nDocument HTML:\n<p>"
@@ -196,7 +195,7 @@ def test_document_builds_tree_lazily_on_selector_use():
     )
 
     assert response._tree is None
-    assert response.css_first("article") is not None
+    assert response.css_find("article") is not None
     assert response._tree is not None
 
 
@@ -230,9 +229,9 @@ def test_document_smart_methods_extract_without_http_or_building_tree():
 
     document = Document(b"<h1>Alpha</h1>")
     client = SimpleNamespace(chat=SimpleNamespace(completions=Completions()))
-    assert document.smart("titles", client=client) == ["Alpha"]
-    assert document.smart_first("title", client=client) == "Alpha"
-    assert document.smart_all(["titles", "headings"], client=client) == {
+    assert document.llm_extract("titles", client=client) == ["Alpha"]
+    assert document.llm_extract_first("title", client=client) == "Alpha"
+    assert document.llm_extract_many(["titles", "headings"], client=client) == {
         "titles": ["Alpha"],
         "headings": ["Alpha"],
     }
@@ -243,7 +242,7 @@ def test_document_smart_methods_extract_without_http_or_building_tree():
     assert document._tree is None
 
 
-@pytest.mark.parametrize("method", ["smart", "smart_first", "smart_all"])
+@pytest.mark.parametrize("method", ["llm_extract", "llm_extract_first", "llm_extract_many"])
 def test_smart_methods_forward_extraction_options(method):
     captured = []
 
@@ -256,7 +255,7 @@ def test_smart_methods_forward_extraction_options(method):
 
     document = Document("<h1>Alpha</h1>")
     client = SimpleNamespace(chat=SimpleNamespace(completions=Completions()))
-    prompts = ["title", "heading"] if method == "smart_all" else "title"
+    prompts = ["title", "heading"] if method == "llm_extract_many" else "title"
     getattr(document, method)(
         prompts,
         client=client,
@@ -266,7 +265,7 @@ def test_smart_methods_forward_extraction_options(method):
         max_chars=3,
         max_tokens=42,
     )
-    assert len(captured) == (2 if method == "smart_all" else 1)
+    assert len(captured) == (2 if method == "llm_extract_many" else 1)
     for call in captured:
         assert call["model"] == "custom-model"
         assert call["temperature"] == 0.25
@@ -279,33 +278,7 @@ def test_smart_methods_forward_extraction_options(method):
     assert document._tree is None
 
 
-def test_document_finds_elements_and_reuses_local_selectors(tmp_path):
-    store = SmartSelectorStore(tmp_path / "selectors.json")
-    document = Document(
-        '<a id="product" href="/alpha">Alpha</a>', url="https://example.com"
-    )
-    prompt = "alpha product link"
-    match = document.find_element(prompt, store=store)
-    assert match.attr("href") == "https://example.com/alpha"
-    assert store.get("alpha-product-link").selectors == ["#product"]
-
-    reloaded = Document('<a id="product" href="/beta">Beta</a>')
-    store = SmartSelectorStore(store.path)
-    assert reloaded.find_element(prompt, store=store).text() == "Beta"
-
-
-@pytest.mark.parametrize("method", ["smart", "smart_first", "smart_all"])
-def test_smart_methods_reject_removed_translation_switch(method):
-    document = Document("<h1>Alpha</h1>")
-    prompt = ["title"] if method == "smart_all" else "title"
-    with pytest.raises(TypeError, match="find_element"):
-        getattr(document, method)(prompt, translate_css=True)
-
-
-def test_crawler_separates_value_extraction_and_item_element_lookup(
-    tmp_path, monkeypatch
-):
-    monkeypatch.setenv("WEBUSE_SELECTOR_STORE", str(tmp_path / "selectors.json"))
+def test_crawler_separates_value_extraction_and_item_element_lookup(monkeypatch):
     calls = []
 
     class Completions:
@@ -313,13 +286,23 @@ def test_crawler_separates_value_extraction_and_item_element_lookup(
             calls.append(kwargs)
             html = kwargs["messages"][1]["content"]
             value = "Alpha" if "Alpha" in html else "Beta"
+            if html.startswith("{"):
+                candidates = json.loads(html)["candidates"]
+                links = [candidate for candidate in candidates if candidate["tag"] == "a"]
+                assert len(links) == 1
+                content = json.dumps({"index": links[0]["index"]})
+            else:
+                content = json.dumps(value)
             return SimpleNamespace(
-                choices=[SimpleNamespace(message=SimpleNamespace(content=f'"{value}"'))]
+                choices=[SimpleNamespace(message=SimpleNamespace(content=content))]
             )
 
     client = SimpleNamespace(chat=SimpleNamespace(completions=Completions()))
     monkeypatch.setattr(
-        "webuse.smart.extract.create_openai_client", lambda **kwargs: client
+        "webuse.extract.smart.create_openai_client", lambda **kwargs: client
+    )
+    monkeypatch.setattr(
+        "webuse.extract.resolver.create_openai_client", lambda **kwargs: client
     )
     document = Document(
         '<article><a class="product" href="/alpha">Alpha</a></article>'
@@ -329,75 +312,127 @@ def test_crawler_separates_value_extraction_and_item_element_lookup(
     items = extract_items(
         document,
         {
-            "item_css": "article",
-            "fields": {
-                "title": {"smart": "Extract the title"},
-                "link": {"find_element": "product link", "attr": "href"},
+            "default": {
+                "product": {
+                    "item_css": "article",
+                    "fields": {
+                        "title": {"llm_extract": "Extract the title"},
+                        "link": {"llm_find": "product link", "attr": "href"},
+                    },
+                },
             },
         },
     )
     assert items == [
-        {"title": "Alpha", "link": "https://example.com/alpha"},
-        {"title": "Beta", "link": "https://example.com/beta"},
+        {"title": "Alpha", "link": "https://example.com/alpha", "_type": "product"},
+        {"title": "Beta", "link": "https://example.com/beta", "_type": "product"},
     ]
-    assert len(calls) == 2
+    assert len(calls) == 4
 
 
 def test_crawler_rejects_selector_options_on_value_extraction():
-    with pytest.raises(ConfigError, match="use find_element"):
+    with pytest.raises(ConfigError, match="use llm_find"):
         extract_items(
-            Document("<a>Buy</a>"), {"link": {"smart": "buy link", "attr": "href"}}
+            Document("<a>Buy</a>"),
+            {"default": {"product": {"fields": {
+                "link": {"llm_extract": "buy link", "attr": "href"}
+            }}}},
         )
 
 
-def test_smart_selector_persists_record(tmp_path: Path):
-    store = SmartSelectorStore(tmp_path / "selectors.json")
-    response = Response(
-        url="https://example.com/catalog", status_code=200, content=HTML
-    )
+def test_element_lookup_uses_current_document_without_writing_files(tmp_path, monkeypatch):
+    calls = []
 
-    match = response.find_element("alpha gadget product link", store=store)
-    assert match.attr("href") == "https://example.com/products/alpha"
+    class Completions:
+        def create(self, **kwargs):
+            payload = json.loads(kwargs["messages"][1]["content"])
+            calls.append(payload["url"])
+            selected = next(
+                c for c in payload["candidates"] if c["attrs"].get("aria-label") == "buy"
+            )
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
+                content=json.dumps({"index": selected["index"]})
+            ))])
 
-    persisted = store.get("alpha-gadget-product-link")
-    assert persisted is not None
-    assert persisted.selectors
-    assert set(persisted.model_dump()) == {"key", "prompt", "selectors"}
-
-
-def test_smart_selector_uses_deterministic_match_before_resolver(tmp_path: Path):
-    class FailingResolver:
-        def resolve(self, prompt, document, candidates):
-            raise AssertionError("resolver should not be called")
-
-    store = SmartSelectorStore(tmp_path / "selectors.json")
-    response = Response(
-        url="https://example.com/catalog", status_code=200, content=HTML
-    )
-
-    first_match = response.find_element("alpha gadget product link", store=store)
-    assert first_match.attr("href") == "https://example.com/products/alpha"
-
-    match = response.find_element(
-        "alpha gadget product link",
-        store=store,
-        use_llm=True,
-        resolver=FailingResolver(),
-    )
-
-    assert match.attr("href") == "https://example.com/products/alpha"
+    client = SimpleNamespace(chat=SimpleNamespace(completions=Completions()))
+    resolver = LlmSmartResolver(client=client)
+    monkeypatch.chdir(tmp_path)
+    for host, css_class in [("one.example", "action"), ("two.example", "purchase")]:
+        document = Document(
+            f'<button class="{css_class}">Cancel</button>'
+            f'<button class="{css_class}" aria-label="buy">Buy</button>',
+            url=f"https://{host}/",
+        )
+        for _ in range(2):
+            assert document.llm_find("buy", resolver=resolver).text() == "Buy"
+    assert calls == ["https://one.example/"] * 2 + ["https://two.example/"] * 2
+    assert list(tmp_path.iterdir()) == []
 
 
-def test_smart_selector_uses_resolver_fallback(tmp_path: Path):
-    class FakeResolver:
-        called = False
+def test_llm_find_always_calls_model_without_keyword_filtering(monkeypatch):
+    calls = []
 
-        def resolve(self, prompt, document, candidates):
-            self.called = True
-            for candidate in candidates:
-                if candidate.attr("data-answer") == "yes":
-                    return candidate
-            return None
+    class Completions:
+        def create(self, **kwargs):
+            payload = json.loads(kwargs["messages"][1]["content"])
+            calls.append(payload)
+            candidates = payload["candidates"]
+            assert len(candidates) > 20
+            selected = next(c for c in candidates if c["attrs"].get("id") == "target")
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(
+                    content=json.dumps({"index": selected["index"]})
+                ))]
+            )
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=Completions()))
+    monkeypatch.setattr("webuse.extract.resolver.create_openai_client", lambda **kw: client)
+    document = Document('<button>Buy</button>' * 30 + '<button id="target">Proceed</button>')
+    for _ in range(2):
+        assert document.llm_find("buy").text() == "Proceed"
+    assert len(calls) == 2
+
+
+def test_css_find_selects_first_match_and_returns_none_without_a_model(monkeypatch):
+    def unexpected_resolver(*args, **kwargs):
+        raise AssertionError("CSS lookup must not construct a resolver")
+
+    monkeypatch.setattr("webuse.extract.resolver.LlmSmartResolver", unexpected_resolver)
+    document = Document('<a>Outside</a><article><a>First</a><a>Second</a></article>')
+    assert document.css_find("a").text() == "Outside"
+    article = document.css_find("article")
+    assert article.css_find("a").text() == "First"
+    assert article.css_find("button") is None
+    assert document.css_find("button") is None
+
+
+@pytest.mark.parametrize("content", ["null", '{"index": -1}', '{"index": 999}'])
+def test_llm_find_raises_when_model_selects_no_element(content):
+    class Completions:
+        def create(self, **kwargs):
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=content))]
+            )
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=Completions()))
+    with pytest.raises(SmartSelectorError, match="buy"):
+        Document("<button>Buy</button>").llm_find(
+            "buy", resolver=LlmSmartResolver(client=client)
+        )
+
+
+def test_llm_find_uses_supplied_resolver():
+    calls = []
+
+    class Completions:
+        def create(self, **kwargs):
+            payload = json.loads(kwargs["messages"][1]["content"])
+            assert payload["prompt"] == "unmatched prompt"
+            calls.append(kwargs)
+            selected = next(c for c in payload["candidates"] if c["tag"] == "button")
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
+                content=json.dumps({"index": selected["index"]})
+            ))])
 
     html = b"""
     <html>
@@ -406,20 +441,19 @@ def test_smart_selector_uses_resolver_fallback(tmp_path: Path):
       </body>
     </html>
     """
-    resolver = FakeResolver()
-    store = SmartSelectorStore(tmp_path / "selectors.json")
+    client = SimpleNamespace(chat=SimpleNamespace(completions=Completions()))
+    resolver = LlmSmartResolver(model="custom-model", client=client)
     response = Response(
         url="https://example.com/actions", status_code=200, content=html
     )
 
-    match = response.find_element(
+    match = response.llm_find(
         "unmatched prompt",
-        store=store,
-        use_llm=True,
         resolver=resolver,
     )
 
-    assert resolver.called
+    assert len(calls) == 1
+    assert calls[0]["model"] == "custom-model"
     assert match.attr("data-answer") == "yes"
 
 
@@ -453,7 +487,7 @@ def test_llm_smart_resolver_accepts_compatible_client():
 def test_lexbor_handles_empty_and_malformed_html():
     empty = Document("")
     assert empty.css("a") == []
-    assert empty.css_first("a") is None
+    assert empty.css_find("a") is None
     assert empty.text_content() == ""
     document = Document("<p>one<p>two")
     assert [node.text() for node in document.css("p")] == ["one", "two"]
@@ -472,14 +506,14 @@ def test_css_scoping_text_attributes_and_serialization():
         "<article><p> A <b>B</b> C </p>tail<input disabled></article>"
         "<article><p>outside</p></article>"
     )
-    article = document.css_first("article:has(input[disabled])")
-    paragraph = article.css_first("p")
+    article = document.css_find("article:has(input[disabled])")
+    paragraph = article.css_find("p")
     assert [node.text() for node in article.css("p")] == ["A B C"]
     assert paragraph.text(separator="|") == "A|B|C"
     assert paragraph.text(separator="", strip=False) == " A B C "
     assert paragraph.html() == "<p> A <b>B</b> C </p>"
-    assert article.css_first("input").attr("disabled") == ""
-    assert article.css_first("input").attr("missing", "fallback") == "fallback"
+    assert article.css_find("input").attr("disabled") == ""
+    assert article.css_find("input").attr("missing", "fallback") == "fallback"
     assert document.text_content() == "A B C tail outside"
 
 
@@ -491,47 +525,13 @@ def test_links_resolve_against_first_html_base():
         url="https://example.com/catalog/page",
     )
     assert document.links() == ["https://example.com/assets/item"]
-    assert document.css_first("a").attr("href") == "https://example.com/assets/item"
+    assert document.css_find("a").attr("href") == "https://example.com/assets/item"
     assert (
-        document.css_first("img").attr("src") == "https://example.com/assets/image.png"
+        document.css_find("img").attr("src") == "https://example.com/assets/image.png"
     )
-    assert document.css_first("base").attr("href") == "https://example.com/assets/"
-    assert document.css_first("a").attr("data") == "value"
+    assert document.css_find("base").attr("href") == "https://example.com/assets/"
+    assert document.css_find("a").attr("data") == "value"
     assert (
-        document.css_first("object").attr("data")
+        document.css_find("object").attr("data")
         == "https://example.com/assets/file.pdf"
     )
-
-
-@pytest.mark.parametrize(
-    "extract",
-    [
-        {"title": {"xpath": "//h1"}},
-        {"fields": {"title": {"xpath": "//h1"}}},
-        {"item_xpath": "//article", "fields": {"title": "h1"}},
-    ],
-)
-def test_xpath_extraction_configs_are_rejected(extract):
-    with pytest.raises(ConfigError, match="no longer supported"):
-        extract_items(Response(content=b"<h1>Title</h1>"), extract)
-
-
-def test_xpath_follow_rules_are_rejected():
-    with pytest.raises(ConfigError, match="XPath"):
-        follow_rule_from_config({"xpath": "//a"})
-    with pytest.raises(ValueError, match="xpath"):
-        FollowRule(xpath="//a")
-
-
-@pytest.mark.parametrize(
-    "arguments",
-    [
-        ["fetch", "https://example.com", "--xpath", "//h1"],
-        ["crawl", "https://example.com", "--follow-xpath", "//a"],
-        ["fetch", "https://example.com", "--translate-xpath"],
-    ],
-)
-def test_xpath_cli_flags_are_rejected(arguments):
-    with pytest.raises(SystemExit) as error:
-        cli.build_parser().parse_args(arguments)
-    assert error.value.code == 2

@@ -1,16 +1,12 @@
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { runtime } from "./runtime";
 
 export const databasePath = resolve(process.env.WEBUSE_DB_PATH || "./webuse-ui.sqlite");
 mkdirSync(dirname(databasePath), { recursive: true });
 
-export const sqlite = new DatabaseSync(databasePath);
-const projectColumns = sqlite.prepare("PRAGMA table_info(projects)").all() as { name: string }[];
-if (projectColumns.length && !projectColumns.some(column => column.name === "workspace_path")) {
-  sqlite.close();
-  throw new Error("This is a legacy Webuse UI database. Use a new --data-dir or WEBUSE_DB_PATH for disk workspaces. The existing database has not been migrated or deleted.");
-}
+export const sqlite = runtime.database ??= new DatabaseSync(databasePath);
 sqlite.exec("PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;");
 
 export function transaction<Args extends unknown[], Result>(callback: (...args: Args) => Result) {

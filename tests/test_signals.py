@@ -4,7 +4,7 @@ import pytest
 import webuse
 from pydantic import BaseModel
 
-from webuse.response import Response
+from webuse.http import Response
 
 
 class FakeClient:
@@ -80,11 +80,11 @@ def test_crawl_emits_core_signals():
     result = webuse.crawl(
         "https://example.com",
         client=FakeClient(),
-        extract={"title": "h1"},
+        extract={"default": {"page": {"fields": {"title": "h1"}}}},
         signals=bus,
     )
 
-    assert result.items == [{"title": "Home"}]
+    assert result.items == [{"title": "Home", "_type": "page"}]
     assert events == [
         "crawl_started",
         "request_queued",
@@ -111,13 +111,13 @@ def test_spider_emits_item_and_pipeline_signals():
     ]:
         bus.connect(name, lambda signal=name, **kwargs: events.append(signal))
 
-    class CleanPipeline(webuse.Pipeline):
+    class CleanPipeline(webuse.ItemPipeline):
         def process_item(self, item):
             return item.model_copy(update={"title": item.title.upper()})
 
     class ExampleSpider(webuse.Spider):
         start_urls = ["https://example.com"]
-        extract = {"title": "h1"}
+        extract = {"default": {"page": {"fields": {"title": "h1"}}}}
         item_model = Item
         pipelines = [CleanPipeline()]
 

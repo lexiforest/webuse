@@ -30,12 +30,20 @@ also manage the process for you.
 ## Agentic crawlers
 
 
-Except for the traditional crawlers we have been writing, webuse also comes with a
-special kind of crawler whose execution schedule is dynamically controlled by an LLM.
-Generating crawler code with AI does not by itself make the crawler agentic: this
-mode uses the model during operation to decide when the crawler should run.
+`AgenticSpider` lets an LLM control a crawl while it runs: choose links, inspect
+pages, and assemble records across pages. The engine stops when the request queue
+is empty and no request is being processed. Declare a goal,
+Pydantic output model, starting URLs, and a total token budget.
+The runtime validates actions and sends records through the existing pipelines.
+Tools are Python calls inside the crawler, not CLI subprocesses.
 
-The benefits of agentic crawlers is more reliablity against site changes.
+See the [agentic spider guide](docs/src/content/docs/user-guide/agentic.md)
+and [Books to Scrape example](examples/agentic_books/spiders/books.py). Use the same
+`webuse crawl` project workflow; an open Chat session is not required.
+
+LLM scheduling of future crawler runs is a separate planned capability. The
+current orchestrator uses fixed cron schedules. AI-generated crawler code alone
+does not imply either runtime capability.
 
 
 ## Install
@@ -53,7 +61,7 @@ webuse ui
 ```
 
 Released packages include the compiled UI. `webuse ui` opens
-`http://127.0.0.1:2951/` and runs until you press Ctrl+C. It requires Node.js 24+
+`http://127.0.0.1:2951/` and runs until you press Ctrl+C. It requires Node.js 22.19+
 on PATH, but no npm install or frontend build. Python-only crawling does not
 require Node. Data is saved in `~/.webuse/ui`; use `--data-dir` to change it,
 `--port` to change the port, or `--no-open` to skip opening the browser.
@@ -107,7 +115,7 @@ import webuse
 
 with webuse.Client(impersonate="chrome", timeout=20) as client:
     response = client.get("https://example.com")
-    title = response.css_first("title")
+    title = response.css_find("title")
     print(title.text() if title is not None else None)
 
     for link in response.css("a"):
@@ -129,9 +137,8 @@ uv run webuse fetch https://example.com --css "title"
 uv run webuse fetch https://example.com --css "a" --jsonl
 ```
 
-See [smart selectors](docs/smart-selectors.rst) for model-backed extraction and
-selector caching. The default selector cache is `.webuse/selectors.json`; keep
-generated state out of version control.
+See [smart selectors](docs/src/content/docs/user-guide/smart-selectors.md) for
+model-backed value extraction and element lookup on the current document.
 
 #### Crawl with Python or configuration
 
@@ -141,7 +148,7 @@ import webuse
 result = webuse.crawl(
     ["https://example.com"],
     follow=webuse.FollowRule(css="a", same_domain=True),
-    extract={"title": "h1"},
+    extract={"default": {"page": {"fields": {"title": "h1"}}}},
     max_depth=1,
     concurrency=5,
     per_domain=1,
@@ -155,48 +162,60 @@ Use `await webuse.acrawl(...)` for async crawling. Larger projects can use
 `webuse.Spider` or `webuse.AsyncSpider`, with custom parsing, request categories,
 Pydantic item models, and pipelines.
 
+`Spider` and `AsyncSpider` share configuration and helpers through
+`webuse.spider.base.BaseSpider`. Subclass `Spider` for synchronous `run()` or
+`AsyncSpider` for `await run()`; `AsyncSpider` is not a subclass of `Spider`.
+
 Both engines record download failures in `result.errors` and propagate parsing
 or pipeline exceptions. Project concurrency defaults and per-domain limits apply
-to both engines; see [configuration](docs/config.rst) for precedence and logging.
+to both engines; see the [configuration reference](docs/src/content/docs/development/framework/config.md) for precedence and logging.
 
-Use YAML for Webuse configuration: `webuse.yaml` for project settings and named
-spiders, or standalone files such as `books.yaml` for a declarative crawler:
+The CLI and harness run project directories with a root `webuse.yaml` and named
+spiders. A small crawler can fit entirely in `books_project/webuse.yaml`:
 
 ```yaml
-name: books
-start_urls:
-  - https://books.toscrape.com/
-allowed_domains:
-  - books.toscrape.com
-max_depth: 1
-pages:
-  default:
-    follow:
-      - css: .next a
-    extract:
-      books:
-        item_css: .product_pod
-        fields:
-          title:
-            css: h3 a
-            attr: title
-          price: .price_color
+name: books_project
+spiders:
+  books:
+    start_urls:
+      - https://books.toscrape.com/
+    allowed_domains:
+      - books.toscrape.com
+    max_depth: 49
+    pages:
+      default:
+        follow:
+          - css: .next a
+        extract:
+          books:
+            item_css: .product_pod
+            fields:
+              title:
+                css: h3 a
+                attr: title
+              price: .price_color
 ```
 
 Run it and write the extracted records to JSONL:
 
 ```bash
-uv run webuse crawl books.yaml -o books.jsonl
-```
-
-The CLI also runs project spiders:
-
-```bash
 uv run webuse crawl books_project --spider books -o books.jsonl
 ```
 
-See the [quick start](docs/quick-start.rst), [CLI guide](docs/cli.rst), and
-[configuration guide](docs/config.rst) for more examples.
+To generate a new spider, create a project first:
+
+```bash
+uv run webuse create my_project
+cd my_project
+uv run webuse gen books https://books.toscrape.com/
+uv run webuse crawl --spider books -o books.jsonl
+```
+
+The CLI runs project directories. Use `fetch` to inspect one page, or use the
+Python library APIs directly.
+
+See the [quick start](docs/src/content/docs/user-guide/quick-start.md), [CLI guide](docs/src/content/docs/user-guide/cli.md), and
+[configuration reference](docs/src/content/docs/development/framework/config.md) for field definitions and examples.
 
 ## Cloud version
 
@@ -240,7 +259,7 @@ not services available from this checkout.
 ## Development
 
 To develop from this repository, use a Python 3.11+ development
-environment and Node.js 24 or newer:
+environment and Node.js 22.19 or newer:
 
 ```bash
 uv sync --extra dev
@@ -250,7 +269,7 @@ npm run dev
 ```
 
 The build installs locked npm dependencies, compiles the UI, and bundles it into both the
-source distribution and wheel. See [release packaging](docs/deploy.rst).
+source distribution and wheel. See [release packaging](docs/src/content/docs/user-guide/deploy.md).
 
 The local UI currently launches Python crawler subprocesses. It is a local
 development control plane, not the planned isolated multi-tenant cloud runtime.
@@ -275,7 +294,8 @@ npm run build
 
 ## Documentation and development
 
-- [Documentation index](docs/index.rst)
+- [Documentation index](docs/src/content/docs/index.md)
+- [Build and preview the Astro docs](docs/README.md)
 - [Local UI setup](ui/README.md)
 - [Examples](examples/)
 

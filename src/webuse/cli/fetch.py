@@ -6,29 +6,22 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
-from ..client import request as _default_request
+from ..http import request
 from ..exceptions import SmartSelectorError
-from ..llm import openai_settings_from_config
-from ..smart import LlmSmartResolver as _DefaultLlmSmartResolver
-from ..smart import (
+from ..llm import openai_defaults
+from ..extract import (
+    LlmSmartResolver,
     SMART_EXTRACTION_SYSTEM_PROMPT,
     SMART_FIRST_EXTRACTION_SYSTEM_PROMPT,
-    SmartSelectorStore,
 )
-from .common import (
+from .utils import (
     _pair,
     _pairs,
     add_request_args,
     cli_request_options,
     json_arg,
-    load_config,
     print_jsonl,
 )
-
-
-def _cli_attr(name: str, default: Any) -> Any:
-    package = sys.modules.get("webuse.cli")
-    return getattr(package, name, default) if package else default
 
 
 def _body_options(args: argparse.Namespace, stack: ExitStack) -> dict[str, Any]:
@@ -64,7 +57,6 @@ def _element_value(element: Any, attr: str | None) -> Any:
 def _print_extraction(
     *,
     args: argparse.Namespace,
-    config: dict[str, Any],
     response: Any,
     values: Any,
     selector: str,
@@ -72,7 +64,7 @@ def _print_extraction(
     field: str,
     first: bool,
 ) -> None:
-    if _fetch_csv_enabled(args, config):
+    if args.csv:
         if output_shape == "item":
             rows = (
                 [{field: value} for value in values]
@@ -94,7 +86,7 @@ def _print_extraction(
             ]
         _print_fetch_csv(rows)
         return
-    if _fetch_jsonl_enabled(args, config) and not first and isinstance(values, list):
+    if args.jsonl and not first and isinstance(values, list):
         if output_shape == "item":
             print_jsonl([{field: value} for value in values])
         else:
@@ -107,35 +99,24 @@ def _print_extraction(
         return
     key = "match" if first else "matches"
     if output_shape == "item":
-        _print_fetch_json({field: values}, args=args, config=config)
+        _print_fetch_json({field: values}, args=args)
     else:
         _print_fetch_json(
             {"url": response.url, key: values, "selector": selector},
             args=args,
-            config=config,
         )
 
 
-def _print_fetch_json(
-    payload: Any, *, args: argparse.Namespace, config: dict[str, Any]
-) -> None:
-    if _fetch_csv_enabled(args, config):
+def _print_fetch_json(payload: Any, *, args: argparse.Namespace) -> None:
+    if args.csv:
         _print_fetch_csv(payload if isinstance(payload, list) else [payload])
         return
-    if _fetch_jsonl_enabled(args, config):
+    if args.jsonl:
         print_jsonl(payload if isinstance(payload, list) else [payload])
         return
     if hasattr(payload, "model_dump"):
         payload = payload.model_dump(mode="json")
     print(json.dumps(payload, ensure_ascii=True, default=str, indent=2))
-
-
-def _fetch_jsonl_enabled(args: argparse.Namespace, config: dict[str, Any]) -> bool:
-    return bool(getattr(args, "jsonl", False) or config.get("jsonl"))
-
-
-def _fetch_csv_enabled(args: argparse.Namespace, config: dict[str, Any]) -> bool:
-    return bool(getattr(args, "csv", False) or config.get("csv"))
 
 
 def _csv_cell(value: Any) -> Any:
@@ -163,58 +144,35 @@ def _print_fetch_csv(rows: list[Any]) -> None:
         writer.writerow({key: _csv_cell(value) for key, value in row.items()})
 
 
-def _find_resolver(
-    args: argparse.Namespace, config: dict[str, Any], llm_config: dict[str, Any]
-) -> Any:
-    if not (getattr(args, "find_use_llm", False) or config.get("find_use_llm")):
-        return None
-    resolver_class = _cli_attr("LlmSmartResolver", _DefaultLlmSmartResolver)
-    settings = openai_settings_from_config(llm_config)
-    return resolver_class(
-        model=settings.model or "gpt-4.1-mini",
-        api_key=settings.api_key,
-        base_url=settings.base_url,
+def _find_resolver(args: argparse.Namespace) -> LlmSmartResolver:
+    settings = openai_defaults()
+    return LlmSmartResolver(
+        model=args.llm_model or settings.model or "gpt-4.1-mini",
+        api_key=args.llm_api_key or settings.api_key,
+        base_url=args.llm_base_url or settings.base_url,
     )
 
 
-def _llm_value(args: argparse.Namespace, config: dict[str, Any], name: str) -> Any:
-    value = getattr(args, name, None)
-    if value is not None:
-        return value
-    return config.get(name)
-
-
 def fetch_command(args: argparse.Namespace) -> int:
-    root_config = load_config(args.config)
-    config = root_config.get("fetch", {})
-    if "xpath" in config or "translate_xpath" in config:
-        raise SystemExit("XPath is no longer supported; use css or find_element")
-    if "translate_css" in config:
-        raise SystemExit("translate_css was removed; use find_element: PROMPT")
-    smart_prompt = args.smart or config.get("smart")
-    find_prompt = args.find_element or config.get("find_element")
-    if smart_prompt and find_prompt:
-        raise SystemExit("Use only one of smart or find_element")
-    llm_config = root_config.get("llm", {})
-    url = args.url or config.get("url")
-    if not url:
-        raise SystemExit("fetch requires a URL")
+    llm_prompt = args.llm_extract
+    find_prompt = args.llm_find
+    css_find = args.css_find
+    css_selector = args.css
     with ExitStack() as stack:
-        request_kwargs = cli_request_options(args, config)
+        request_kwargs = cli_request_options(args, {})
         request_kwargs.update(_body_options(args, stack))
-        response = _cli_attr("request", _default_request)(
-            args.method or config.get("method", "GET"),
-            url,
+        response = request(
+            args.method,
+            args.url,
             **request_kwargs,
         )
-    if args.json_output or config.get("json_output"):
+    if args.json_output:
         payload = response.json()
-        _print_fetch_json(payload, args=args, config=config)
+        _print_fetch_json(payload, args=args)
         return 0
-    css_selector = args.css or config.get("css")
     if css_selector:
         matches = response.css(css_selector)
-        first = False if args.all_matches else args.first or config.get("first", False)
+        first = args.first and not args.all_matches
         values = (
             _element_value(matches[0], args.attr)
             if first and matches
@@ -222,83 +180,74 @@ def fetch_command(args: argparse.Namespace) -> int:
         )
         _print_extraction(
             args=args,
-            config=config,
             response=response,
             values=values,
             selector=css_selector,
-            output_shape=args.output_shape or config.get("output_shape", "matches"),
-            field=args.field or config.get("field", "value"),
+            output_shape=args.output_shape,
+            field=args.field,
             first=first,
         )
         return 0
-    first = False if args.all_matches else args.first or config.get("first", False)
-    if smart_prompt:
-        settings = openai_settings_from_config(llm_config)
+    first = args.first and not args.all_matches
+    if llm_prompt:
+        settings = openai_defaults()
         llm_kwargs = {
             key: value
             for key, value in {
-                "model": _llm_value(args, config, "llm_model")
-                or settings.model
-                or "gpt-4.1-mini",
-                "api_key": _llm_value(args, config, "llm_api_key") or settings.api_key,
-                "base_url": _llm_value(args, config, "llm_base_url")
-                or settings.base_url,
-                "system_prompt": _llm_value(args, config, "llm_system_prompt")
+                "model": args.llm_model or settings.model or "gpt-4.1-mini",
+                "api_key": args.llm_api_key or settings.api_key,
+                "base_url": args.llm_base_url or settings.base_url,
+                "system_prompt": args.llm_system_prompt
                 or (
                     SMART_FIRST_EXTRACTION_SYSTEM_PROMPT
                     if first
                     else SMART_EXTRACTION_SYSTEM_PROMPT
                 ),
-                "max_chars": _llm_value(args, config, "llm_max_chars"),
-                "temperature": _llm_value(args, config, "llm_temperature"),
+                "max_chars": args.llm_max_chars,
+                "temperature": args.llm_temperature,
             }.items()
             if value is not None
         }
-        extractor = response.smart_first if first else response.smart
-        value = extractor(smart_prompt, **llm_kwargs)
+        extractor = response.llm_extract_first if first else response.llm_extract
+        value = extractor(llm_prompt, **llm_kwargs)
         _print_extraction(
             args=args,
-            config=config,
             response=response,
             values=value,
-            selector=smart_prompt,
-            output_shape=args.output_shape or config.get("output_shape", "matches"),
-            field=args.field or config.get("field", "value"),
+            selector=llm_prompt,
+            output_shape=args.output_shape,
+            field=args.field,
             first=first,
         )
         return 0
-    if find_prompt:
-        selector_store = args.selector_store or config.get("selector_store")
-        selector_key = args.selector_key or config.get("selector_key")
-        store = SmartSelectorStore(selector_store) if selector_store else None
-        resolver = _find_resolver(args, config, llm_config)
+    if find_prompt or css_find:
         try:
-            match = response.find_element(
-                find_prompt,
-                key=selector_key,
-                store=store,
-                use_llm=resolver is not None,
-                resolver=resolver,
+            match = (
+                response.css_find(css_find)
+                if css_find
+                else response.llm_find(
+                    find_prompt, resolver=_find_resolver(args)
+                )
             )
-            value = (
-                _element_value(match, args.attr)
-                if first
-                else [_element_value(match, args.attr)]
-            )
+            if match is None:
+                value = None if first else []
+            else:
+                value = _element_value(match, args.attr)
+                if not first:
+                    value = [value]
         except SmartSelectorError:
-            failure = args.find_failure or config.get("find_failure", "error")
+            failure = args.find_failure
             if failure == "empty":
                 value = None if first else []
             else:
                 raise
         _print_extraction(
             args=args,
-            config=config,
             response=response,
             values=value,
-            selector=find_prompt,
-            output_shape=args.output_shape or config.get("output_shape", "matches"),
-            field=args.field or config.get("field", "value"),
+            selector=css_find or find_prompt,
+            output_shape=args.output_shape,
+            field=args.field,
             first=first,
         )
         return 0
@@ -310,7 +259,6 @@ def fetch_command(args: argparse.Namespace) -> int:
                 "headers": response.headers,
             },
             args=args,
-            config=config,
         )
         return 0
     sys.stdout.write(response.text)
@@ -321,20 +269,18 @@ def fetch_command(args: argparse.Namespace) -> int:
 
 def register(subparsers: argparse._SubParsersAction) -> None:
     fetch = subparsers.add_parser("fetch")
-    fetch.add_argument("url", nargs="?")
-    fetch.add_argument("--config")
-    fetch.add_argument("--method")
+    fetch.add_argument("url")
+    fetch.add_argument("--method", default="GET")
     add_request_args(fetch)
     fetch.add_argument("--data")
     fetch.add_argument("--json", dest="json_body")
     fetch.add_argument("--form", action="append")
     fetch.add_argument("--file", action="append")
-    fetch.add_argument("--css")
     fetch.add_argument("--attr")
     fetch.add_argument("--first", action="store_true")
     fetch.add_argument("--all", dest="all_matches", action="store_true")
-    fetch.add_argument("--output-shape", choices=["matches", "item"])
-    fetch.add_argument("--field")
+    fetch.add_argument("--output-shape", choices=["matches", "item"], default="matches")
+    fetch.add_argument("--field", default="value")
     fetch.add_argument("--llm-model")
     fetch.add_argument("--llm-api-key")
     fetch.add_argument("--llm-base-url")
@@ -342,12 +288,11 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     fetch.add_argument("--llm-max-chars", type=int)
     fetch.add_argument("--llm-temperature", type=float)
     extraction = fetch.add_mutually_exclusive_group()
-    extraction.add_argument("--smart")
-    extraction.add_argument("--find-element")
-    fetch.add_argument("--selector-store")
-    fetch.add_argument("--selector-key")
-    fetch.add_argument("--find-use-llm", action="store_true")
-    fetch.add_argument("--find-failure", choices=["error", "empty"])
+    extraction.add_argument("--css")
+    extraction.add_argument("--css-find")
+    extraction.add_argument("--llm-extract")
+    extraction.add_argument("--llm-find")
+    fetch.add_argument("--find-failure", choices=["error", "empty"], default="error")
     fetch.add_argument("--meta", action="store_true")
     fetch.add_argument("--json-output", action="store_true")
     output_format = fetch.add_mutually_exclusive_group()

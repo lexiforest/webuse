@@ -1,5 +1,4 @@
 import asyncio
-import importlib
 import threading
 import time
 from collections import defaultdict
@@ -10,9 +9,7 @@ from webuse import AsyncSpider, ConfigError, Response, SignalBus, Spider, acrawl
 from webuse import llm
 from webuse.cli.crawl import _configure_project_logging, _load_spider
 from webuse.config import load_config_file
-from webuse.crawl import FileRequestQueue, FileRequestSeen
 from webuse.log import configure_logger, logger
-from webuse.smart import SmartSelectorStore
 from webuse.spider.config import ProjectConfig, SpiderConfig
 
 
@@ -61,7 +58,7 @@ def test_parse_failure_propagates_and_emits_error_signals(asynchronous):
 
 @pytest.mark.parametrize("asynchronous", [False, True])
 def test_download_errors_are_recorded_and_state_signals_are_emitted(
-    asynchronous, tmp_path
+    asynchronous,
 ):
     events = defaultdict(list)
     bus = SignalBus()
@@ -85,11 +82,10 @@ def test_download_errors_are_recorded_and_state_signals_are_emitted(
             "https://example.com",
             client=Failing(),
             signals=bus,
-            request_queue=FileRequestQueue(tmp_path / "queue.jsonl"),
-            request_seen=FileRequestSeen(tmp_path / "seen.jsonl"),
         )
-        assert FileRequestQueue(tmp_path / "queue.jsonl").empty()
-    assert result.stats.errors == 1
+    assert result.errors == [
+        {"url": "https://example.com/", "error": "download failed"}
+    ]
     assert len(events["request_error"]) == 1
     assert events["state_loaded"][0]["queue_size"] == 0
     assert events["state_updated"][-1]["queue_size"] == 0
@@ -249,6 +245,25 @@ def test_project_logging_applies_path_level_and_append(tmp_path):
         configure_logger()
 
 
+def test_exception_logging_has_traceback_without_local_values():
+    from io import StringIO
+
+    sink = StringIO()
+    api_key = "private-test-credential"
+    try:
+        configure_logger(sink=sink)
+        try:
+            1 / len(api_key[:0])
+        except ZeroDivisionError:
+            logger.exception("failed")
+        output = sink.getvalue()
+        assert "Traceback (most recent call last):" in output
+        assert "ZeroDivisionError" in output
+        assert api_key not in output
+    finally:
+        configure_logger()
+
+
 @pytest.mark.parametrize("suffix", ["yaml", "toml"])
 def test_async_config_file_loads_async_spider(tmp_path, suffix):
     path = tmp_path / f"spider.{suffix}"
@@ -257,35 +272,17 @@ def test_async_config_file_loads_async_spider(tmp_path, suffix):
         if suffix == "yaml"
         else 'start_urls = ["https://example.com"]'
     )
-    spider = _load_spider(str(path), spider_class=AsyncSpider)
+    (tmp_path / "webuse.yaml").write_text(f"spiders:\n  example: {path.name}\n")
+    spider = _load_spider(str(path), project_dir=tmp_path, spider_class=AsyncSpider)
     assert isinstance(spider, AsyncSpider)
     assert asyncio.run(spider.run(client=AsyncClient())).stats.fetched == 1
 
 
-def test_smart_store_configuration_precedence(tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        importlib.import_module("webuse.config"),
-        "USER_CONFIG_PATH",
-        tmp_path / "absent.yaml",
-    )
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("WEBUSE_SELECTOR_STORE", raising=False)
-    assert SmartSelectorStore().path.as_posix() == ".webuse/selectors.json"
-    (tmp_path / ".webuserc.yaml").write_text(
-        "smart:\n  selector_store: configured.json\n"
-    )
-    assert SmartSelectorStore().path.name == "configured.json"
-    monkeypatch.setenv("WEBUSE_SELECTOR_STORE", "environment.json")
-    assert SmartSelectorStore().path.name == "environment.json"
-    assert SmartSelectorStore("explicit.json").path.name == "explicit.json"
-
-
 def test_config_loaders_share_mapping_validation(tmp_path):
-    from webuse.cli.common import load_config
-    from webuse.crawl.utils import load_config_file as crawl_load_config
+    from webuse.cli.utils import load_config
 
     path = tmp_path / "config.yaml"
     path.write_text("- not a mapping")
-    for loader in (load_config, load_config_file, crawl_load_config):
+    for loader in (load_config, load_config_file):
         with pytest.raises(ConfigError, match="must contain a mapping"):
             loader(str(path))

@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        node-version: ["24", "26"]
+        node-version: ["22.19.0", "24", "26"]
     defaults:
       run:
         working-directory: ui
@@ -57,6 +57,21 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  docs:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.19.0"
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
   package:
     runs-on: ubuntu-latest
     steps:
@@ -67,7 +82,7 @@ jobs:
           python-version: "3.11"
       - uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version: "22.19.0"
           cache: npm
           cache-dependency-path: ui/package-lock.json
       - name: Build sdist and wheel with compiled UI

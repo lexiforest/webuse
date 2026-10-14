@@ -5,9 +5,19 @@ allowed_domains:
   - books.toscrape.com
 max_depth: 1
 
-follow:
-  - css: a
-    same_domain: true
+items:
+  pipelines:
+    default:
+      - class: spiders.books.CleanBookPipeline
+      - type: jsonl
+        path: output.jsonl
 
-extract:
-  title: title
+pages:
+  default:
+    follow:
+      - css: a
+        same_domain: true
+    extract:
+      page:
+        fields:
+          title: title

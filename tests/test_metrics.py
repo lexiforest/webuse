@@ -97,7 +97,7 @@ def test_attach_metrics_emits_pipeline_error_metrics():
     signals = webuse.SignalBus()
     client = FakeMetricsClient()
     webuse.attach_metrics(signals, client=client)
-    pipeline = webuse.Pipeline()
+    pipeline = webuse.ItemPipeline()
     error = RuntimeError("broken")
 
     signals.send("pipeline_error", pipeline=pipeline, error=error)
@@ -109,7 +109,7 @@ def test_attach_metrics_emits_pipeline_error_metrics():
         "counter",
         "pipeline_error",
         1,
-        {"pipeline": "Pipeline", "error": "RuntimeError"},
+        {"pipeline": "ItemPipeline", "error": "RuntimeError"},
     ) in client.calls
     assert (
         "counter",
@@ -120,14 +120,18 @@ def test_attach_metrics_emits_pipeline_error_metrics():
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])
-@pytest.mark.parametrize("drop", [False, True])
-def test_pipeline_failure_balances_runtime_metrics(asynchronous, drop):
+@pytest.mark.parametrize("outcome", ["error", "drop", "none"])
+def test_pipeline_failure_balances_runtime_metrics(asynchronous, outcome):
     class Item(BaseModel):
         title: str
 
-    class Broken(webuse.Pipeline):
+    class Broken(webuse.ItemPipeline):
         def process_item(self, item):
-            raise webuse.DropItem("skip") if drop else RuntimeError("broken")
+            if outcome == "none":
+                return None
+            raise (
+                webuse.DropItem("skip") if outcome == "drop" else RuntimeError("broken")
+            )
 
     class Example(webuse.AsyncSpider if asynchronous else webuse.Spider):
         start_urls = ["https://example.com"]
@@ -154,8 +158,12 @@ def test_pipeline_failure_balances_runtime_metrics(asynchronous, drop):
             return asyncio.run(spider.run(client=AsyncClient(), signals=signals))
         return spider.run(client=Client(), signals=signals)
 
-    if drop:
+    if outcome != "error":
         assert run().items == []
+        drops = [call for call in client.calls if call[1] == "item_dropped"]
+        assert drops == [
+            ("counter", "item_dropped", 1, {"item_type": "Item", "error": "DropItem"})
+        ]
     else:
         with pytest.raises(RuntimeError, match="broken"):
             run()

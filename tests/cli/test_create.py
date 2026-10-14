@@ -15,27 +15,18 @@ def test_create_command_scaffolds_project(tmp_path, capsys):
     assert (project / "webuse.yaml").exists()
     assert (project / "README.md").exists()
     assert (project / ".gitignore").exists()
-    assert (project / "items.py").exists()
-    assert (project / "pipelines.py").exists()
+    assert not (project / "items.py").exists()
+    assert not (project / "pipelines.py").exists()
     assert (project / "__init__.py").exists()
     assert (project / "spiders" / "__init__.py").exists()
     assert (project / ".webuse").is_dir()
     assert (project / "spiders").is_dir()
     config = load_config_file(project / "webuse.yaml")
-    items_text = (project / "items.py").read_text(encoding="utf-8")
-    pipelines_text = (project / "pipelines.py").read_text(encoding="utf-8")
     assert config["name"] == "books"
     assert "books.toscrape.com" not in str(config)
     assert "crawl" not in config
     assert config["llm"] == {}
     assert config["concurrency"] == {"limit": 5, "per_domain": 1}
-    assert config["items"]["pipelines"]["default"] == [
-        {"class": "pipelines.CleanBookPipeline"},
-        {"type": "jsonl", "path": "output.jsonl"},
-    ]
-    assert "from pydantic import BaseModel" in items_text
-    assert "class BookItem(BaseModel)" in items_text
-    assert "class CleanBookPipeline(webuse.Pipeline)" in pipelines_text
 
 
 def test_create_command_refuses_non_empty_folder_without_force(tmp_path):
@@ -53,16 +44,14 @@ def test_create_command_force_writes_scaffold_into_existing_folder(tmp_path, cap
     project = tmp_path / "existing"
     project.mkdir()
     (project / "keep.txt").write_text("mine", encoding="utf-8")
+    (project / "items.py").write_text("# custom item models\n")
+    (project / "pipelines.py").write_text("# custom processing\n")
 
     code = cli.main(["create", str(project), "--force", "--name", "Custom"])
     _ = capsys.readouterr()
 
     assert code == 0
     assert (project / "keep.txt").read_text(encoding="utf-8") == "mine"
+    assert (project / "items.py").read_text() == "# custom item models\n"
+    assert (project / "pipelines.py").read_text() == "# custom processing\n"
     assert "# Custom" in (project / "README.md").read_text(encoding="utf-8")
-    assert "class BookItem(BaseModel)" in (project / "items.py").read_text(
-        encoding="utf-8"
-    )
-    assert "class CleanBookPipeline(webuse.Pipeline)" in (
-        project / "pipelines.py"
-    ).read_text(encoding="utf-8")

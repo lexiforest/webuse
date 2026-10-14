@@ -1,6 +1,8 @@
-from .client import (
+from .agent import AgentLimits, AgentModel, AgentModelError, AgentRunInfo, AgentTool
+from .http import (
     AsyncClient,
     Client,
+    Response,
     adelete,
     aget,
     apost,
@@ -13,10 +15,8 @@ from .client import (
     request,
 )
 from .config import load_webuse_config
-from .crawl import (
+from .engine import (
     DefaultRequestHasher,
-    FileRequestQueue,
-    FileRequestSeen,
     MemoryRequestQueue,
     MemoryRequestSeen,
     RedisRequestQueue,
@@ -25,6 +25,7 @@ from .crawl import (
     RequestQueue,
     RequestSeen,
     acrawl,
+    agentic_crawl,
     canonical_request_url,
     crawl,
 )
@@ -34,7 +35,6 @@ from .exceptions import (
     DropItem,
     IgnoreRequest,
     NotConfigured,
-    NotSupported,
     PipelineError,
     PipelineStateError,
     SignalError,
@@ -52,23 +52,31 @@ from .llm import (
 )
 from .log import configure_logger, logger
 from .models import CrawlRequest, FollowRule, RequestOptions
-from .metrics import UStatsMetrics, attach_metrics
+from .metrics import Metrics, attach_metrics
 from .pipelines import (
+    AsyncItemPipeline,
     AssetDownloadPipeline,
     CsvPipeline,
     JsonlPipeline,
-    Pipeline,
+    ItemPipeline,
     SQLitePipeline,
     WebhookPipeline,
 )
-from .response import Response
 from .signals import SignalBus
-from .smart import LlmSmartResolver, SmartResolver, SmartSelectorStore
-from .spider import AsyncSpider, Spider
+from .extract import LlmSmartResolver
+from .spider import AgenticSpider, AsyncSpider, Spider
 
 __version__ = "0.0.1"
 
 __all__ = [
+    "AgenticSpider",
+    "AgentLimits",
+    "AgentModel",
+    "AgentModelError",
+    "AgentRunInfo",
+    "AgentTool",
+    "agentic_crawl",
+    "AsyncItemPipeline",
     "AsyncClient",
     "AsyncSpider",
     "AssetDownloadPipeline",
@@ -79,8 +87,6 @@ __all__ = [
     "CrawlRequest",
     "DefaultRequestHasher",
     "DropItem",
-    "FileRequestQueue",
-    "FileRequestSeen",
     "FollowRule",
     "IgnoreRequest",
     "JsonlPipeline",
@@ -88,9 +94,8 @@ __all__ = [
     "MemoryRequestQueue",
     "MemoryRequestSeen",
     "NotConfigured",
-    "NotSupported",
     "OpenAISettings",
-    "Pipeline",
+    "ItemPipeline",
     "PipelineError",
     "PipelineStateError",
     "RedisRequestQueue",
@@ -105,12 +110,10 @@ __all__ = [
     "SQLitePipeline",
     "Spider",
     "SpiderError",
-    "UStatsMetrics",
+    "Metrics",
     "WebhookPipeline",
     "LlmSmartResolver",
-    "SmartResolver",
     "SmartSelectorError",
-    "SmartSelectorStore",
     "WebuseError",
     "__version__",
     "acrawl",

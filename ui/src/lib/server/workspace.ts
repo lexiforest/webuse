@@ -3,12 +3,13 @@ import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync,
 import { dirname, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { databasePath } from "./db";
+import { runtime } from "./runtime";
 
 export type ProjectFile = { path: string; content: string };
 type Entry = { path: string; hash: string; mode: number; size: number };
 export const workspaceRoot = resolve(process.env.WEBUSE_WORKSPACE_DIR || join(dirname(databasePath), "workspaces"));
 const omittedNames = new Set([".git", ".venv", "venv", "node_modules", "__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache", ".DS_Store"]);
-const locks = new Set<number>();
+const locks = runtime.workspaceLocks;
 const hash = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 
 export class WorkspaceConflict extends Error {}

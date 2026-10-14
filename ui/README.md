@@ -1,6 +1,6 @@
 # webuse GUI
 
-SolidStart control plane for webuse projects. Node owns the UI, SQLite database,
+SolidStart 1.x control plane for webuse projects, built with Vinxi. Node owns the UI, SQLite database,
 scheduler, run queue, and crawler subprocess lifecycle. Each run starts an
 independent Python process using `python -m webuse.cli crawl`.
 
@@ -12,7 +12,7 @@ isolated cloud agent runtime.
 [HUMAN.md](../HUMAN.md) defines the product direction and must never be edited by
 agents. See [PLAN.md](../PLAN.md) for the derived implementation plan.
 
-Use Node.js 24 or newer. Node.js 26 is supported.
+Use Node.js 22.19 or newer. Node.js 26 is supported.
 
 ## Run the packaged UI
 
@@ -23,7 +23,7 @@ uv add webuse
 uv run webuse ui
 ```
 
-The launcher requires Node.js 24+ on PATH, opens `http://127.0.0.1:2951/`, and
+The launcher requires Node.js 22.19+ on PATH, opens `http://127.0.0.1:2951/`, and
 stops with Ctrl+C. npm is not required. Use `--no-open`, `--port`, `--host`, and
 `--data-dir` as needed. The default bind address is `127.0.0.1`.
 
@@ -45,10 +45,11 @@ npm ci
 npm run dev
 ```
 
-Open the URL printed by Vite, by default `http://127.0.0.1:2951/`.
+Configuration lives in `app.config.ts`. Open the URL printed by Vinxi, by default
+`http://localhost:2951/`.
 Development, preview, and production start default to port 2951. Override the
-Vite port with `npm run dev -- --port 4000` or `npm run preview -- --port 4000`;
-override the production port with `PORT=4000 npm run start`.
+development port with `npm run dev -- --port 4000`; use
+`PORT=4000 npm run preview` or `PORT=4000 npm run start` for the built server.
 
 The orchestrator discovers `../.venv/bin/python` automatically. Override it and
 the control-plane storage paths when needed:
@@ -140,7 +141,7 @@ HTTP/Python/crawl tools; no external model calls are needed.
 
 ## Python release packaging
 
-Run `uv build` from the repository root with Node.js 24+ and npm installed. The
+Run `uv build` from the repository root with Node.js 22.19+ and npm installed. The
 setuptools build runs `npm ci` and `npm run build` with the Node server preset,
 then packages `.output/server` and `.output/public` under `webuse/_ui`. This
 generated directory is ignored by Git. Editable Python installs skip this build;
@@ -149,10 +150,7 @@ use the development server above, or run `uv build` to populate the local bundle
 Both the wheel and source distribution carry the compiled UI. Building a wheel
 from the published source distribution requires no Node/npm build tools. Node is
 still required to run the UI. SQLite uses Node's built-in `node:sqlite`, so the
-bundle has no platform-specific SQLite addon. No legacy UI database/settings
-migration is provided. A database from before disk workspaces is rejected with
-an explanatory error; use a fresh `--data-dir` (or `WEBUSE_DB_PATH`). Existing
-database files are not migrated or deleted automatically.
+bundle has no platform-specific SQLite addon.
 
 ## Local and cloud roadmap
 

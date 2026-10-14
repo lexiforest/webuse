@@ -1,305 +1,229 @@
+import asyncio
+import json
+import sys
 
 import pytest
 
-from webuse import cli
+from webuse import AsyncSpider, Response, cli
+from webuse.config import load_config_file
+from webuse.cli.crawl import _load_spider
+from crawl_helpers import FakeClient
 
 
-def test_gen_command_creates_yaml_config_by_default(tmp_path, capsys):
-    target = tmp_path / "standalone"
-
-    code = cli.main(
-        ["gen", "books", "https://books.toscrape.com/", "--directory", str(target)]
-    )
-    out = capsys.readouterr().out.strip()
-
-    config = target / "books.yaml"
-    assert code == 0
-    assert str(config) in out
-    assert config.exists()
-    assert not (target / "books.py").exists()
-    assert not (target / "spiders").exists()
-    text = config.read_text(encoding="utf-8")
-    assert "name: books" in text
-    assert "start_urls:" in text
-    assert "- https://books.toscrape.com/" in text
-    assert "pages:" in text
-    assert "extract:" in text
-
-
-def test_gen_command_creates_python_spider_file(tmp_path, capsys):
-    target = tmp_path / "standalone"
-
-    code = cli.main(
-        [
-            "gen",
-            "books",
-            "https://books.toscrape.com/",
-            "--directory",
-            str(target),
-            "--python",
+@pytest.fixture(autouse=True)
+def isolated_spider_imports():
+    # Each generated project owns its own top-level spiders package.
+    def modules():
+        return [
+            name for name in sys.modules
+            if name == "spiders" or name.startswith("spiders.")
         ]
-    )
-    out = capsys.readouterr().out.strip()
 
-    spider = target / "books.py"
-    assert code == 0
-    assert str(spider) in out
-    assert spider.exists()
-    text = spider.read_text(encoding="utf-8")
-    assert "class BooksSpider(webuse.Spider)" in text
-    assert 'name = "books"' in text
-    assert "Path(" not in text
-    assert "sys.path" not in text
-    assert "from items import" not in text
-    assert 'item_model = "items.BookItem"' not in text
-    assert 'start_urls = ["https://books.toscrape.com/"]' in text
-    assert 'allowed_domains = {"books.toscrape.com"}' in text
-    assert '"fields": {' in text
-    assert '"title": "title"' in text
-    assert "def main():" in text
-    assert "BooksSpider().run()" in text
-    assert "def run(" not in text
-    assert "_json_default" not in text
-    assert "import json" not in text
-    assert not (target / "spiders").exists()
-    assert not (target / "books.toml").exists()
-    assert not (target / "books.yaml").exists()
+    saved = {name: sys.modules.pop(name) for name in modules()}
+    try:
+        yield
+    finally:
+        for name in modules():
+            sys.modules.pop(name)
+        sys.modules.update(saved)
 
 
-def test_gen_command_creates_project_yaml_config_by_default(tmp_path, capsys):
+@pytest.mark.parametrize(
+    "format_args,suffix",
+    [([], ".yaml"), (["--yaml"], ".yaml"), (["--toml"], ".toml"), (["--python-only"], None)],
+)
+@pytest.mark.parametrize("asynchronous", [False, True])
+def test_gen_creates_registered_project_spider(
+    tmp_path, capsys, format_args, suffix, asynchronous, monkeypatch
+):
     project = tmp_path / "project"
-    project.mkdir()
-    (project / "webuse.toml").write_text('name = "project"\n', encoding="utf-8")
-
-    code = cli.main(
-        ["gen", "books", "https://books.toscrape.com/", "--directory", str(project)]
-    )
-    out = capsys.readouterr().out.strip()
-
-    config = project / "spiders" / "books.yaml"
-    spider = project / "spiders" / "books.py"
-    assert code == 0
-    assert str(config) in out
-    assert config.exists()
-    assert spider.exists()
-    spider_text = spider.read_text(encoding="utf-8")
-    assert 'spider_config_path = "spiders/books.yaml"' in spider_text
-    assert 'item_model = "items.BookItem"' in spider_text
-    config_text = config.read_text(encoding="utf-8")
-    assert "start_urls:" in config_text
-    assert "fields:" in config_text
-    project_text = (project / "webuse.toml").read_text(encoding="utf-8")
-    assert "[spiders.books]" in project_text
-    assert 'path = "spiders/books.py"' in project_text
-
-
-def test_gen_command_creates_project_python_spider_file(tmp_path, capsys):
-    project = tmp_path / "project"
-    project.mkdir()
-    (project / "webuse.toml").write_text('name = "project"\n', encoding="utf-8")
-
-    code = cli.main(
-        [
-            "gen",
-            "books",
-            "https://books.toscrape.com/",
-            "--directory",
-            str(project),
-            "--python",
-        ]
-    )
-    out = capsys.readouterr().out.strip()
-
-    spider = project / "spiders" / "books.py"
-    assert code == 0
-    assert str(spider) in out
-    assert spider.exists()
-    text = spider.read_text(encoding="utf-8")
-    assert 'item_model = "items.BookItem"' in text
-    assert 'start_urls = ["https://books.toscrape.com/"]' in text
-    project_text = (project / "webuse.toml").read_text(encoding="utf-8")
-    assert "[spiders.books]" in project_text
-    assert 'path = "spiders/books.py"' in project_text
-
-
-def test_gen_command_can_create_toml_config(tmp_path, capsys):
-    project = tmp_path / "project"
-    project.mkdir()
-    (project / "webuse.toml").write_text('name = "project"\n', encoding="utf-8")
-
-    code = cli.main(
-        [
-            "gen",
-            "books",
-            "https://books.toscrape.com/",
-            "--directory",
-            str(project),
-            "--toml",
-        ]
-    )
-    out = capsys.readouterr().out.strip()
-
-    config = project / "spiders" / "books.toml"
-    spider = project / "spiders" / "books.py"
-    assert code == 0
-    assert str(config) in out
-    assert spider.exists()
-    spider_text = spider.read_text(encoding="utf-8")
-    assert 'spider_config_path = "spiders/books.toml"' in spider_text
-    assert "Path(" not in spider_text
-    assert "sys.path" not in spider_text
-    assert 'item_model = "items.BookItem"' in spider_text
-    assert "def main():" in spider_text
-    assert "BooksSpider().run()" in spider_text
-    assert "def run(" not in spider_text
-    assert "_json_default" not in spider_text
-    assert "import json" not in spider_text
-    assert 'start_urls = ["https://books.toscrape.com/"]' not in spider_text
-    assert "allowed_domains" not in spider_text
-    assert "webuse.FollowRule" not in spider_text
-    assert '"fields": {' not in spider_text
-    text = config.read_text(encoding="utf-8")
-    assert 'name = "books"' in text
-    assert 'start_urls = ["https://books.toscrape.com/"]' in text
-    assert 'allowed_domains = ["books.toscrape.com"]' in text
-    assert "[[pages.default.follow]]" in text
-    assert "[pages.default.extract.books.fields]" in text
-    assert "[crawl]" not in text
-    assert "[items.pipelines]" not in text
-    project_text = (project / "webuse.toml").read_text(encoding="utf-8")
-    assert "[spiders.books]" in project_text
-    assert 'path = "spiders/books.py"' in project_text
-
-
-def test_gen_command_can_create_standalone_toml_config_only(tmp_path, capsys):
-    target = tmp_path / "standalone"
-
-    code = cli.main(
-        [
-            "gen",
-            "books",
-            "https://books.toscrape.com/",
-            "--directory",
-            str(target),
-            "--toml",
-        ]
-    )
-    out = capsys.readouterr().out.strip()
-
-    config = target / "books.toml"
-    assert code == 0
-    assert str(config) in out
-    assert config.exists()
-    assert not (target / "books.py").exists()
-    assert not (target / "spiders").exists()
-    text = config.read_text(encoding="utf-8")
-    assert 'name = "books"' in text
-    assert 'start_urls = ["https://books.toscrape.com/"]' in text
-    assert "[pages.default.extract.books.fields]" in text
-
-
-def test_gen_command_refuses_both_config_formats(tmp_path):
-    with pytest.raises(SystemExit) as exc:
+    assert cli.main(["create", str(project)]) == 0
+    capsys.readouterr()
+    assert (
         cli.main(
             [
                 "gen",
                 "books",
-                "https://books.toscrape.com/",
-                "--directory",
-                str(tmp_path),
-                "--toml",
-                "--yaml",
-            ]
-        )
-
-    assert "Use only one" in str(exc.value)
-
-
-def test_gen_command_refuses_python_with_config_format(tmp_path):
-    with pytest.raises(SystemExit) as exc:
-        cli.main(
-            [
-                "gen",
-                "books",
-                "https://books.toscrape.com/",
-                "--directory",
-                str(tmp_path),
-                "--python",
-                "--yaml",
-            ]
-        )
-
-    assert "Use only one" in str(exc.value)
-
-
-def test_gen_command_refuses_config_overwrite_without_force(tmp_path):
-    project = tmp_path / "project"
-    project.mkdir()
-    (project / "webuse.toml").write_text('name = "project"\n', encoding="utf-8")
-    config = project / "spiders" / "books.toml"
-    config.parent.mkdir(parents=True)
-    config.write_text("mine", encoding="utf-8")
-
-    with pytest.raises(SystemExit) as exc:
-        cli.main(
-            [
-                "gen",
-                "books",
-                "https://books.toscrape.com/",
+                "https://example.com",
                 "--directory",
                 str(project),
-                "--toml",
+                *format_args,
+                *(["--async"] if asynchronous else []),
             ]
         )
-
-    assert "refusing to overwrite" in str(exc.value)
-    assert config.read_text(encoding="utf-8") == "mine"
-
-
-def test_gen_command_sanitizes_module_name(tmp_path, capsys):
-    target = tmp_path / "standalone"
-
-    code = cli.main(
-        ["gen", "Product Pages", "https://example.com", "--directory", str(target)]
+        == 0
     )
-    _ = capsys.readouterr()
+    payload = json.loads(capsys.readouterr().out)
+    spider_path = project / "spiders/books.py"
+    assert payload["path"] == str(spider_path)
+    assert "item_model = BookItem" in spider_path.read_text()
+    assert "class BookItem(BaseModel):" in spider_path.read_text()
+    assert "class CleanBookPipeline(webuse.ItemPipeline):" in spider_path.read_text()
+    assert "def main" not in spider_path.read_text()
+    config = load_config_file(project / "webuse.yaml")
+    assert config["spiders"]["books"] == {"path": "spiders/books.py"}
+    if suffix:
+        config_path = project / f"spiders/books{suffix}"
+        assert payload["config"] == str(config_path)
+        assert load_config_file(config_path)["start_urls"] == ["https://example.com"]
+        assert load_config_file(config_path)["items"]["pipelines"]["default"] == [
+            {"class": "spiders.books.CleanBookPipeline"},
+            {"type": "jsonl", "path": "output.jsonl"},
+        ]
+    else:
+        assert "config" not in payload
+    spider = _load_spider(str(spider_path), project_dir=project)
+    assert isinstance(spider, AsyncSpider) is asynchronous
 
-    assert code == 0
-    assert (target / "product_pages.yaml").exists()
+    class GeneratedPageClient(FakeClient):
+        def request(self, method, url, **kwargs):
+            response = super().request(method, url, **kwargs)
+            response.content = b"<title>Home</title><h1>Home</h1>"
+            return response
+
+    class AsyncGeneratedPageClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def request(self, method, url, **kwargs):
+            return GeneratedPageClient().request(method, url, **kwargs)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            pass
+
+    result = (
+        asyncio.run(spider.run(client=AsyncGeneratedPageClient(), max_requests=1))
+        if asynchronous
+        else spider.run(client=GeneratedPageClient(), max_requests=1)
+    )
+    assert len(result.items) == 1
+    assert result.items[0].title == "Home"
+    assert (project / "output.jsonl").is_file()
+    if asynchronous:
+        from webuse.engine import aio
+
+        monkeypatch.setattr(aio, "AsyncClient", AsyncGeneratedPageClient)
+        # The generated AsyncSpider runs through the ordinary crawl command.
+        assert cli.main(
+            ["crawl", str(project), "--spider", "books", "--max-requests", "1"]
+        ) == 0
+        records = (project / "output.jsonl").read_text().splitlines()
+        assert len(records) == 2
+        assert all(json.loads(record)["title"] == "Home" for record in records)
 
 
-def test_gen_command_refuses_default_yaml_overwrite_without_force(tmp_path):
-    target = tmp_path / "standalone"
-    config = target / "books.yaml"
-    target.mkdir(parents=True)
-    config.write_text("mine", encoding="utf-8")
-
-    with pytest.raises(SystemExit) as exc:
+@pytest.mark.parametrize("args", [[], ["--python-only"], ["--toml"]])
+@pytest.mark.parametrize("exists", [False, True])
+def test_gen_requires_existing_project(tmp_path, args, exists):
+    target = tmp_path / "missing"
+    if exists:
+        target.mkdir()
+    with pytest.raises(SystemExit, match="project|webuse.yaml"):
         cli.main(
-            ["gen", "books", "https://books.toscrape.com/", "--directory", str(target)]
+            ["gen", "books", "https://example.com", "--directory", str(target), *args]
+        )
+    assert not (target / "books.yaml").exists()
+    assert not (target / "spiders").exists()
+
+
+@pytest.mark.parametrize("args", [["--toml", "--yaml"], ["--python-only", "--yaml"]])
+def test_gen_refuses_multiple_formats(tmp_path, args):
+    with pytest.raises(SystemExit, match="Use only one"):
+        cli.main(
+            ["gen", "books", "https://example.com", "--directory", str(tmp_path), *args]
         )
 
-    assert "refusing to overwrite" in str(exc.value)
-    assert config.read_text(encoding="utf-8") == "mine"
 
-
-def test_gen_command_force_overwrites_default_yaml_config(tmp_path, capsys):
-    target = tmp_path / "standalone"
-    config = target / "books.yaml"
-    target.mkdir(parents=True)
-    config.write_text("mine", encoding="utf-8")
-
-    code = cli.main(
-        [
-            "gen",
-            "books",
-            "https://books.toscrape.com/",
-            "--directory",
-            str(target),
-            "--force",
-        ]
+@pytest.mark.parametrize("project_suffix", ["yaml", "toml"])
+@pytest.mark.parametrize("format_args", [[], ["--toml"], ["--python-only"]])
+def test_gen_supports_minimal_project_and_sanitizes_names(
+    tmp_path, project_suffix, format_args, capsys
+):
+    config = tmp_path / f"webuse.{project_suffix}"
+    config.write_text(
+        'name = "project"\n' if project_suffix == "toml" else "name: project\n"
     )
-    _ = capsys.readouterr()
+    assert (
+        cli.main(
+            [
+                "gen",
+                "Product Pages",
+                "https://example.com",
+                "--directory",
+                str(tmp_path),
+                *format_args,
+            ]
+        )
+        == 0
+    )
+    spider_path = tmp_path / "spiders/product_pages.py"
+    # Prove the pipeline loaded from this generated module actually processes items.
+    spider_path.write_text(
+        spider_path.read_text().replace(
+            "return item", 'return item.model_copy(update={"title": "processed"})'
+        )
+    )
+    assert load_config_file(config)["spiders"]["product_pages"] == {
+        "path": "spiders/product_pages.py"
+    }
+    spider = _load_spider(str(spider_path), project_dir=tmp_path)
+    response = Response(content=b"<title>Home</title>")
 
-    assert code == 0
-    assert "start_urls:" in config.read_text(encoding="utf-8")
+    class Client:
+        def request(self, method, url, **kwargs):
+            return response
+
+    result = spider.run(client=Client(), max_requests=1)
+    assert result.items[0].title == "processed"
+    records = (tmp_path / "output.jsonl").read_text().splitlines()
+    assert json.loads(records[0])["title"] == "processed"
+
+
+@pytest.mark.parametrize(
+    "suffix,args", [("yaml", []), ("toml", ["--toml"]), ("py", ["--python-only"])]
+)
+def test_gen_preserves_files_unless_forced(tmp_path, capsys, suffix, args):
+    (tmp_path / "webuse.yaml").write_text("name: project\n")
+    path = tmp_path / f"spiders/books.{suffix}"
+    path.parent.mkdir()
+    path.write_text("mine")
+    command = [
+        "gen",
+        "books",
+        "https://example.com",
+        "--directory",
+        str(tmp_path),
+        *args,
+    ]
+    with pytest.raises(SystemExit, match="refusing to overwrite"):
+        cli.main(command)
+    assert path.read_text() == "mine"
+    assert cli.main([*command, "--force"]) == 0
+    assert path.read_text() != "mine"
+
+
+def test_gen_force_replaces_toml_registration(tmp_path, capsys):
+    config = tmp_path / "webuse.toml"
+    config.write_text('[spiders.books]\npath = "old.py"\n\n[log]\nlevel = "debug"\n')
+    command = ["gen", "books", "https://example.com", "--directory", str(tmp_path)]
+    with pytest.raises(SystemExit, match="already registered"):
+        cli.main(command)
+    assert not (tmp_path / "spiders").exists()
+    assert cli.main([*command, "--force"]) == 0
+    assert load_config_file(config) == {
+        "spiders": {"books": {"path": "spiders/books.py"}},
+        "log": {"level": "debug"},
+    }
+
+
+def test_gen_rejects_uneditable_toml_before_writing_files(tmp_path):
+    config = tmp_path / "webuse.toml"
+    content = 'spiders = {books = {path = "books.py"}}\n'
+    config.write_text(content)
+    with pytest.raises(SystemExit, match="inline TOML"):
+        cli.main(["gen", "quotes", "https://example.com", "--directory", str(tmp_path)])
+    assert config.read_text() == content
+    assert not (tmp_path / "spiders").exists()

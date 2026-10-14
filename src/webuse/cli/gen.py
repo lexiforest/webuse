@@ -1,13 +1,13 @@
 import argparse
 import re
+import tomllib
 from pathlib import Path
 from urllib.parse import urlparse
 
 import yaml
 
-from .common import print_jsonl
-
-_CONFIG_NAMES = ("webuse.toml", "webuse.yaml", "webuse.yml")
+from .utils import print_jsonl
+from .project import load_project_config, project_config_path, require_project_dir
 
 
 def _module_name(value: str) -> str:
@@ -33,34 +33,36 @@ def _class_name(value: str) -> str:
     return name
 
 
-def _is_project_dir(path: Path) -> bool:
-    return any((path / name).exists() for name in _CONFIG_NAMES)
-
-
-def _project_config_file(path: Path) -> Path:
-    for name in _CONFIG_NAMES:
-        candidate = path / name
-        if candidate.exists():
-            return candidate
-    raise SystemExit(f"cannot find project config in {path}")
-
-
-def _register_spider(project_dir: Path, name: str, path: Path, *, force: bool) -> None:
-    config_path = _project_config_file(project_dir)
+def _registered_config(
+    project_dir: Path, name: str, path: Path, *, force: bool
+) -> tuple[Path, str]:
+    config_path = project_config_path(project_dir)
+    existing = load_project_config(project_dir)
+    if name in existing.spiders and not force:
+        raise SystemExit(f"spider already registered in project config: {name}")
     relative_path = path.relative_to(project_dir).as_posix()
     if config_path.suffix == ".toml":
         text = config_path.read_text(encoding="utf-8")
         section = f"[spiders.{name}]"
-        if section in text and not force:
-            raise SystemExit(f"spider already registered in project config: {name}")
-        if section in text:
-            return
-        suffix = "\n" if text.endswith("\n") else "\n\n"
-        config_path.write_text(
-            f'{text}{suffix}{section}\npath = "{relative_path}"\n',
-            encoding="utf-8",
-        )
-        return
+        replacement = f'{section}\npath = "{relative_path}"\n\n'
+        if name in existing.spiders:
+            pattern = rf"(?ms)^{re.escape(section)}[^\n]*\n.*?(?=^\[|\Z)"
+            text, count = re.subn(pattern, lambda match: replacement, text, count=1)
+            if count != 1:
+                raise SystemExit(
+                    f"edit the existing inline TOML spider registration manually: {name}"
+                )
+        else:
+            suffix = "\n" if text.endswith("\n") else "\n\n"
+            text = f"{text}{suffix}{replacement}"
+        try:
+            tomllib.loads(text)
+        except tomllib.TOMLDecodeError as exc:
+            raise SystemExit(
+                "cannot extend inline TOML spider registrations; "
+                "use [spiders.NAME] tables before generating a spider"
+            ) from exc
+        return config_path, text
 
     config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     if not isinstance(config, dict):
@@ -71,14 +73,21 @@ def _register_spider(project_dir: Path, name: str, path: Path, *, force: bool) -
     if name in spiders and not force:
         raise SystemExit(f"spider already registered in project config: {name}")
     spiders[name] = {"path": relative_path}
-    config_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    return config_path, yaml.safe_dump(config, sort_keys=False)
 
 
-def _spider_config_toml(name: str, url: str) -> str:
+def _spider_config_toml(name: str, url: str, *, pipelines: list[dict[str, str]]) -> str:
     parsed = urlparse(url)
     allowed_domains = (
         f'allowed_domains = ["{parsed.netloc}"]\n' if parsed.netloc else ""
     )
+    item_config = ""
+    if pipelines:
+        entries = "\n".join(
+            "  { " + ", ".join(f'{key} = "{value}"' for key, value in spec.items()) + " },"
+            for spec in pipelines
+        )
+        item_config = f"\n[items.pipelines]\ndefault = [\n{entries}\n]\n"
     return f'''name = "{name}"
 start_urls = ["{url}"]
 {allowed_domains}max_depth = 1
@@ -89,13 +98,18 @@ same_domain = true
 
 [pages.default.extract.{_module_name(name)}.fields]
 title = "title"
-'''
+{item_config}'''
 
 
-def _spider_config_yaml(name: str, url: str) -> str:
+def _spider_config_yaml(name: str, url: str, *, pipelines: list[dict[str, str]]) -> str:
     parsed = urlparse(url)
     allowed_domains = (
         f"allowed_domains:\n  - {parsed.netloc}\n" if parsed.netloc else ""
+    )
+    item_config = (
+        yaml.safe_dump({"items": {"pipelines": {"default": pipelines}}}, sort_keys=False)
+        if pipelines
+        else ""
     )
     return f"""name: {name}
 start_urls:
@@ -110,7 +124,7 @@ pages:
       {_module_name(name)}:
         fields:
           title: title
-"""
+{item_config}"""
 
 
 def _spider_template(
@@ -118,44 +132,49 @@ def _spider_template(
     url: str,
     *,
     config_suffix: str | None = None,
-    project_mode: bool = False,
+    asynchronous: bool = False,
 ) -> str:
     parsed = urlparse(url)
     allowed_domain = parsed.netloc
     class_name = _class_name(name)
+    base_class = "AsyncSpider" if asynchronous else "Spider"
     module = _module_name(name)
+    definitions = '''import webuse
+from pydantic import BaseModel, Field
+
+
+class BookItem(BaseModel):
+    title: str
+    price: str = ""
+    availability: str = Field(
+        default="", description="Raw availability text from the listing page."
+    )
+
+
+class CleanBookPipeline(webuse.ItemPipeline):
+    def process_item(self, item: BookItem):
+        return item
+
+
+'''
     if config_suffix:
-        config_path = (
-            f"spiders/{module}{config_suffix}"
-            if project_mode
-            else f"{module}{config_suffix}"
-        )
-        item_model = '    item_model = "items.BookItem"\n' if project_mode else ""
-        return f"""import webuse
-
-
-class {class_name}(webuse.Spider):
+        config_path = f"spiders/{module}{config_suffix}"
+        return definitions + f'''class {class_name}(webuse.{base_class}):
     spider_config_path = "{config_path}"
-{item_model}
-
-def main():
-    {class_name}().run()
-
-
-if __name__ == "__main__":
-    main()
-"""
+    item_model = BookItem
+'''
 
     allowed_domains = (
         f'    allowed_domains = {{"{allowed_domain}"}}\n' if allowed_domain else ""
     )
-    item_model = '    item_model = "items.BookItem"\n' if project_mode else ""
-    return f'''import webuse
-
-
-class {class_name}(webuse.Spider):
+    return definitions + f'''class {class_name}(webuse.{base_class}):
     name = "{name}"
-{item_model}    start_urls = ["{url}"]
+    item_model = BookItem
+    pipelines = [
+        CleanBookPipeline(),
+        {{"type": "jsonl", "path": "output.jsonl"}},
+    ]
+    start_urls = ["{url}"]
 {allowed_domains}    max_depth = 1
 
     follow = [
@@ -163,18 +182,12 @@ class {class_name}(webuse.Spider):
     ]
 
     extract = {{
-        "fields": {{
-            "title": "title",
+        "default": {{
+            "{module}": {{
+                "fields": {{"title": "title"}},
+            }},
         }},
     }}
-
-
-def main():
-    {class_name}().run()
-
-
-if __name__ == "__main__":
-    main()
 '''
 
 
@@ -182,63 +195,80 @@ def gen_command(args: argparse.Namespace) -> int:
     target = Path(args.directory)
     if target.exists() and not target.is_dir():
         raise SystemExit(f"gen target exists and is not a directory: {target}")
-    if sum(bool(value) for value in (args.python, args.toml, args.yaml)) > 1:
-        raise SystemExit("Use only one of --python, --toml, or --yaml")
+    if sum(bool(value) for value in (args.python_only, args.toml, args.yaml)) > 1:
+        raise SystemExit("Use only one of --python-only, --toml, or --yaml")
 
-    project_mode = target.exists() and _is_project_dir(target)
+    target = require_project_dir(target)
     module = _module_name(args.name)
-    output_dir = target / "spiders" if project_mode else target
+    output_dir = target / "spiders"
     path = output_dir / f"{module}.py"
-    use_python = args.python
     use_toml = args.toml
-    use_yaml = args.yaml or not (args.python or args.toml)
-    standalone_config_only = not project_mode and not use_python
-    if not standalone_config_only and path.exists() and not args.force:
+    use_yaml = args.yaml or not (args.python_only or args.toml)
+    if path.exists() and not args.force:
         raise SystemExit(f"refusing to overwrite existing file: {path}")
 
     config_path = None
     config_content = None
     config_suffix = None
+    pipelines = [
+        {"class": f"spiders.{module}.CleanBookPipeline"},
+        {"type": "jsonl", "path": "output.jsonl"},
+    ]
     if use_toml:
         config_path = output_dir / f"{module}.toml"
-        config_content = _spider_config_toml(args.name, args.url)
+        config_content = _spider_config_toml(args.name, args.url, pipelines=pipelines)
         config_suffix = ".toml"
     elif use_yaml:
         config_path = output_dir / f"{module}.yaml"
-        config_content = _spider_config_yaml(args.name, args.url)
+        config_content = _spider_config_yaml(args.name, args.url, pipelines=pipelines)
         config_suffix = ".yaml"
     if config_path is not None and config_path.exists() and not args.force:
         raise SystemExit(f"refusing to overwrite existing file: {config_path}")
 
+    project_path, project_content = _registered_config(
+        target, module, path, force=args.force
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     payload = {"name": args.name, "url": args.url}
-    if not standalone_config_only:
-        path.write_text(
-            _spider_template(
-                args.name,
-                args.url,
-                config_suffix=config_suffix,
-                project_mode=project_mode,
-            ),
-            encoding="utf-8",
-        )
-        payload["path"] = str(path)
+    path.write_text(
+        _spider_template(
+            args.name,
+            args.url,
+            config_suffix=config_suffix,
+            asynchronous=args.async_spider,
+        ),
+        encoding="utf-8",
+    )
+    payload["path"] = str(path)
     if config_path is not None and config_content is not None:
         config_path.write_text(config_content, encoding="utf-8")
         payload["config"] = str(config_path)
-    if project_mode:
-        _register_spider(target, module, path, force=args.force)
+    project_path.write_text(project_content, encoding="utf-8")
     print_jsonl([payload])
     return 0
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
-    gen_parser = subparsers.add_parser("gen")
+    gen_parser = subparsers.add_parser(
+        "gen", help="add a spider to an existing project"
+    )
     gen_parser.add_argument("name")
     gen_parser.add_argument("url")
-    gen_parser.add_argument("--directory", default=".")
+    gen_parser.add_argument(
+        "--directory", default=".", help="existing project directory"
+    )
     gen_parser.add_argument("--force", action="store_true")
-    gen_parser.add_argument("--python", action="store_true")
+    gen_parser.add_argument(
+        "--async",
+        dest="async_spider",
+        action="store_true",
+        help="generate an AsyncSpider (works with any output format)",
+    )
+    gen_parser.add_argument(
+        "--python-only",
+        action="store_true",
+        help="generate a Python-only spider without a separate config file",
+    )
     gen_parser.add_argument("--toml", action="store_true")
     gen_parser.add_argument("--yaml", action="store_true")
     gen_parser.set_defaults(func=gen_command)

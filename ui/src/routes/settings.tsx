@@ -54,14 +54,12 @@ async function readSettingsResponse(response: Response, action: "load" | "save")
   return JSON.parse(body) as {
     settings: SettingsValue;
     effectiveSettings: SettingsValue;
-    paths: { local: string; user: string };
   };
 }
 
 export default function Settings() {
   const [settings, setSettings] = createSignal<SettingsValue>(defaultSettings);
   const [effectiveSettings, setEffectiveSettings] = createSignal<SettingsValue>(defaultSettings);
-  const [localPath, setLocalPath] = createSignal(".webuserc.yaml");
   const [loading, setLoading] = createSignal(true);
   const [saving, setSaving] = createSignal(false);
   const [error, setError] = createSignal<string>();
@@ -84,7 +82,6 @@ export default function Settings() {
       const data = await readSettingsResponse(response, "load");
       setSettings(data.settings);
       setEffectiveSettings(data.effectiveSettings);
-      setLocalPath(data.paths.local);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load settings");
     } finally {
@@ -107,7 +104,6 @@ export default function Settings() {
       const data = await readSettingsResponse(response, "save");
       setSettings(data.settings);
       setEffectiveSettings(data.effectiveSettings);
-      setLocalPath(data.paths.local);
       setSaved(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save settings");
@@ -126,7 +122,7 @@ export default function Settings() {
         <h1 class="text-3xl font-bold text-sky-400">Settings</h1>
         <p class="mt-1 text-sm text-gray-400">Global runtime, LLM, and selector configuration</p>
         <p class="mt-2 text-xs text-gray-500">
-          Editing local config: <span class="font-mono text-gray-300">{localPath()}</span>
+          Settings database: <span class="font-mono text-gray-300">{effectiveSettings().runtime.databasePath}</span>
         </p>
       </div>
 
@@ -139,7 +135,7 @@ export default function Settings() {
       </Show>
       <Show when={saved()}>
         <div class="mb-4 rounded border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
-          Saved in {localPath()} and applied to the orchestrator.
+          Saved in {effectiveSettings().runtime.databasePath} and applied to the orchestrator.
         </div>
       </Show>
 

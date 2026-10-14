@@ -50,8 +50,3 @@ webuse = ["_ui/**/*", "_ui/public/.vite/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
-[tool.uv.workspace]
-members = [
-    "docs",
-]

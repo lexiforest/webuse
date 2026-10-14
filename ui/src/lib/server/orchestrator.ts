@@ -5,6 +5,7 @@ import { createInterface } from "node:readline";
 
 import { store } from "./store";
 import { materializeVersion } from "./workspace";
+import { runtime } from "./runtime";
 
 type Settings = {
   runtime?: { workDirectory?: string; concurrency?: string };
@@ -12,11 +13,8 @@ type Settings = {
   smart?: { selectorStore?: string };
 };
 
-const active = new Map<number, ReturnType<typeof spawn>>();
-const running = new Set<number>();
-const cancelling = new Set<number>();
-let timer: ReturnType<typeof setInterval> | undefined;
-let ticking = false;
+const state = runtime.orchestrator;
+const { active, running, cancelling } = state;
 
 function settings() { return store.getSettings() as Settings; }
 function workDirectory() { return resolve(settings().runtime?.workDirectory || process.env.WEBUSE_WORK_DIR || "./runs"); }
@@ -70,11 +68,9 @@ async function runJob(job: NonNullable<ReturnType<typeof store.getJob>>) {
       }
     }
     materializeVersion(job.projectId, sample.sourceVersion, projectDirectory);
-    const config = ["webuse.toml", "webuse.yaml", "webuse.yml"].map(name => join(projectDirectory, name)).find(existsSync);
-    const target = config || projectDirectory;
     const output = join(jobDirectory, "items.jsonl");
     const command = pythonCommand();
-    const args = ["-m", "webuse.cli", "crawl", target, "-o", output];
+    const args = ["-m", "webuse.cli", "crawl", projectDirectory, "-o", output];
     if (sample.assistantSample) args.push("--max-requests", String(sample.assistantSample.maxRequests));
     const commandText = [command, ...args].join(" ");
     store.updateJobCommand(job.id, commandText);
@@ -107,8 +103,8 @@ async function runJob(job: NonNullable<ReturnType<typeof store.getJob>>) {
 }
 
 async function tick() {
-  if (ticking) return;
-  ticking = true;
+  if (state.ticking) return;
+  state.ticking = true;
   try {
     store.enqueueDueJobs();
     while (running.size < concurrency()) {
@@ -117,15 +113,15 @@ async function tick() {
       running.add(job.id);
       void runJob(job).finally(() => { running.delete(job.id); void tick(); });
     }
-  } finally { ticking = false; }
+  } finally { state.ticking = false; }
 }
 
 export function ensureOrchestrator() {
-  if (!timer) {
+  if (!state.timer) {
     mkdirSync(workDirectory(), { recursive: true });
     store.reconcileRunningJobs();
-    timer = setInterval(() => void tick(), Math.max(250, Number(process.env.WEBUSE_POLL_MS || 1000)));
-    timer.unref();
+    state.timer = setInterval(() => void tick(), Math.max(250, Number(process.env.WEBUSE_POLL_MS || 1000)));
+    state.timer.unref();
   }
   void tick();
 }
@@ -137,8 +133,8 @@ export function cancelRun(id: number) {
 }
 
 export function stopOrchestrator() {
-  if (timer) clearInterval(timer);
-  timer = undefined;
+  if (state.timer) clearInterval(state.timer);
+  state.timer = undefined;
   for (const child of active.values()) terminateProcess(child);
 }
 

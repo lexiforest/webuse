@@ -4,7 +4,7 @@ from typing import Any
 from curl_cffi import AsyncSession
 from curl_cffi.requests.websockets import WebSocket
 
-from .common import (
+from .utils import (
     add_request_args,
     cli_request_options,
     json_arg,

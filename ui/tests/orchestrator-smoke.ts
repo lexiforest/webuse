@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { nextCronTime, validCron } from "../src/lib/server/cron";
-import { cancelRun, ensureOrchestrator, stopOrchestrator } from "../src/lib/server/orchestrator";
+import { ensureOrchestrator, stopOrchestrator } from "../src/lib/server/orchestrator";
 import { store } from "../src/lib/server/store";
 import { sqlite, transaction } from "../src/lib/server/db";
 
@@ -40,6 +40,8 @@ while (current?.status === "queued" || current?.status === "running") {
 }
 
 assert.equal(current?.status, "failed");
+assert.match(current?.command ?? "", /crawl .*[/\\]project -o /);
+assert.doesNotMatch(current?.command ?? "", /crawl .*webuse\.(yaml|yml|toml)/);
 assert.match(store.listLogs(run!.id)[0].message as string, /webuse\.cli/);
 if (process.platform !== "win32") {
   const directory = process.env.WEBUSE_WORK_DIR!;
@@ -56,7 +58,12 @@ if (process.platform !== "win32") {
       assert.ok(Date.now() < timeout, "Test runner did not start");
       await new Promise(resolve => setTimeout(resolve, 25));
     }
-    assert.equal(cancelRun(graceful.id), true);
+    // A separately bundled route must see the job started by the Nitro plugin.
+    const peerPath = "./orchestrator-peer.mjs";
+    const peer = await import(peerPath);
+    peer.ensureOrchestrator();
+    assert.equal(store.getJob(graceful.id)?.status, "running");
+    assert.equal(peer.cancelRun(graceful.id), true);
     while (store.getJob(graceful.id)?.status === "running") {
       assert.ok(Date.now() < timeout, "Test runner did not stop");
       await new Promise(resolve => setTimeout(resolve, 25));

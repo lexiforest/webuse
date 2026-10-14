@@ -1,5 +1,5 @@
 class WebuseError(Exception):
-    """Base exception for the package."""
+    """Base exception for webuse."""
 
 
 class SmartSelectorError(WebuseError):
@@ -48,7 +48,3 @@ class CloseSpider(WebuseError):
 
 class NotConfigured(ConfigError):
     """Raised by components that are disabled or missing required configuration."""
-
-
-class NotSupported(WebuseError):
-    """Raised when a feature or operation is not supported."""

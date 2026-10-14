@@ -1,9 +1,7 @@
 
-import pytest
 import webuse
-from webuse.exceptions import ConfigError
 from webuse.models import CrawlRequest, FollowRule
-from webuse.response import Response
+from webuse.http import Response
 from webuse.spider import AsyncSpider, Spider
 
 from crawl_helpers import (
@@ -16,13 +14,16 @@ def test_spider_runs_declarative_crawl():
     class ExampleSpider(Spider):
         start_urls = ["https://example.com"]
         follow = [FollowRule(css="a.next", same_domain=True)]
-        extract = {"title": "h1"}
+        extract = {"default": {"page": {"fields": {"title": "h1"}}}}
         max_depth = 1
         concurrency = 2
 
     result = ExampleSpider().run(client=FakeClient())
 
-    assert result.items == [{"title": "Home"}, {"title": "Page One"}]
+    assert result.items == [
+        {"title": "Home", "_type": "page"},
+        {"title": "Page One", "_type": "page"},
+    ]
     assert result.stats.followed_links == 1
     assert webuse.Spider is Spider
     assert webuse.AsyncSpider is AsyncSpider
@@ -31,7 +32,7 @@ def test_spider_runs_declarative_crawl():
 def test_custom_parse_replaces_declarative_extract():
     class ExampleSpider(Spider):
         start_urls = ["https://example.com"]
-        extract = {"title": "h1"}
+        extract = {"default": {"page": {"fields": {"title": "h1"}}}}
 
         def parse(self, response):
             return {"url": response.url}
@@ -44,14 +45,14 @@ def test_custom_parse_replaces_declarative_extract():
 def test_spider_start_method_can_override_initial_requests():
     class StartSpider(Spider):
         start_urls = ["https://example.com/page-2"]
-        extract = {"title": "h1"}
+        extract = {"default": {"page": {"fields": {"title": "h1"}}}}
 
         def start(self):
             return ["https://example.com"]
 
     result = StartSpider().run(client=FakeClient())
 
-    assert result.items == [{"title": "Home"}]
+    assert result.items == [{"title": "Home", "_type": "page"}]
 
 
 def test_spider_runs_from_yaml_config(tmp_path):
@@ -89,72 +90,6 @@ pages:
     ]
     assert result.stats.followed_links == 1
     assert spider.name is None
-
-
-def test_spider_config_rejects_old_top_level_follow_extract(tmp_path):
-    config = tmp_path / "old.yaml"
-    config.write_text(
-        """
-start_urls:
-  - https://example.com
-follow:
-  - css: a.next
-extract:
-  title: h1
-""",
-        encoding="utf-8",
-    )
-
-    class ConfigSpider(Spider):
-        spider_config_path = config
-
-    with pytest.raises(ConfigError):
-        ConfigSpider().run(client=FakeClient())
-
-
-def test_spider_config_rejects_legacy_page_follow_from(tmp_path):
-    config = tmp_path / "from.yaml"
-    config.write_text(
-        """
-start_urls:
-  - https://example.com
-pages:
-  default:
-    follow:
-      - css: a.next
-        from: default
-        category: detail
-""",
-        encoding="utf-8",
-    )
-
-    class ConfigSpider(Spider):
-        spider_config_path = config
-
-    with pytest.raises(ConfigError):
-        ConfigSpider().run(client=FakeClient())
-
-
-def test_spider_config_rejects_legacy_category_extract_shorthand(tmp_path):
-    config = tmp_path / "extract.yaml"
-    config.write_text(
-        """
-start_urls:
-  - https://example.com
-pages:
-  default:
-    extract:
-      fields:
-        title: h1
-""",
-        encoding="utf-8",
-    )
-
-    class ConfigSpider(Spider):
-        spider_config_path = config
-
-    with pytest.raises(ConfigError):
-        ConfigSpider().run(client=FakeClient())
 
 
 def test_spider_config_extracts_records_with_item_css(tmp_path):
@@ -418,7 +353,7 @@ def test_spider_parse_can_return_items_and_followups():
         max_depth = 1
 
         def parse(self, response):
-            title = response.css_first("h1").text()
+            title = response.css_find("h1").text()
             if response.url == "https://example.com/":
                 return {"title": title}, CrawlRequest(url="https://example.com/page-1")
             return {"title": title}
@@ -434,7 +369,7 @@ def test_spider_parse_can_yield_items_and_follow_requests():
         max_depth = 1
 
         def parse(self, response):
-            yield {"title": response.css_first("h1").text()}
+            yield {"title": response.css_find("h1").text()}
             if response.url == "https://example.com/":
                 yield response.follow("/page-1", meta={"source": "home"})
 
@@ -451,11 +386,11 @@ def test_spider_routes_follow_request_by_category():
         routes = {"detail": "parse_detail"}
 
         def parse(self, response):
-            yield {"title": response.css_first("h1").text()}
+            yield {"title": response.css_find("h1").text()}
             yield response.follow("/page-1", category="detail")
 
         def parse_detail(self, response):
-            yield {"detail": response.css_first("h1").text()}
+            yield {"detail": response.css_find("h1").text()}
 
     result = ParseSpider().run(client=FakeClient())
 
@@ -471,7 +406,7 @@ def test_spider_routes_follow_request_by_parse_method_name():
             yield response.follow("/page-1", category="detail")
 
         def parse_detail(self, response):
-            yield {"detail": response.css_first("h1").text()}
+            yield {"detail": response.css_find("h1").text()}
 
     result = ParseSpider().run(client=FakeClient())
 
@@ -487,7 +422,7 @@ def test_spider_routes_can_use_handler_function():
             yield response.follow("/page-1", category="detail")
 
         def parse_detail(self, response):
-            yield {"detail": response.css_first("h1").text()}
+            yield {"detail": response.css_find("h1").text()}
 
         routes = {"detail": parse_detail}
 
@@ -501,7 +436,7 @@ def test_spider_parse_can_yield_pydantic_items():
         start_urls = ["https://example.com"]
 
         def parse(self, response):
-            yield SampleItem(title=response.css_first("h1").text())
+            yield SampleItem(title=response.css_find("h1").text())
 
     result = ParseSpider().run(client=FakeClient())
 

@@ -4,10 +4,11 @@ import { effectiveSettings } from "./settings";
 import { store } from "./store";
 import { createWebuseTools, installSkill, skillPath } from "./assistant-tools";
 import { lockWorkspace, readWorkspace } from "./workspace";
+import { runtime } from "./runtime";
 
 export type ToolActivity = { id: string; name: string; status: "running" | "succeeded" | "failed" };
 export type AssistantEvent = { type: "text"; text: string } | { type: "tool"; tool: ToolActivity } | { type: "status"; text: string };
-const active = new Map<number, AbortController>();
+const active = runtime.assistants;
 export function assistantRunning(projectId: number) { return active.has(projectId); }
 export function cancelAssistant(projectId: number) { const controller = active.get(projectId); controller?.abort(); return !!controller; }
 export function stopAssistants() { for (const controller of active.values()) controller.abort(); }
@@ -89,8 +90,7 @@ export async function runAssistant(options: { projectId: number; sessionId: numb
       if (event.type === "compaction_start") emit({ type: "status", text: "Compacting conversation context..." });
       if (event.type === "auto_retry_start") emit({ type: "status", text: "Retrying model request..." });
     });
-    const previous = entries.length ? "" : store.listMessages(options.sessionId).slice(0, -1).slice(-12).map(message => `${message.role}: ${message.content.slice(0, 4000)}`).join("\n");
-    await session.prompt(`${previous ? `Earlier conversation (context only):\n${previous}\n\n` : ""}${options.message}`);
+    await session.prompt(options.message);
     const last = [...session.messages].reverse().find(message => message.role === "assistant");
     if (last?.role === "assistant" && last.stopReason === "error") failure = last.errorMessage || "Model request failed.";
     store.saveAssistantState(options.sessionId, [manager.getHeader()!, ...manager.getEntries()]);

@@ -1,0 +1,4 @@
+name: quotes
+spiders:
+  quotes:
+    path: spiders/quotes.py

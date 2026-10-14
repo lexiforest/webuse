@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 const prefix = `/tmp/webuse-node-smoke-${process.pid}`;
 const outputDir = resolve("node_modules/.cache/webuse");
 const output = resolve(outputDir, "orchestrator-smoke.mjs");
+const peerOutput = resolve(outputDir, "orchestrator-peer.mjs");
 const assistantOutput = resolve(outputDir, "assistant-smoke.mjs");
 const workspaceOutput = resolve(outputDir, "workspace-smoke.mjs");
 process.env.WEBUSE_DB_PATH = `${prefix}.sqlite`;
@@ -16,6 +17,7 @@ await mkdir(outputDir, { recursive: true });
 try {
   await build({ entryPoints: ["tests/workspace-smoke.ts"], outfile: workspaceOutput, bundle: true, platform: "node", format: "esm", packages: "external" });
   await import(`${workspaceOutput}?run=${Date.now()}`);
+  await build({ entryPoints: ["src/lib/server/orchestrator.ts"], outfile: peerOutput, bundle: true, platform: "node", format: "esm", packages: "external" });
   await build({ entryPoints: ["tests/orchestrator-smoke.ts"], outfile: output, bundle: true, platform: "node", format: "esm", packages: "external" });
   await import(`${output}?run=${Date.now()}`);
   await build({ entryPoints: ["tests/assistant-smoke.ts"], outfile: assistantOutput, bundle: true, platform: "node", format: "esm", packages: "external", loader: { ".md": "text" } });
@@ -28,6 +30,7 @@ try {
     rm(`${prefix}-runs`, { force: true, recursive: true }),
     rm(`${prefix}-workspaces`, { force: true, recursive: true }),
     rm(output, { force: true }),
+    rm(peerOutput, { force: true }),
     rm(assistantOutput, { force: true }),
     rm(workspaceOutput, { force: true }),
   ]);

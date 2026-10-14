@@ -1,0 +1,4 @@
+name: agentic_books
+robots_txt: true
+spiders:
+  books: spiders/books.py:Books

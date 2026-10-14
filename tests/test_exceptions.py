@@ -1,8 +1,9 @@
 import pytest
 
 import webuse
-from webuse.crawl.utils import follow_rule_from_config, load_config_file
-from webuse.pipelines import JsonlPipeline, resolve_pipeline
+from webuse.spider.config import follow_rule_from_config
+from webuse.config import load_config_file
+from webuse.pipelines import JsonlPipeline, create_pipeline
 from webuse.spider import Spider
 
 
@@ -20,8 +21,8 @@ def test_spider_errors_use_webuse_error():
 
 def test_pipeline_errors_use_webuse_error():
     with pytest.raises(webuse.PipelineError):
-        resolve_pipeline({"type": "missing"})
+        create_pipeline({"type": "missing"})
     with pytest.raises(webuse.PipelineError):
-        resolve_pipeline("missing.module.Pipeline")
+        create_pipeline("missing.module.ItemPipeline")
     with pytest.raises(webuse.PipelineStateError):
         JsonlPipeline().process_item({"title": "x"})

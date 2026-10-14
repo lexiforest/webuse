@@ -64,7 +64,7 @@ class ${className}(webuse.Spider):
     start_urls = ["${startUrl}"]
 
     def parse(self, response):
-        title = response.css_first("title")
+        title = response.css_find("title")
         yield {
             "url": response.url,
             "title": title.text.strip() if title else "",

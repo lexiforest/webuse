@@ -74,18 +74,9 @@ def env_config() -> dict[str, Any]:
         }.items()
         if value is not None
     }
-    smart = {
-        key: value
-        for key, value in {
-            "selector_store": _env_first("WEBUSE_SELECTOR_STORE"),
-        }.items()
-        if value is not None
-    }
     config: dict[str, Any] = {}
     if llm:
         config["llm"] = llm
-    if smart:
-        config["smart"] = smart
     return config
 
 

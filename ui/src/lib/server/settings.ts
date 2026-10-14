@@ -52,5 +52,5 @@ export function effectiveSettings() {
 }
 
 export function settingsPayload() {
-  return { settings: savedSettings(), effectiveSettings: effectiveSettings(), paths: { local: store.databasePath, user: "" } };
+  return { settings: savedSettings(), effectiveSettings: effectiveSettings() };
 }

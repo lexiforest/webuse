@@ -1,0 +1,8 @@
+name: start_urls
+spiders:
+  file:
+    path: spiders/sources.py:FileStartUrlsSpider
+  redis:
+    path: spiders/sources.py:RedisStartUrlsSpider
+  sqlite:
+    path: spiders/sources.py:SQLiteStartUrlsSpider

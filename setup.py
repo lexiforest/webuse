@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -20,7 +21,7 @@ def validate_bundle():
     if not (BUNDLE / "server" / "index.mjs").is_file() or not (BUNDLE / "public").is_dir():
         raise RuntimeError(
             "The compiled UI is missing. Build releases from a source checkout "
-            "with Node.js 24+ and npm."
+            "with Node.js 22.19+ and npm."
         )
     native = [
         path for path in BUNDLE.rglob("*")
@@ -39,10 +40,11 @@ def build_ui():
     node = shutil.which("node")
     npm = shutil.which("npm")
     if not node or not npm:
-        raise RuntimeError("Building a webuse release requires Node.js 24+ and npm on PATH.")
+        raise RuntimeError("Building a webuse release requires Node.js 22.19+ and npm on PATH.")
     version = subprocess.check_output([node, "--version"], text=True).strip()
-    if int(version.lstrip("v").split(".")[0]) < 24:
-        raise RuntimeError(f"Building the UI requires Node.js 24+; found {version}.")
+    parsed = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", version)
+    if parsed is None or tuple(map(int, parsed.groups())) < (22, 19, 0):
+        raise RuntimeError(f"Building the UI requires Node.js 22.19+; found {version}.")
     subprocess.run([npm, "ci"], cwd=source, check=True)
     subprocess.run(
         [npm, "run", "build"], cwd=source, check=True,

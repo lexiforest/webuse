@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from webuse.response import Response
+from webuse.http import Response
 
 
 PAGES = {

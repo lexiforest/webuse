@@ -2,10 +2,10 @@
   "name": "webuse-ui",
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
-    "build": "vite build",
+    "dev": "PORT=${PORT:-2951} vinxi dev",
+    "build": "vinxi build",
     "start": "PORT=${PORT:-2951} node .output/server/index.mjs",
-    "preview": "vite preview",
+    "preview": "PORT=${PORT:-2951} vinxi start",
     "typecheck": "tsc --noEmit",
     "test": "node tests/run-orchestrator-smoke.mjs"
   },
@@ -13,28 +13,29 @@
     "@earendil-works/pi-ai": "1.1.0",
     "@earendil-works/pi-coding-agent": "1.1.0",
     "@kobalte/core": "^0.13.11",
-    "@solidjs/router": "^1.0.0",
-    "@solidjs/start": "^2.0.4",
+    "@solidjs/router": "^0.15.3",
+    "@solidjs/start": "^1.3.2",
     "croner": "^10.0.1",
     "cronstrue": "^3.14.0",
     "dompurify": "^3.4.9",
     "marked": "^18.0.5",
     "mermaid": "^11.15.0",
-    "nitro": "^3.0.260903-beta",
+    "nitropack": "^2.13.1",
     "solid-icons": "^1.2.0",
-    "solid-js": "^1.9.15",
+    "solid-js": "^1.9.16",
     "typebox": "1.3.27",
-    "vite": "^8.2.2",
+    "vinxi": "^0.5.11",
+    "vite": "^6.4.1",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.7",
-    "@types/node": "^24.0.0",
+    "@types/node": "^22.19.0",
     "esbuild": "^0.28.2",
     "tailwindcss": "^4.0.7",
     "typescript": "^7.0.2"
   },
   "engines": {
-    "node": ">=24"
+    "node": ">=22.19.0"
   }
 }

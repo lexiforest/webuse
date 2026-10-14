@@ -1,3 +1,2 @@
 include setup.py
-include docs/pyproject.toml
 graft src/webuse/_ui
