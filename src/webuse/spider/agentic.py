@@ -7,6 +7,7 @@ from ..agent import AgentLimits
 from ..engine.agentic import agentic_crawl
 from ..exceptions import SpiderError
 from ..models import CrawlResult
+from ..extract.rules import _aiter_values
 from ..pipelines.utils import _apipeline_lifecycle, _aprocess_items
 from .aio import AsyncSpider
 from .config import EffectiveAgenticSettings
@@ -53,12 +54,15 @@ class AgenticSpider(AsyncSpider):
         state.result = CrawlResult()
 
         async def process(item):
-            return await _aprocess_items(
-                [item],
-                state.pipelines,
-                coerce_item=self._coerce_pipeline_item,
-                emit=partial(state.signals.asend, spider=self),
-            )
+            return [
+                processed
+                async for processed in _aprocess_items(
+                    _aiter_values(item),
+                    state.pipelines,
+                    coerce_item=self._coerce_pipeline_item,
+                    emit=partial(state.signals.asend, spider=self),
+                )
+            ]
 
         with self._activate_run(state):
             reason = "error"

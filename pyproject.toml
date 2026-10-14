@@ -25,6 +25,9 @@ dependencies = [
   "pydantic>=2.13.4",
   "loguru>=0.7.3",
   "selectolax>=1.0.0",
+  "aiofile>=3.12.3",
+  "aiosqlite>=0.22.1",
+  "redis>=8.1.0",
 ]
 
 [project.optional-dependencies]

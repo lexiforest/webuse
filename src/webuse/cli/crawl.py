@@ -2,9 +2,8 @@ import argparse
 import asyncio
 import importlib
 import importlib.util
-import inspect
 import sys
-from contextlib import contextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -12,12 +11,22 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from ..engine import (
+    AsyncRedisRequestQueue,
+    AsyncRedisRequestSeen,
     RedisRequestQueue,
     RedisRequestSeen,
 )
 from ..models import CrawlResult
-from ..pipelines import CsvPipeline, JsonlPipeline, ItemPipeline, SQLitePipeline
-from ..pipelines.utils import _pipeline_lifecycle
+from ..pipelines import (
+    CsvPipeline,
+    JsonlPipeline,
+    ItemPipeline,
+    SQLitePipeline,
+    AsyncCsvPipeline,
+    AsyncJsonlPipeline,
+    AsyncSQLitePipeline,
+)
+from ..pipelines.utils import _apipeline_lifecycle
 from ..signals import SignalBus
 from ..spider import AgenticSpider, AsyncSpider, Spider
 from ..spider.config import SpiderConfig
@@ -52,20 +61,20 @@ def _state_name(target: str) -> str:
     )
 
 
-def _state_options(value: str | None, *, target: str) -> dict[str, Any]:
+def _state_options(
+    value: str | None, *, target: str, asynchronous: bool = False
+) -> dict[str, Any]:
     if not value:
         return {}
     parsed = urlparse(value)
     if parsed.scheme != "redis":
         raise SystemExit("--state requires a redis:// URL")
     name = _state_name(target)
+    queue_class = AsyncRedisRequestQueue if asynchronous else RedisRequestQueue
+    seen_class = AsyncRedisRequestSeen if asynchronous else RedisRequestSeen
     return {
-        "request_queue": RedisRequestQueue(
-            f"webuse:{name}:requests:queue", redis_url=value
-        ),
-        "request_seen": RedisRequestSeen(
-            f"webuse:{name}:requests:seen", redis_url=value
-        ),
+        "request_queue": queue_class(f"webuse:{name}:requests:queue", redis_url=value),
+        "request_seen": seen_class(f"webuse:{name}:requests:seen", redis_url=value),
     }
 
 
@@ -272,7 +281,7 @@ def _spider_targets_from_crawl_target(
     return _spider_targets_from_project_config(project_dir, spider), project_dir
 
 
-def _output_pipeline(output: str) -> ItemPipeline:
+def _output_pipeline(output: str, *, asynchronous: bool = False) -> ItemPipeline:
     path = Path(output)
     extension = path.suffix.lower()
     pipeline_class = _OUTPUT_EXTENSIONS.get(extension)
@@ -283,70 +292,54 @@ def _output_pipeline(output: str) -> ItemPipeline:
         )
     if pipeline_class is SQLitePipeline and path.exists():
         path.unlink()
-    if pipeline_class in {JsonlPipeline, CsvPipeline}:
+    if asynchronous:
+        pipeline_class = {
+            JsonlPipeline: AsyncJsonlPipeline,
+            CsvPipeline: AsyncCsvPipeline,
+            SQLitePipeline: AsyncSQLitePipeline,
+        }[pipeline_class]
+    if pipeline_class in {
+        JsonlPipeline,
+        CsvPipeline,
+        AsyncJsonlPipeline,
+        AsyncCsvPipeline,
+    }:
         return pipeline_class(path, append=False)
     return pipeline_class(path)
 
 
-@contextmanager
-def _stream_spider_output(spider: Spider | AsyncSpider, pipeline: ItemPipeline | None):
-    """Write processed records immediately, preserving the spider's own hooks."""
+@asynccontextmanager
+async def _astream_spider_output(spider, pipeline):
     original_signals = spider.signals
     signals = original_signals or SignalBus()
     written = 0
+    loop = asyncio.get_running_loop()
 
-    def write(item):
+    async def write(item):
         nonlocal written
         if pipeline is not None:
             if isinstance(item, dict):
                 item = _OutputItem.model_validate(item)
-            pipeline.process_item(item)
+            await pipeline.process_item(item)
             written += 1
 
-    def write_remaining(result):
-        # Custom run() implementations may return items without dispatching
-        # item_processed. Normal spiders have already written all their items.
-        if pipeline is not None:
-            for item in result.items[written:]:
-                write(item)
+    def write_from_thread(item):
+        return asyncio.run_coroutine_threadsafe(write(item), loop).result()
 
+    async def write_remaining(result):
+        for item in result.items[written:]:
+            await write(item)
+
+    handler = write if isinstance(spider, AsyncSpider) else write_from_thread
     if pipeline is not None:
-        signals.connect("item_processed", write)
+        signals.connect("item_processed", handler)
         spider.signals = signals
     try:
         yield write_remaining
     finally:
         if pipeline is not None:
-            signals.disconnect("item_processed", write)
+            signals.disconnect("item_processed", handler)
             spider.signals = original_signals
-
-
-def _run_single_spider(
-    target: str | _InlineSpiderTarget,
-    *,
-    project_dir: Path,
-    attributes: dict[str, str] | None = None,
-    state: str | None = None,
-    max_requests: int | None = None,
-    output: ItemPipeline | None = None,
-) -> CrawlResult:
-    spider = _apply_attributes(
-        _load_spider(target, project_dir=project_dir), attributes or {}
-    )
-    with _stream_spider_output(spider, output) as write_remaining:
-        result = spider.run(
-            **({"max_requests": max_requests} if max_requests is not None else {}),
-            **_state_options(
-                state,
-                target=target.name
-                if isinstance(target, _InlineSpiderTarget)
-                else target,
-            ),
-        )
-        if inspect.isawaitable(result):
-            result = asyncio.run(result)
-        write_remaining(result)
-    return result
 
 
 async def _arun_single_spider(
@@ -357,24 +350,42 @@ async def _arun_single_spider(
     state: str | None = None,
     max_requests: int | None = None,
     output: ItemPipeline | None = None,
+    spider_class: type[Spider] | type[AsyncSpider] = AsyncSpider,
 ) -> CrawlResult:
-    if state:
-        raise SystemExit("--state is currently supported only for sync crawl")
     spider = _apply_attributes(
-        _load_spider(target, project_dir=project_dir, spider_class=AsyncSpider),
+        _load_spider(target, project_dir=project_dir, spider_class=spider_class),
         attributes or {},
     )
-    with _stream_spider_output(spider, output) as write_remaining:
-        result = spider.run(
-            **({"max_requests": max_requests} if max_requests is not None else {})
+    async with AsyncExitStack() as stack:
+        options = _state_options(
+            state,
+            target=target.name if isinstance(target, _InlineSpiderTarget) else target,
+            asynchronous=isinstance(spider, AsyncSpider)
+            and not isinstance(spider, AgenticSpider),
         )
-        if inspect.isawaitable(result):
-            result = await result
-        write_remaining(result)
+        for backend in options.values():
+            if hasattr(backend, "aclose"):
+                stack.push_async_callback(backend.aclose)
+            else:
+                stack.callback(backend.client.close)
+        if max_requests is not None:
+            options["max_requests"] = max_requests
+        async with _astream_spider_output(spider, output) as write_remaining:
+            if isinstance(spider, AsyncSpider):
+                result = await spider.run(**options)
+            else:
+                result = await asyncio.to_thread(spider.run, **options)
+            await write_remaining(result)
     return result
 
 
 def crawl_command(args: argparse.Namespace) -> int:
+    return asyncio.run(acrawl_command(args, spider_class=Spider))
+
+
+async def acrawl_command(
+    args: argparse.Namespace, *, spider_class: type[Spider] | type[AsyncSpider] = AsyncSpider
+) -> int:
     if args.max_requests is not None and args.max_requests < 1:
         raise SystemExit("--max-requests must be positive")
     targets, project_dir = _spider_targets_from_crawl_target(
@@ -384,45 +395,8 @@ def crawl_command(args: argparse.Namespace) -> int:
     attributes = _attributes(args.attribute)
     results = []
     remaining = args.max_requests
-    output = _output_pipeline(args.output) if args.output else None
-    with _pipeline_lifecycle([output] if output is not None else []):
-        for target in targets:
-            if remaining is not None and remaining <= 0:
-                break
-            current = _run_single_spider(
-                target,
-                project_dir=project_dir,
-                attributes=attributes,
-                state=args.state,
-                max_requests=remaining,
-                output=output,
-            )
-            results.append(current)
-            if remaining is not None:
-                remaining -= current.stats.queued
-    return (
-        0
-        if all(
-            not current.errors
-            and (current.agent is None or current.close_reason == "finished")
-            for current in results
-        )
-        else 1
-    )
-
-
-async def acrawl_command(args: argparse.Namespace) -> int:
-    if args.max_requests is not None and args.max_requests < 1:
-        raise SystemExit("--max-requests must be positive")
-    targets, project_dir = _spider_targets_from_crawl_target(
-        args.directory, args.spider
-    )
-    _configure_project_logging(project_dir)
-    attributes = _attributes(args.attribute)
-    results = []
-    remaining = args.max_requests
-    output = _output_pipeline(args.output) if args.output else None
-    with _pipeline_lifecycle([output] if output is not None else []):
+    output = _output_pipeline(args.output, asynchronous=True) if args.output else None
+    async with _apipeline_lifecycle([output] if output is not None else []):
         for target in targets:
             if remaining is not None and remaining <= 0:
                 break
@@ -433,6 +407,7 @@ async def acrawl_command(args: argparse.Namespace) -> int:
                 state=args.state,
                 max_requests=remaining,
                 output=output,
+                spider_class=spider_class,
             )
             results.append(current)
             if remaining is not None:
@@ -462,7 +437,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     crawl_parser.add_argument("-a", "--attribute", action="append")
     crawl_parser.add_argument("-o", "--output")
     crawl_parser.add_argument(
-        "--state", metavar="REDIS_URL", help="Redis scheduler state URL (sync only)"
+        "--state", metavar="REDIS_URL", help="Redis scheduler state URL"
     )
     crawl_parser.add_argument("--async", dest="use_async", action="store_true")
     crawl_parser.add_argument("--max-requests", type=int)

@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+from contextlib import aclosing
 from typing import Any
 from urllib.robotparser import RobotFileParser
 
@@ -11,6 +12,13 @@ from ..log import logger
 from ..models import CrawlRequest, CrawlResult, CrawlStats, FollowRule
 from ..signals import SignalBus
 from .state import DefaultRequestHasher, RequestHasher
+from .async_state import (
+    AsyncRequestQueue,
+    AsyncRequestSeen,
+    AsyncMemoryRequestQueue,
+    AsyncMemoryRequestSeen,
+    async_state_info,
+)
 from .policy import (
     arobots_allowed,
     coerce_requests,
@@ -39,29 +47,35 @@ async def acrawl(
     client: AsyncClient | None = None,
     on_error: Any = None,
     request_defaults: dict[str, Any] | None = None,
+    request_queue: AsyncRequestQueue | None = None,
+    request_seen: AsyncRequestSeen | None = None,
     request_hasher: RequestHasher | None = None,
     signals: SignalBus | None = None,
 ) -> CrawlResult:
     extract = compile_extraction(extract)
     if per_domain is not None and per_domain < 1:
         raise ValueError("per_domain must be positive")
+    concurrency = max(1, concurrency)
     signal_bus = signals or SignalBus()
     result = CrawlResult(stats=CrawlStats())
     await signal_bus.asend("crawl_started", result=result)
-    queue: asyncio.Queue[CrawlRequest | None] = asyncio.Queue()
-    seen: set[str] = set()
+    queue = request_queue if request_queue is not None else AsyncMemoryRequestQueue()
+    seen = request_seen if request_seen is not None else AsyncMemoryRequestSeen()
+    condition = asyncio.Condition()
+    active = 0
     hasher = request_hasher or DefaultRequestHasher()
     owned_client = client is None
-    client = client or AsyncClient(**(request_defaults or {}))
+    if owned_client:
+        client_options = dict(request_defaults or {})
+        client_options.setdefault("max_clients", concurrency)
+        client = AsyncClient(**client_options)
     follow_rules = follow if isinstance(follow, list) else [follow] if follow else []
     robots_cache: dict[str, RobotFileParser] = {}
     robots_locks: dict[str, asyncio.Lock] = {}
     domain_limits: dict[str, asyncio.Semaphore] = {}
 
     async def state_signal(name="state_updated"):
-        await signal_bus.asend(
-            name, backend="asyncio.Queue", queue_size=queue.qsize(), seen_size=len(seen)
-        )
+        await signal_bus.asend(name, **await async_state_info(queue, seen))
 
     async def fetch(request):
         async def download():
@@ -81,71 +95,77 @@ async def acrawl(
         async with limit:
             return await download()
 
-    def close_spider(reason: str) -> None:
+    async def close_spider(reason: str) -> None:
         result.close_reason = reason
-        while True:
-            try:
-                queue.get_nowait()
-                queue.task_done()
-            except asyncio.QueueEmpty:
-                break
+        await queue.clear()
+        async with condition:
+            condition.notify_all()
+
+    async def acquire_request():
+        nonlocal active
+        async with condition:
+            while result.close_reason is None:
+                request = await queue.pop()
+                if request is not None:
+                    active += 1
+                    return request
+                # Active workers can still discover requests while awaiting I/O.
+                if active == 0:
+                    return None
+                await condition.wait()
+        return None
 
     async def maybe_await(value: Any) -> Any:
         return await value if inspect.isawaitable(value) else value
 
     async def worker():
+        nonlocal active
         while True:
-            request = await queue.get()
+            request = await acquire_request()
             if request is None:
-                queue.task_done()
-                break
-            if result.close_reason is not None:
-                queue.task_done()
-                continue
-            request_hash = hasher.hash(request)
-            if dedupe and request_hash in seen:
-                result.stats.skipped_duplicates += 1
-                logger.info(
-                    "crawl request skipped method={} url={} reason=duplicate",
-                    request.method,
-                    request.url,
-                )
-                await signal_bus.asend(
-                    "request_skipped", request=request, reason="duplicate"
-                )
-                queue.task_done()
-                continue
-            seen.add(request_hash)
-            await state_signal()
-            normalized = normalize_url(request.url)
-            request.url = normalized
-            if not await arobots_allowed(
-                normalized,
-                enabled=robots_txt,
-                user_agent=user_agent,
-                client=client,
-                cache=robots_cache,
-                locks=robots_locks,
-            ):
-                result.stats.skipped_robots += 1
-                logger.info(
-                    "crawl request skipped method={} url={} reason=robots",
-                    request.method,
-                    request.url,
-                )
-                await signal_bus.asend(
-                    "request_skipped", request=request, reason="robots"
-                )
-                queue.task_done()
-                continue
-            # Check after robots awaits so concurrent workers share one budget.
-            if max_requests is not None and result.stats.queued >= max_requests:
-                queue.task_done()
-                continue
-            result.visited.add(normalized)
-            result.stats.queued += 1
-            request_after_downloader = False
+                return
+            request_after_downloader = True
             try:
+                request_hash = hasher.hash(request)
+                is_new = await seen.add(request_hash)
+                if dedupe and not is_new:
+                    result.stats.skipped_duplicates += 1
+                    logger.info(
+                        "crawl request skipped method={} url={} reason=duplicate",
+                        request.method,
+                        request.url,
+                    )
+                    await signal_bus.asend(
+                        "request_skipped", request=request, reason="duplicate"
+                    )
+                    continue
+                await state_signal()
+                normalized = normalize_url(request.url)
+                request.url = normalized
+                if not await arobots_allowed(
+                    normalized,
+                    enabled=robots_txt,
+                    user_agent=user_agent,
+                    client=client,
+                    cache=robots_cache,
+                    locks=robots_locks,
+                ):
+                    result.stats.skipped_robots += 1
+                    logger.info(
+                        "crawl request skipped method={} url={} reason=robots",
+                        request.method,
+                        request.url,
+                    )
+                    await signal_bus.asend(
+                        "request_skipped", request=request, reason="robots"
+                    )
+                    continue
+                # Check after robots awaits so concurrent workers share one budget.
+                if max_requests is not None and result.stats.queued >= max_requests:
+                    continue
+                result.visited.add(normalized)
+                result.stats.queued += 1
+                request_after_downloader = False
                 logger.info(
                     "crawl request started method={} url={} depth={}",
                     request.method,
@@ -175,13 +195,17 @@ async def acrawl(
                         "parse_started", response=response, request=request
                     )
                     parsed = await aextract_response(response, extract)
-                    result.items.extend(parsed.items)
+                    page_items = []
+                    async with aclosing(parsed.items) as items:
+                        async for item in items:
+                            result.items.append(item)
+                            page_items.append(item)
                     callback_followups = parsed.requests
                     await signal_bus.asend(
                         "parse_finished",
                         response=response,
                         request=request,
-                        items=parsed.items,
+                        items=page_items,
                         followups=callback_followups,
                     )
                 except IgnoreRequest:
@@ -210,7 +234,7 @@ async def acrawl(
                         items=[],
                         followups=[],
                     )
-                    close_spider(exc.reason)
+                    await close_spider(exc.reason)
                     continue
                 except Exception as exc:
                     await signal_bus.asend(
@@ -252,6 +276,8 @@ async def acrawl(
                     if result.close_reason is not None:
                         break
                     await queue.put(next_request)
+                    async with condition:
+                        condition.notify_all()
                     await state_signal()
                     await signal_bus.asend(
                         "request_queued", request=next_request, source="follow"
@@ -282,7 +308,7 @@ async def acrawl(
                     await signal_bus.asend(
                         "request_after_downloader", request=request, success=False
                     )
-                close_spider(exc.reason)
+                await close_spider(exc.reason)
             except Exception as exc:
                 # Parsing, pipelines, follow callbacks and signal failures are
                 # programming/configuration errors, just as in sync crawl.
@@ -306,27 +332,21 @@ async def acrawl(
                 if on_error:
                     await maybe_await(on_error(exc, request))
             finally:
-                queue.task_done()
+                async with condition:
+                    active -= 1
+                    condition.notify_all()
 
     workers = []
-    joined = None
     try:
         await state_signal("state_loaded")
         for seed in coerce_requests(seeds):
             await queue.put(seed)
             await signal_bus.asend("request_queued", request=seed, source="start")
             await state_signal()
-        workers = [asyncio.create_task(worker()) for _ in range(max(1, concurrency))]
-        joined = asyncio.create_task(queue.join())
-        done, _ = await asyncio.wait(
-            [joined, *workers], return_when=asyncio.FIRST_COMPLETED
-        )
-        for task in done:
-            task.result()
-        await signal_bus.asend("scheduler_empty", result=result)
-        for _ in workers:
-            await queue.put(None)
+        workers = [asyncio.create_task(worker()) for _ in range(concurrency)]
         await asyncio.gather(*workers)
+        await state_signal()
+        await signal_bus.asend("scheduler_empty", result=result)
     except Exception as exc:
         result.close_reason = "error"
         await signal_bus.asend("crawl_error", result=result, error=exc)
@@ -335,11 +355,10 @@ async def acrawl(
         result.close_reason = "cancelled"
         raise
     finally:
-        tasks = [*workers, *([joined] if joined is not None else [])]
+        tasks = workers
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
-        await state_signal()
         if owned_client:
             await client.__aexit__(None, None, None)
         await signal_bus.asend(

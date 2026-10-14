@@ -1070,7 +1070,7 @@ def test_cli_flushes_records_before_stop_and_keeps_partial_output(
 ):
     import importlib
     from webuse import cli
-    from webuse.pipelines import JsonlPipeline
+    from webuse.pipelines import AsyncJsonlPipeline
 
     command = importlib.import_module("webuse.cli.crawl")
     (tmp_path / "webuse.yaml").write_text("spiders:\n  example: example.py\n")
@@ -1079,13 +1079,13 @@ def test_cli_flushes_records_before_stop_and_keeps_partial_output(
     output.write_text("old run\n")
     writers = []
 
-    original_open = JsonlPipeline.open_spider
+    original_open = AsyncJsonlPipeline.open_spider
 
-    def track_open(self):
+    async def track_open(self):
         writers.append(self)
-        original_open(self)
+        await original_open(self)
 
-    monkeypatch.setattr(JsonlPipeline, "open_spider", track_open)
+    monkeypatch.setattr(AsyncJsonlPipeline, "open_spider", track_open)
 
     def stop_after_write(kwargs):
         assert (

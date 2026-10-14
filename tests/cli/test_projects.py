@@ -12,6 +12,9 @@ from crawl_helpers import AsyncFakeClient, FakeClient
 @pytest.fixture
 def fake_transport(monkeypatch):
     class AsyncClient(AsyncFakeClient):
+        def __init__(self, **kwargs):
+            self.options = kwargs
+
         async def __aenter__(self):
             return self
 

@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from html.parser import HTMLParser
 from typing import TYPE_CHECKING, Any
 
-from ..llm import create_openai_client, openai_defaults
+from ..llm import acompletion_content, create_openai_client, openai_defaults
 
 if TYPE_CHECKING:
     from .parser import Document
@@ -132,3 +133,52 @@ def extract_smart(
         **kwargs,
     )
     return coerce_smart_output(response.choices[0].message.content or "", first=first)
+
+
+async def aextract_smart(
+    document: Document,
+    prompt: str,
+    *,
+    first: bool = False,
+    model: str | None = None,
+    client: Any = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    system_prompt: str | None = None,
+    max_chars: int | None = 12000,
+    temperature: float = 0,
+    **kwargs: Any,
+) -> Any:
+    # Local provider discovery can perform blocking HTTP on first use.
+    defaults = await asyncio.to_thread(openai_defaults)
+    html = document.text
+    text = _text_without_tree(html)
+    if max_chars is not None:
+        html, text = html[:max_chars], text[:max_chars]
+    content = await acompletion_content(
+        client=client,
+        settings=defaults,
+        api_key=api_key,
+        base_url=base_url,
+        model=model or defaults.model or "gpt-4.1-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": system_prompt
+                or (
+                    SMART_FIRST_EXTRACTION_SYSTEM_PROMPT
+                    if first
+                    else SMART_EXTRACTION_SYSTEM_PROMPT
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Prompt:\n{prompt}\n\nDocument text:\n{text}\n\nDocument HTML:\n{html}"
+                ),
+            },
+        ],
+        temperature=temperature,
+        **kwargs,
+    )
+    return coerce_smart_output(content, first=first)

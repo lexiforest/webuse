@@ -26,24 +26,13 @@ the process manager and metrics dashboard.
 Besides, you can also bring your existing scripts to the orchestrator, and it can
 also manage the process for you.
 
+Warning
 
-## Agentic crawlers
+`webuse` is intended for programmers, not non-technical users. At least you should
+know what the http protocol is.
 
-
-`AgenticSpider` lets an LLM control a crawl while it runs: choose links, inspect
-pages, and assemble records across pages. The engine stops when the request queue
-is empty and no request is being processed. Declare a goal,
-Pydantic output model, starting URLs, and a total token budget.
-The runtime validates actions and sends records through the existing pipelines.
-Tools are Python calls inside the crawler, not CLI subprocesses.
-
-See the [agentic spider guide](docs/src/content/docs/user-guide/agentic.md)
-and [Books to Scrape example](examples/agentic_books/spiders/books.py). Use the same
-`webuse crawl` project workflow; an open Chat session is not required.
-
-LLM scheduling of future crawler runs is a separate planned capability. The
-current orchestrator uses fixed cron schedules. AI-generated crawler code alone
-does not imply either runtime capability.
+Even the harness part requires you understand what the model generates. Unlike other
+AI projects, we don't promise magic. Code is still code, not plain English.
 
 
 ## Install
@@ -255,6 +244,26 @@ Providers, API contracts, remaining allowances, and launch sequencing are still
 being designed. Browser rendering and CAPTCHA solving are separate capabilities, and
 coverage will depend on the target site and provider. These are roadmap items,
 not services available from this checkout.
+
+## Agentic crawlers(Experimental)
+
+
+`AgenticSpider` lets an LLM control a crawl while it runs: choose links, inspect
+pages, and assemble records across pages. The engine stops when the request queue
+is empty and no request is being processed. Declare a goal,
+Pydantic output model, starting URLs, and a total token budget.
+The runtime validates actions and sends records through the existing pipelines.
+Tools are Python calls inside the crawler, not CLI subprocesses.
+
+See the [agentic spider guide](docs/src/content/docs/user-guide/agentic.md)
+and [Books to Scrape example](examples/agentic_books/spiders/books.py). Use the same
+`webuse crawl` project workflow; an open Chat session is not required.
+
+LLM scheduling of future crawler runs is a separate planned capability. The
+current orchestrator uses fixed cron schedules. AI-generated crawler code alone
+does not imply either runtime capability.
+
+
 
 ## Development
 

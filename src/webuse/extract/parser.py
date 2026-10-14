@@ -7,11 +7,11 @@ from urllib.parse import urljoin
 from pydantic import BaseModel, ConfigDict
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
-from .resolver import resolve_element
-from .smart import extract_smart
+from .resolver import aresolve_element, resolve_element
+from .smart import aextract_smart, extract_smart
 
 if TYPE_CHECKING:
-    from .resolver import LlmSmartResolver
+    from .resolver import AsyncLlmSmartResolver, LlmSmartResolver
 
 
 class Element(BaseModel):
@@ -155,7 +155,9 @@ class Document:
         """Extract the first matching value through an LLM."""
         return extract_smart(self, prompt, first=True, **kwargs)
 
-    def llm_extract_many(self, prompts: list[str], **kwargs: Any) -> dict[str, list[Any]]:
+    def llm_extract_many(
+        self, prompts: list[str], **kwargs: Any
+    ) -> dict[str, list[Any]]:
         """Run prompts sequentially and map each prompt to its extracted values."""
         return {prompt: self.llm_extract(prompt, **kwargs) for prompt in prompts}
 
@@ -171,3 +173,22 @@ class Document:
             prompt,
             resolver=resolver,
         )
+
+    async def allm_extract(self, prompt: str, **kwargs: Any) -> list[Any]:
+        return await aextract_smart(self, prompt, first=False, **kwargs)
+
+    async def allm_extract_first(self, prompt: str, **kwargs: Any) -> Any:
+        return await aextract_smart(self, prompt, first=True, **kwargs)
+
+    async def allm_extract_many(
+        self, prompts: list[str], **kwargs: Any
+    ) -> dict[str, list[Any]]:
+        return {prompt: await self.allm_extract(prompt, **kwargs) for prompt in prompts}
+
+    async def allm_find(
+        self,
+        prompt: str,
+        *,
+        resolver: AsyncLlmSmartResolver | None = None,
+    ) -> Element:
+        return await aresolve_element(self, prompt, resolver=resolver)

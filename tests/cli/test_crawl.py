@@ -69,7 +69,10 @@ def test_output_streams_processed_items_across_spiders(
         return check_output(options["extract"](Response(content=b"kept")))
 
     async def fake_acrawl(seeds, **options):
-        return check_output(await options["extract"](Response(content=b"kept")))
+        from webuse.extract import ParseResult
+
+        parsed = await options["extract"](Response(content=b"kept"))
+        return check_output(ParseResult([item async for item in parsed.items]))
 
     monkeypatch.setattr(sync, "crawl", fake_crawl)
     monkeypatch.setattr(aio, "acrawl", fake_acrawl)
@@ -98,9 +101,12 @@ def test_crawl_loads_both_spider_types(tmp_path, capsys, base, explicit_class, c
     (tmp_path / "webuse.yaml").write_text(f"spiders:\n  example: '{target}'\n")
     output = tmp_path / "items.jsonl"
 
-    assert cli.main(
-        ["crawl", str(tmp_path), "--spider", "example", "-o", str(output), *command]
-    ) == 0
+    assert (
+        cli.main(
+            ["crawl", str(tmp_path), "--spider", "example", "-o", str(output), *command]
+        )
+        == 0
+    )
     assert capsys.readouterr().out == ""
     assert output.read_text() == '{"title": "Loaded"}\n'
 
@@ -203,7 +209,30 @@ def test_crawl_command_passes_attributes_to_spider(cli_project, monkeypatch, cap
     )
 
 
-def test_crawl_command_rejects_state_with_async(cli_project, monkeypatch):
+@pytest.mark.parametrize("command", [[], ["--async"]])
+def test_crawl_command_uses_async_state(cli_project, monkeypatch, command):
+    from webuse.cli import crawl as crawl_module
+    from webuse.engine import AsyncMemoryRequestQueue, AsyncMemoryRequestSeen
+
+    closed = []
+
+    class Queue(AsyncMemoryRequestQueue):
+        def __init__(self, key, *, redis_url):
+            super().__init__()
+            assert key.endswith(":requests:queue")
+
+        async def aclose(self):
+            closed.append("queue")
+
+    class Seen(AsyncMemoryRequestSeen):
+        def __init__(self, key, *, redis_url):
+            super().__init__()
+
+        async def aclose(self):
+            closed.append("seen")
+
+    monkeypatch.setattr(crawl_module, "AsyncRedisRequestQueue", Queue)
+    monkeypatch.setattr(crawl_module, "AsyncRedisRequestSeen", Seen)
     cli_project.write_spider(
         """import webuse
 
@@ -214,19 +243,20 @@ class BooksSpider(webuse.AsyncSpider):
     )
     monkeypatch.chdir(cli_project.root)
 
-    with pytest.raises(SystemExit) as exc:
+    assert (
         cli.main(
             [
                 "crawl",
                 "--spider",
                 "books",
-                "--async",
+                *command,
                 "--state",
                 "redis://localhost:6379/0",
             ]
         )
-
-    assert "--state" in str(exc.value)
+        == 0
+    )
+    assert sorted(closed) == ["queue", "seen"]
 
 
 def test_crawl_command_resolves_redis_state(monkeypatch):
@@ -252,6 +282,22 @@ def test_crawl_command_resolves_redis_state(monkeypatch):
     assert options["request_queue"].key == "webuse:books:requests:queue"
     assert options["request_seen"].key == "webuse:books:requests:seen"
     assert options["request_queue"].redis_url == "redis://localhost:6379/0"
+
+
+@pytest.mark.parametrize("command", [[], ["--async"]])
+def test_request_budget_skips_loading_later_spiders(tmp_path, command):
+    (tmp_path / "webuse.yaml").write_text(
+        "spiders:\n  first: first.py\n  later: later.py\n"
+    )
+    (tmp_path / "first.py").write_text(
+        "from webuse import Spider\n"
+        "from webuse.models import CrawlResult, CrawlStats\n"
+        "class First(Spider):\n"
+        "    def run(self, **kwargs):\n"
+        "        return CrawlResult(stats=CrawlStats(queued=1))\n"
+    )
+    (tmp_path / "later.py").write_text("raise AssertionError('must not load')\n")
+    assert cli.main(["crawl", str(tmp_path), *command, "--max-requests", "1"]) == 0
 
 
 def test_crawl_command_rejects_malformed_attribute(cli_project, monkeypatch):
@@ -395,8 +441,12 @@ def test_crawl_command_runs_importable_spider_module(
     output = tmp_path / "test.jsonl"
     monkeypatch.chdir(tmp_path)
 
-    (cli_project.root / "webuse.toml").write_text('spiders = {books = {module = "project.spiders.books"}}\n')
-    code = cli.main(["crawl", str(cli_project.root), "--spider", "books", "-o", str(output)])
+    (cli_project.root / "webuse.toml").write_text(
+        'spiders = {books = {module = "project.spiders.books"}}\n'
+    )
+    code = cli.main(
+        ["crawl", str(cli_project.root), "--spider", "books", "-o", str(output)]
+    )
     out = capsys.readouterr().out
 
     assert code == 0
@@ -456,7 +506,9 @@ pages:
 
     monkeypatch.setattr(sync_module, "crawl", fake_crawl)
 
-    (tmp_path / "webuse.yaml").write_text("spiders:\n  books:\n    config: books.yaml\n")
+    (tmp_path / "webuse.yaml").write_text(
+        "spiders:\n  books:\n    config: books.yaml\n"
+    )
     code = cli.main(["crawl", str(tmp_path), "-o", str(output)])
     out = capsys.readouterr().out
 
@@ -498,9 +550,7 @@ pages:
     monkeypatch.setattr(sync_module, "crawl", fake_crawl)
 
     (tmp_path / "webuse.yaml").write_text("spiders:\n  books: books.yaml\n")
-    code = cli.main(
-        ["crawl", str(tmp_path), "--spider", "books", "-o", str(output)]
-    )
+    code = cli.main(["crawl", str(tmp_path), "--spider", "books", "-o", str(output)])
     out = capsys.readouterr().out
 
     assert code == 0

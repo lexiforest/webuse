@@ -1,4 +1,12 @@
 from .aio import acrawl
+from .async_state import (
+    AsyncRequestQueue,
+    AsyncRequestSeen,
+    AsyncMemoryRequestQueue,
+    AsyncMemoryRequestSeen,
+    AsyncRedisRequestQueue,
+    AsyncRedisRequestSeen,
+)
 from .agentic import agentic_crawl
 from .state import (
     DefaultRequestHasher,
@@ -14,6 +22,12 @@ from .state import (
 from .sync import crawl
 
 __all__ = [
+    "AsyncRequestQueue",
+    "AsyncRequestSeen",
+    "AsyncMemoryRequestQueue",
+    "AsyncMemoryRequestSeen",
+    "AsyncRedisRequestQueue",
+    "AsyncRedisRequestSeen",
     "DefaultRequestHasher",
     "MemoryRequestQueue",
     "MemoryRequestSeen",

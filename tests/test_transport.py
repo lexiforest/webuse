@@ -133,3 +133,48 @@ def test_top_level_helpers_use_parsing_response(tmp_path, asynchronous):
         else webuse.get(path.as_uri())
     )
     assert response.css_find("h1").text() == "hello"
+
+
+@pytest.mark.parametrize(
+    "concurrency,defaults,expected",
+    [(1, {}, 1), (25, {}, 25), (0, {}, 1), (25, {"max_clients": 3}, 3)],
+)
+def test_acrawl_transport_capacity_matches_workers(
+    monkeypatch, concurrency, defaults, expected
+):
+    async def run():
+        active = 0
+        peak = 0
+        full = asyncio.Event()
+
+        async def request(client, method, url, **kwargs):
+            nonlocal active, peak
+            # Exercise curl_cffi's real handle pool without network traffic.
+            handle = await client.pop_curl()
+            try:
+                active += 1
+                peak = max(peak, active)
+                if active == expected:
+                    full.set()
+                await full.wait()
+                await asyncio.sleep(0)
+                return Response(url=url, status_code=200, content=b"<h1>hello</h1>")
+            finally:
+                active -= 1
+                client.push_curl(handle)
+
+        monkeypatch.setattr(AsyncClient, "request", request)
+        original_defaults = defaults.copy()
+        result = await asyncio.wait_for(
+            webuse.acrawl(
+                [f"https://example.com/{index}" for index in range(30)],
+                concurrency=concurrency,
+                request_defaults=defaults,
+            ),
+            timeout=2,
+        )
+        assert peak == expected
+        assert result.stats.fetched == 30
+        assert defaults == original_defaults
+
+    asyncio.run(run())

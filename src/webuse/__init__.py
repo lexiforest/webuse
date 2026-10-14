@@ -16,6 +16,12 @@ from .http import (
 )
 from .config import load_webuse_config
 from .engine import (
+    AsyncRequestQueue,
+    AsyncRequestSeen,
+    AsyncMemoryRequestQueue,
+    AsyncMemoryRequestSeen,
+    AsyncRedisRequestQueue,
+    AsyncRedisRequestSeen,
     DefaultRequestHasher,
     MemoryRequestQueue,
     MemoryRequestSeen,
@@ -54,6 +60,11 @@ from .log import configure_logger, logger
 from .models import CrawlRequest, FollowRule, RequestOptions
 from .metrics import Metrics, attach_metrics
 from .pipelines import (
+    AsyncAssetDownloadPipeline,
+    AsyncCsvPipeline,
+    AsyncJsonlPipeline,
+    AsyncSQLitePipeline,
+    AsyncWebhookPipeline,
     AsyncItemPipeline,
     AssetDownloadPipeline,
     CsvPipeline,
@@ -63,12 +74,24 @@ from .pipelines import (
     WebhookPipeline,
 )
 from .signals import SignalBus
-from .extract import LlmSmartResolver
+from .extract import AsyncLlmSmartResolver, LlmSmartResolver
 from .spider import AgenticSpider, AsyncSpider, Spider
 
 __version__ = "0.0.1"
 
 __all__ = [
+    "AsyncRequestQueue",
+    "AsyncRequestSeen",
+    "AsyncMemoryRequestQueue",
+    "AsyncMemoryRequestSeen",
+    "AsyncRedisRequestQueue",
+    "AsyncRedisRequestSeen",
+    "AsyncAssetDownloadPipeline",
+    "AsyncCsvPipeline",
+    "AsyncJsonlPipeline",
+    "AsyncSQLitePipeline",
+    "AsyncWebhookPipeline",
+    "AsyncLlmSmartResolver",
     "AgenticSpider",
     "AgentLimits",
     "AgentModel",

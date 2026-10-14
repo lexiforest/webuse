@@ -46,6 +46,7 @@ class BaseSpider:
 
     _run_state: SpiderRun | None = None
     _settings_class = EffectiveSpiderSettings
+    _async_pipelines = False
 
     name: str | None = None
     start_urls: Any = ()
@@ -151,14 +152,20 @@ class BaseSpider:
         project_base_dir: Path | None = None,
     ) -> list[ItemPipeline | AsyncItemPipeline]:
         if override is not UNSET:
-            return create_pipelines(override)
+            return create_pipelines(override, asynchronous=self._async_pipelines)
         if self.pipelines is not None:
-            return create_pipelines(self.pipelines, base_dir=project_base_dir)
+            return create_pipelines(
+                self.pipelines,
+                base_dir=project_base_dir,
+                asynchronous=self._async_pipelines,
+            )
         specs = spider_config.pipeline_specs() if spider_config is not None else None
         base_dir = project_base_dir
         if base_dir is None and self.spider_config_path is not None:
             base_dir = Path(self.spider_config_path).parent
-        return create_pipelines(specs, base_dir=base_dir)
+        return create_pipelines(
+            specs, base_dir=base_dir, asynchronous=self._async_pipelines
+        )
 
     def _resolve_settings(
         self,

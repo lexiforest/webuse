@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import AsyncIterable, Iterable
+from collections.abc import AsyncIterable, AsyncIterator, Iterable
+from contextlib import aclosing
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -82,9 +83,7 @@ def select_scopes(response: Any, extract: ItemSpec) -> list[Any]:
     return [response]
 
 
-def extract_spec_items(
-    response: Any, name: str, spec: ItemSpec
-) -> list[Any]:
+def extract_spec_items(response: Any, name: str, spec: ItemSpec) -> list[Any]:
     fields = spec.fields
     if not fields:
         return []
@@ -186,10 +185,107 @@ def extract_response(response: Any, extract: Any) -> ParseResult:
     return normalize_parse_result(value)
 
 
-async def aextract_response(response: Any, extract: Any) -> ParseResult:
-    value = extract(response) if callable(extract) else extract_items(response, extract)
+async def aextract_items(response: Any, extract: Any) -> AsyncIterator[Any]:
+    """Extract one item at a time, awaiting model-backed fields."""
+    extract = compile_extraction(extract)
+    if extract is None:
+        return
+    if not isinstance(extract, ExtractionRules):
+        raise ConfigError("aextract_items requires declarative extraction rules")
+    for name, spec in extract_specs_for_response(response, extract):
+        if not spec.fields:
+            continue
+        for scope in select_scopes(response, spec):
+            item = {}
+            for key, rule in spec.fields.items():
+                if rule.css is not None:
+                    item[key] = extract_by_css(scope, rule)
+                elif rule.css_find is not None:
+                    item[key] = extract_by_css_find(scope, rule)
+                elif rule.llm_extract is not None:
+                    document = convert_to_document(scope)
+                    extractor = (
+                        document.allm_extract
+                        if rule.all
+                        else document.allm_extract_first
+                    )
+                    item[key] = await extractor(rule.llm_extract)
+                else:
+                    match = await convert_to_document(scope).allm_find(rule.llm_find)
+                    item[key] = element_value(match, rule.attr)
+            item.setdefault("_type", spec.type or name)
+            if spec.item_model is not None:
+                item.setdefault("_item_model", spec.item_model)
+            yield item
+
+
+async def _aiter_values(value: Any) -> AsyncIterator[Any]:
+    """Iterate a scalar or iterable, closing generators on early exit."""
     if inspect.isawaitable(value):
         value = await value
-    if isinstance(value, AsyncIterable):
-        value = [entry async for entry in value]
-    return normalize_parse_result(value)
+    try:
+        if isinstance(value, AsyncIterable):
+            async for entry in value:
+                yield entry
+        elif isinstance(value, Iterable) and not isinstance(
+            value, (str, bytes, dict, BaseModel, CrawlRequest)
+        ):
+            for entry in value:
+                yield entry
+        elif value is not None:
+            yield value
+    finally:
+        if inspect.isasyncgen(value):
+            await value.aclose()
+        elif inspect.isgenerator(value):
+            value.close()
+
+
+@dataclass
+class AsyncParseResult:
+    items: AsyncIterator[Any]
+    requests: list[CrawlRequest] = field(default_factory=list)
+
+
+async def aextract_response(response: Any, extract: Any) -> AsyncParseResult:
+    value = (
+        extract(response) if callable(extract) else aextract_items(response, extract)
+    )
+    if inspect.isawaitable(value):
+        value = await value
+    if isinstance(value, AsyncParseResult):
+        return value
+    requests: list[CrawlRequest] = []
+
+    async def items():
+        if isinstance(value, ParseResult) or (
+            isinstance(value, tuple) and len(value) == 2
+        ):
+            item_values, request_values = (
+                (value.items, value.requests)
+                if isinstance(value, ParseResult)
+                else value
+            )
+            async with aclosing(_aiter_values(item_values)) as entries:
+                async for item in entries:
+                    yield item
+            async with aclosing(_aiter_values(request_values)) as entries:
+                async for request in entries:
+                    requests.append(
+                        request
+                        if isinstance(request, CrawlRequest)
+                        else CrawlRequest(url=str(request))
+                    )
+        else:
+            async with aclosing(_aiter_values(value)) as entries:
+                async for entry in entries:
+                    if isinstance(entry, (CrawlRequest, str)):
+                        requests.append(
+                            entry
+                            if isinstance(entry, CrawlRequest)
+                            else CrawlRequest(url=entry)
+                        )
+                    else:
+                        yield entry
+
+    return AsyncParseResult(items(), requests)

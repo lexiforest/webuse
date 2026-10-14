@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from typing import TYPE_CHECKING, Any
 
 from ..exceptions import SmartSelectorError
-from ..llm import create_openai_client, openai_defaults
+from ..llm import acompletion_content, create_openai_client, openai_defaults
 
 if TYPE_CHECKING:
     from .parser import Document, Element
@@ -123,3 +124,69 @@ def _parse_llm_index(content: str) -> int | None:
             else None
         )
     return None
+
+
+class AsyncLlmSmartResolver:
+    def __init__(self, *, model=None, api_key=None, base_url=None, client=None):
+        self.model = model
+        self.api_key = api_key
+        self.base_url = base_url
+        self.client = client
+
+    async def resolve(
+        self, prompt: str, document: Document, candidates: list[Element]
+    ) -> Element | None:
+        if not candidates:
+            return None
+        defaults = await asyncio.to_thread(openai_defaults)
+        content = await acompletion_content(
+            settings=defaults,
+            client=self.client,
+            api_key=self.api_key,
+            base_url=self.base_url,
+            model=self.model or defaults.model or "gpt-4.1-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Choose the best HTML element for the user's scraping prompt. "
+                        "Return only JSON with a zero-based integer field named index, "
+                        "or null if none match."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "prompt": prompt,
+                            "url": document.url,
+                            "candidates": [
+                                _candidate_summary(el, i)
+                                for i, el in enumerate(candidates)
+                            ],
+                        },
+                        ensure_ascii=True,
+                    ),
+                },
+            ],
+            temperature=0,
+        )
+        index = _parse_llm_index(content)
+        return (
+            candidates[index]
+            if index is not None and 0 <= index < len(candidates)
+            else None
+        )
+
+
+async def aresolve_element(
+    document: Document,
+    prompt: str,
+    *,
+    resolver: AsyncLlmSmartResolver | None = None,
+) -> Element:
+    resolver = resolver if resolver is not None else AsyncLlmSmartResolver()
+    match = await resolver.resolve(prompt, document, list(document.iter_elements()))
+    if match is None:
+        raise SmartSelectorError(f"Unable to find an element for prompt: {prompt!r}")
+    return match

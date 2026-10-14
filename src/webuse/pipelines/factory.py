@@ -8,6 +8,11 @@ from typing import Any
 from ..exceptions import PipelineError
 from .base import AsyncItemPipeline, ItemPipeline
 from .builtin import (
+    AsyncAssetDownloadPipeline,
+    AsyncCsvPipeline,
+    AsyncJsonlPipeline,
+    AsyncSQLitePipeline,
+    AsyncWebhookPipeline,
     AssetDownloadPipeline,
     CsvPipeline,
     JsonlPipeline,
@@ -22,6 +27,14 @@ _BUILTIN_PIPELINES = {
     "csv": CsvPipeline,
     "sqlite": SQLitePipeline,
     "webhook": WebhookPipeline,
+}
+
+_ASYNC_BUILTIN_PIPELINES = {
+    "assets": AsyncAssetDownloadPipeline,
+    "jsonl": AsyncJsonlPipeline,
+    "csv": AsyncCsvPipeline,
+    "sqlite": AsyncSQLitePipeline,
+    "webhook": AsyncWebhookPipeline,
 }
 
 
@@ -47,14 +60,15 @@ def _import_object(path: str, *, base_dir: str | Path | None = None) -> Any:
 
 
 def create_pipeline(
-    spec: Any, *, base_dir: str | Path | None = None
+    spec: Any, *, base_dir: str | Path | None = None, asynchronous: bool = False
 ) -> ItemPipeline | AsyncItemPipeline:
+    builtins = _ASYNC_BUILTIN_PIPELINES if asynchronous else _BUILTIN_PIPELINES
     if isinstance(spec, (ItemPipeline, AsyncItemPipeline)):
         return spec
     if isinstance(spec, str):
         key = spec.lower()
-        if key in _BUILTIN_PIPELINES:
-            return _BUILTIN_PIPELINES[key](base_dir=base_dir)
+        if key in builtins:
+            return builtins[key](base_dir=base_dir)
         target = _import_object(spec, base_dir=base_dir)
         return target() if isinstance(target, type) else target
     if isinstance(spec, type):
@@ -67,9 +81,9 @@ def create_pipeline(
             if base_dir is not None and "base_dir" not in options:
                 options["base_dir"] = base_dir
             key = str(pipeline_type).lower()
-            if key not in _BUILTIN_PIPELINES:
+            if key not in builtins:
                 raise PipelineError(f"Unknown builtin pipeline type: {pipeline_type!r}")
-            return _BUILTIN_PIPELINES[key](**options)
+            return builtins[key](**options)
         if pipeline_class:
             target = _import_object(str(pipeline_class), base_dir=base_dir)
             return target(**options) if isinstance(target, type) else target
@@ -79,7 +93,7 @@ def create_pipeline(
 
 
 def create_pipelines(
-    specs: Any, *, base_dir: str | Path | None = None
+    specs: Any, *, base_dir: str | Path | None = None, asynchronous: bool = False
 ) -> list[ItemPipeline | AsyncItemPipeline]:
     if specs is None:
         return []
@@ -87,7 +101,10 @@ def create_pipelines(
         specs, "process_item"
     ):
         specs = [specs]
-    return [create_pipeline(spec, base_dir=base_dir) for spec in specs]
+    return [
+        create_pipeline(spec, base_dir=base_dir, asynchronous=asynchronous)
+        for spec in specs
+    ]
 
 
 __all__ = ["create_pipeline", "create_pipelines"]

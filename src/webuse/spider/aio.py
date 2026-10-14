@@ -1,10 +1,12 @@
 import asyncio
+from contextlib import aclosing
 from functools import partial
 from pathlib import Path
 from typing import Any
 
 from ..engine.aio import acrawl
-from ..extract import ParseResult, aextract_response
+from ..extract import aextract_items, aextract_response
+from ..extract.rules import AsyncParseResult
 from ..llm import use_openai_settings
 from ..models import CrawlResult
 from ..pipelines.utils import _apipeline_lifecycle, _aprocess_items
@@ -13,20 +15,36 @@ from .config import ProjectConfig
 
 
 class AsyncSpider(BaseSpider):
+    _async_pipelines = True
+
+    def parse(self, response: Any) -> Any:
+        settings = self._run_state.settings if self._run_state is not None else None
+        return aextract_items(response, settings.extract if settings else self.extract)
+
     async def _aextract_callback(
         self, response: Any, state: SpiderRun, pipeline_lock: asyncio.Lock
-    ) -> ParseResult:
+    ) -> AsyncParseResult:
         parsed = await aextract_response(
             response, self._response_handler(response, state.settings)
         )
-        async with pipeline_lock:
-            parsed.items = await _aprocess_items(
-                parsed.items,
-                state.pipelines,
-                coerce_item=self._coerce_pipeline_item,
-                emit=partial(state.signals.asend, spider=self, response=response),
-            )
-        return parsed
+
+        async def processed_items():
+            async with aclosing(parsed.items):
+                async with pipeline_lock:
+                    async with aclosing(
+                        _aprocess_items(
+                            parsed.items,
+                            state.pipelines,
+                            coerce_item=self._coerce_pipeline_item,
+                            emit=partial(
+                                state.signals.asend, spider=self, response=response
+                            ),
+                        )
+                    ) as items:
+                        async for item in items:
+                            yield item
+
+        return AsyncParseResult(processed_items(), parsed.requests)
 
     async def run(self, **overrides: Any) -> CrawlResult:
         project_config, project_base_dir = self._project_config()

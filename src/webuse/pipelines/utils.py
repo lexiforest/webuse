@@ -156,15 +156,14 @@ def _process_items(
 
 
 async def _aprocess_items(
-    items: list[Any],
+    items: AsyncIterator[Any],
     pipelines: list[ItemPipeline | AsyncItemPipeline],
     *,
     coerce_item: Callable[[Any], BaseModel],
     emit: Callable[..., Any],
-) -> list[Any]:
+) -> AsyncIterator[Any]:
     """Apply sync/async hooks; the spider serializes concurrent response batches."""
-    processed = []
-    for item in items:
+    async for item in items:
         await emit("item_extracted", item=item)
         current = coerce_item(item) if pipelines else item
         for pipeline in pipelines:
@@ -190,8 +189,7 @@ async def _aprocess_items(
                 raise
         if current is not None or not pipelines:
             await emit("item_processed", item=current)
-            processed.append(current)
-    return processed
+            yield current
 
 
 __all__ = ["ensure_pipeline_item", "item_to_dict", "item_to_json", "resolve_path"]

@@ -89,6 +89,32 @@ def _model_id(payload: Any) -> str | None:
     return None
 
 
+async def acompletion_content(
+    *,
+    settings: OpenAISettings,
+    client: Any = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
+    **payload: Any,
+) -> str:
+    """Await an injected model client or use curl_cffi for the default transport."""
+    if client is not None:
+        response = await client.chat.completions.create(**payload)
+        return response.choices[0].message.content or ""
+    api_key = api_key or settings.api_key
+    base_url = base_url or settings.base_url or "https://api.openai.com/v1"
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    async with requests.AsyncSession() as session:
+        response = await session.post(
+            f"{base_url.rstrip('/')}/chat/completions",
+            headers=headers,
+            json=payload,
+            allow_redirects=False,
+        )
+        response.raise_for_status()
+        return response.json()["choices"][0]["message"].get("content") or ""
+
+
 def detect_local_openai_settings(*, timeout: float = 0.2) -> OpenAISettings | None:
     for provider, base_url, api_key in _LOCAL_OPENAI_ENDPOINTS:
         try:
