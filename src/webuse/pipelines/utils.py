@@ -162,7 +162,7 @@ async def _aprocess_items(
     coerce_item: Callable[[Any], BaseModel],
     emit: Callable[..., Any],
 ) -> AsyncIterator[Any]:
-    """Apply sync/async hooks; the spider serializes concurrent response batches."""
+    """Apply hooks in item order; concurrent workers use the same pipelines."""
     async for item in items:
         await emit("item_extracted", item=item)
         current = coerce_item(item) if pipelines else item

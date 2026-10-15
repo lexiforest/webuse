@@ -69,6 +69,97 @@ class Session:
         self.closed = True
 
 
+@pytest.mark.parametrize("kind", ["jsonl", "csv", "sqlite"])
+def test_concurrent_file_pipeline_writes_preserve_every_record(tmp_path, kind):
+    path = tmp_path / f"items.{kind}"
+    titles = [f'{index}: "quoted", newline\n' + "x" * 4096 for index in range(40)]
+
+    async def run():
+        pipeline = create_pipeline({"type": kind, "path": path}, asynchronous=True)
+        async with _apipeline_lifecycle([pipeline]):
+            await asyncio.gather(
+                *(pipeline.process_item(Item(title=title)) for title in titles)
+            )
+
+    asyncio.run(run())
+    if kind == "jsonl":
+        rows = [json.loads(line) for line in path.read_text().splitlines()]
+    elif kind == "csv":
+        with path.open(newline="") as file:
+            rows = list(csv.DictReader(file))
+    else:
+        with sqlite3.connect(path) as db:
+            rows = [json.loads(row[0]) for row in db.execute("SELECT data FROM items")]
+    assert len(rows) == len(titles)
+    assert sorted(row["title"] for row in rows) == sorted(titles)
+
+
+@pytest.mark.parametrize("kind", ["webhook", "assets"])
+def test_http_pipelines_allow_overlapping_requests(tmp_path, kind):
+    async def run():
+        barrier = asyncio.Barrier(2)
+
+        class ConcurrentSession(Session):
+            async def request(self, method, url, **kwargs):
+                await barrier.wait()
+                return await super().request(method, url, **kwargs)
+
+        session = ConcurrentSession()
+        options = (
+            {"url": "https://sink.test"}
+            if kind == "webhook"
+            else {"directory": tmp_path}
+        )
+        pipeline = create_pipeline(
+            {"type": kind, "session": session, **options}, asynchronous=True
+        )
+        async with _apipeline_lifecycle([pipeline]):
+            results = await asyncio.wait_for(
+                asyncio.gather(
+                    *(
+                        pipeline.process_item(
+                            Item(
+                                title=str(index),
+                                asset_urls=[f"https://asset.test/{index}"],
+                            )
+                        )
+                        for index in range(2)
+                    )
+                ),
+                2,
+            )
+        assert len(session.requests) == len(results) == 2
+        if kind == "assets":
+            assert all(
+                (tmp_path / item.assets[0]["path"]).read_bytes() == b"asset"
+                for item in results
+            )
+
+    asyncio.run(run())
+
+
+def test_concurrent_duplicate_assets_share_a_completed_file(tmp_path):
+    async def run():
+        session = Session()
+        pipeline = create_pipeline(
+            {"type": "assets", "directory": tmp_path, "session": session},
+            asynchronous=True,
+        )
+        item = Item(title="page", asset_urls=["https://asset.test/image.png"])
+        async with _apipeline_lifecycle([pipeline]):
+            results = await asyncio.gather(
+                *(pipeline.process_item(item) for _ in range(20))
+            )
+            assert not pipeline._path_locks
+        assert len(session.requests) == 1
+        assert sum(item.assets[0]["status"] == "downloaded" for item in results) == 1
+        assert {item.assets[0]["size"] for item in results} == {5}
+        assert len({item.assets[0]["checksum"] for item in results}) == 1
+        assert (tmp_path / results[0].assets[0]["path"]).read_bytes() == b"asset"
+
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize("kind", ["webhook", "assets"])
 @pytest.mark.parametrize("status", [200, 500])
 def test_async_http_pipelines_await_io_and_preserve_borrowed_session(

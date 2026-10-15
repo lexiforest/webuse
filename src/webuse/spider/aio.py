@@ -22,7 +22,7 @@ class AsyncSpider(BaseSpider):
         return aextract_items(response, settings.extract if settings else self.extract)
 
     async def _aextract_callback(
-        self, response: Any, state: SpiderRun, pipeline_lock: asyncio.Lock
+        self, response: Any, state: SpiderRun
     ) -> AsyncParseResult:
         parsed = await aextract_response(
             response, self._response_handler(response, state.settings)
@@ -30,19 +30,18 @@ class AsyncSpider(BaseSpider):
 
         async def processed_items():
             async with aclosing(parsed.items):
-                async with pipeline_lock:
-                    async with aclosing(
-                        _aprocess_items(
-                            parsed.items,
-                            state.pipelines,
-                            coerce_item=self._coerce_pipeline_item,
-                            emit=partial(
-                                state.signals.asend, spider=self, response=response
-                            ),
-                        )
-                    ) as items:
-                        async for item in items:
-                            yield item
+                async with aclosing(
+                    _aprocess_items(
+                        parsed.items,
+                        state.pipelines,
+                        coerce_item=self._coerce_pipeline_item,
+                        emit=partial(
+                            state.signals.asend, spider=self, response=response
+                        ),
+                    )
+                ) as items:
+                    async for item in items:
+                        yield item
 
         return AsyncParseResult(processed_items(), parsed.requests)
 
@@ -60,13 +59,10 @@ class AsyncSpider(BaseSpider):
         state, engine_overrides = self._prepare_run(
             overrides, project_config, project_base_dir
         )
-        pipeline_lock = asyncio.Lock()
         options = self._crawl_options(
             state.settings,
             engine_overrides,
-            extract=lambda response: self._aextract_callback(
-                response, state, pipeline_lock
-            ),
+            extract=lambda response: self._aextract_callback(response, state),
         )
         options["signals"] = state.signals
         with self._activate_run(state):

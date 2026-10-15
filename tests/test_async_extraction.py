@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from pydantic import BaseModel
 
-from crawl_helpers import AsyncFakeClient
+from crawl_helpers import AsyncFakeClient, PAGES
 from webuse import (
     AsyncItemPipeline,
     AsyncSpider,
@@ -15,10 +15,110 @@ from webuse import (
 )
 from webuse.extract import Document
 from webuse.llm import OpenAISettings
+from webuse.signals import SignalBus
 
 
 class Item(BaseModel):
     title: str
+
+
+@pytest.mark.parametrize("with_pipelines", [False, True])
+def test_response_streams_overlap_and_preserve_item_and_pipeline_order(with_pipelines):
+    async def run():
+        parse_barrier = asyncio.Barrier(3)
+        pipeline_barrier = asyncio.Barrier(3)
+        processed = []
+        trace = {}
+
+        async def parse(response):
+            await parse_barrier.wait()
+            for index in range(2):
+                title = f"{response.url}:{index}"
+                trace[title] = []
+                yield Item(title=title)
+                # A worker finishes this item before consuming its next one.
+                assert title in processed
+                assert trace[title] == (["first", "second"] if with_pipelines else [])
+
+        class First(AsyncItemPipeline):
+            async def process_item(self, item):
+                await pipeline_barrier.wait()
+                trace[item.title].append("first")
+                return item
+
+        class Second(AsyncItemPipeline):
+            async def process_item(self, item):
+                assert trace[item.title] == ["first"]
+                await asyncio.sleep(0)
+                trace[item.title].append("second")
+                return item
+
+        signals = SignalBus()
+        signals.connect("item_processed", lambda item: processed.append(item.title))
+        spider = AsyncSpider(
+            start_urls=list(PAGES),
+            concurrency=3,
+            parse=parse,
+            pipelines=[First(), Second()] if with_pipelines else [],
+            signals=signals,
+        )
+        result = await asyncio.wait_for(spider.run(client=AsyncFakeClient()), 2)
+        assert len(result.items) == len(processed) == 6
+        assert {item.title for item in result.items} == set(trace)
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("cancel", [False, True])
+def test_overlapping_pipeline_calls_stop_before_lifecycle_cleanup(cancel):
+    async def run():
+        active = set()
+        closed_streams = set()
+        all_started = asyncio.Event()
+        finish = asyncio.Event()
+        pipeline_closed = []
+
+        async def parse(response):
+            try:
+                yield Item(title=response.url)
+            finally:
+                closed_streams.add(response.url)
+
+        class Output(AsyncItemPipeline):
+            async def process_item(self, item):
+                active.add(item.title)
+                if len(active) == 3:
+                    all_started.set()
+                try:
+                    await all_started.wait()
+                    if not cancel and item.title == "https://example.com/":
+                        raise RuntimeError("sink failed")
+                    await finish.wait()
+                    return item
+                finally:
+                    active.remove(item.title)
+
+            async def close_spider(self):
+                assert not active
+                pipeline_closed.append(True)
+
+        spider = AsyncSpider(
+            start_urls=list(PAGES), concurrency=3, parse=parse, pipelines=[Output()]
+        )
+        task = asyncio.create_task(spider.run(client=AsyncFakeClient()))
+        try:
+            await asyncio.wait_for(all_started.wait(), 2)
+            if cancel:
+                task.cancel()
+            with pytest.raises(asyncio.CancelledError if cancel else RuntimeError):
+                await asyncio.wait_for(task, 2)
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        assert closed_streams == set(PAGES)
+        assert pipeline_closed == [True]
+
+    asyncio.run(run())
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])

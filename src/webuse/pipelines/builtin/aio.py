@@ -5,6 +5,7 @@ import csv
 import hashlib
 import io
 from datetime import datetime, timezone
+from weakref import WeakValueDictionary
 
 import aiosqlite
 from aiofile import async_open
@@ -23,6 +24,7 @@ from .webhook import WebhookPipeline, _response_text
 
 class AsyncJsonlPipeline(JsonlPipeline, AsyncItemPipeline):
     async def open_spider(self) -> None:
+        self._write_lock = asyncio.Lock()
         await asyncio.to_thread(self.path.parent.mkdir, parents=True, exist_ok=True)
         self._file = await async_open(
             self.path, "a" if self.append else "w", encoding="utf-8"
@@ -31,7 +33,9 @@ class AsyncJsonlPipeline(JsonlPipeline, AsyncItemPipeline):
     async def process_item(self, item: BaseModel) -> BaseModel:
         if self._file is None:
             raise PipelineStateError("AsyncJsonlPipeline is not open")
-        await self._file.write(item_to_json(item) + "\n")
+        line = item_to_json(item) + "\n"
+        async with self._write_lock:
+            await self._file.write(line)
         return item
 
     async def close_spider(self) -> None:
@@ -44,6 +48,7 @@ class AsyncJsonlPipeline(JsonlPipeline, AsyncItemPipeline):
 
 class AsyncCsvPipeline(CsvPipeline, AsyncItemPipeline):
     async def open_spider(self) -> None:
+        self._write_lock = asyncio.Lock()
         await asyncio.to_thread(self.path.parent.mkdir, parents=True, exist_ok=True)
         self._write_header = not self.append or not await asyncio.to_thread(
             lambda: self.path.exists() and self.path.stat().st_size > 0
@@ -57,14 +62,15 @@ class AsyncCsvPipeline(CsvPipeline, AsyncItemPipeline):
         if self._file is None:
             raise PipelineStateError("AsyncCsvPipeline is not open")
         row = {key: _csv_value(value) for key, value in item_to_dict(item).items()}
-        buffer = io.StringIO(newline="")
-        self.fieldnames = self.fieldnames or list(row)
-        writer = csv.DictWriter(buffer, self.fieldnames, extrasaction="ignore")
-        if self._write_header:
-            writer.writeheader()
-        writer.writerow(row)
-        await self._file.write(buffer.getvalue())
-        self._write_header = False
+        async with self._write_lock:
+            buffer = io.StringIO(newline="")
+            self.fieldnames = self.fieldnames or list(row)
+            writer = csv.DictWriter(buffer, self.fieldnames, extrasaction="ignore")
+            if self._write_header:
+                writer.writeheader()
+            writer.writerow(row)
+            await self._file.write(buffer.getvalue())
+            self._write_header = False
         return item
 
     async def close_spider(self) -> None:
@@ -77,6 +83,7 @@ class AsyncCsvPipeline(CsvPipeline, AsyncItemPipeline):
 
 class AsyncSQLitePipeline(SQLitePipeline, AsyncItemPipeline):
     async def open_spider(self) -> None:
+        self._write_lock = asyncio.Lock()
         await asyncio.to_thread(self.path.parent.mkdir, parents=True, exist_ok=True)
         self._connection = await aiosqlite.connect(self.path)
         try:
@@ -98,16 +105,17 @@ class AsyncSQLitePipeline(SQLitePipeline, AsyncItemPipeline):
         if self._connection is None:
             raise PipelineStateError("AsyncSQLitePipeline is not open")
         item = ensure_pipeline_item(item)
-        async with self._connection.execute(
-            f"INSERT INTO {self.table} (item_type, data, created_at) VALUES (?, ?, ?)",
-            (
-                type(item).__name__,
-                item_to_json(item),
-                datetime.now(timezone.utc).isoformat(),
-            ),
-        ):
-            pass
-        await self._connection.commit()
+        async with self._write_lock:
+            async with self._connection.execute(
+                f"INSERT INTO {self.table} (item_type, data, created_at) VALUES (?, ?, ?)",
+                (
+                    type(item).__name__,
+                    item_to_json(item),
+                    datetime.now(timezone.utc).isoformat(),
+                ),
+            ):
+                pass
+            await self._connection.commit()
         return item
 
     async def close_spider(self) -> None:
@@ -157,6 +165,8 @@ class AsyncWebhookPipeline(WebhookPipeline, AsyncItemPipeline):
 
 class AsyncAssetDownloadPipeline(AssetDownloadPipeline, AsyncItemPipeline):
     async def open_spider(self) -> None:
+        # Only active downloads and their waiters keep these locks alive.
+        self._path_locks: WeakValueDictionary[str, asyncio.Lock] = WeakValueDictionary()
         await asyncio.to_thread(self.directory.mkdir, parents=True, exist_ok=True)
         if self._session is None:
             self._session = AsyncSession()
@@ -166,6 +176,11 @@ class AsyncAssetDownloadPipeline(AssetDownloadPipeline, AsyncItemPipeline):
         if self._session is None:
             raise PipelineStateError("AsyncAssetDownloadPipeline is not open")
         relative_path = _asset_path(url)
+        lock = self._path_locks.setdefault(relative_path, asyncio.Lock())
+        async with lock:
+            return await self._download_path(url, relative_path)
+
+    async def _download_path(self, url: str, relative_path: str) -> dict:
         path = self.directory / relative_path
         cached = self.skip_existing and await asyncio.to_thread(path.exists)
         if cached:

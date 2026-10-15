@@ -13,7 +13,11 @@ class ItemPipeline:
 
 
 class AsyncItemPipeline:
-    """Async item processing and lifecycle hooks for AsyncSpider."""
+    """Async hooks shared by a run's workers.
+
+    process_item calls may overlap. Protect shared state across awaits inside
+    the pipeline. Lifecycle hooks run before workers start and after they stop.
+    """
 
     async def open_spider(self) -> None:
         return None

@@ -213,7 +213,8 @@ def test_sync_spider_rejects_async_hooks_without_leaking_coroutines():
     assert coroutines[0].cr_frame is None
 
 
-def test_async_spider_serializes_pipeline_batches():
+@pytest.mark.parametrize("concurrency", [1, 2, 3])
+def test_async_spider_bounds_pipeline_calls_by_worker_count(concurrency):
     active = 0
     peak = 0
 
@@ -227,12 +228,18 @@ def test_async_spider_serializes_pipeline_batches():
             return item
 
     spider = AsyncSpider(
-        start_urls=["https://example.com", "https://example.com/page-1"],
-        concurrency=2,
-        parse=lambda response: SampleItem(title=response.url),
+        start_urls=[
+            "https://example.com",
+            "https://example.com/page-1",
+            "https://example.com/page-2",
+        ],
+        concurrency=concurrency,
+        parse=lambda response: (
+            SampleItem(title=f"{response.url}:{index}") for index in range(4)
+        ),
         pipelines=[Output()],
     )
     result = asyncio.run(spider.run(client=AsyncFakeClient()))
-    assert len(result.items) == 2
+    assert len(result.items) == 12
     assert active == 0
-    assert peak == 1
+    assert peak == concurrency
