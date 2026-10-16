@@ -1,6 +1,7 @@
 import { build } from "esbuild";
 import { mkdir, rm } from "node:fs/promises";
 import { resolve } from "node:path";
+import { testShutdown } from "./shutdown-smoke.mjs";
 
 const prefix = `/tmp/webuse-node-smoke-${process.pid}`;
 const outputDir = resolve("node_modules/.cache/webuse");
@@ -8,6 +9,7 @@ const output = resolve(outputDir, "orchestrator-smoke.mjs");
 const peerOutput = resolve(outputDir, "orchestrator-peer.mjs");
 const assistantOutput = resolve(outputDir, "assistant-smoke.mjs");
 const workspaceOutput = resolve(outputDir, "workspace-smoke.mjs");
+const shutdownOutput = resolve(outputDir, "shutdown-worker.mjs");
 process.env.WEBUSE_DB_PATH = `${prefix}.sqlite`;
 process.env.WEBUSE_WORK_DIR = `${prefix}-runs`;
 process.env.WEBUSE_WORKSPACE_DIR = `${prefix}-workspaces`;
@@ -22,6 +24,8 @@ try {
   await import(`${output}?run=${Date.now()}`);
   await build({ entryPoints: ["tests/assistant-smoke.ts"], outfile: assistantOutput, bundle: true, platform: "node", format: "esm", packages: "external", loader: { ".md": "text" } });
   await import(`${assistantOutput}?run=${Date.now()}`);
+  await build({ entryPoints: ["tests/shutdown-worker.ts"], outfile: shutdownOutput, bundle: true, platform: "node", format: "esm", packages: "external", loader: { ".md": "text" } });
+  await testShutdown(shutdownOutput);
 } finally {
   await Promise.all([
     rm(`${prefix}.sqlite`, { force: true }),
@@ -33,5 +37,6 @@ try {
     rm(peerOutput, { force: true }),
     rm(assistantOutput, { force: true }),
     rm(workspaceOutput, { force: true }),
+    rm(shutdownOutput, { force: true }),
   ]);
 }

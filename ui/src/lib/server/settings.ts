@@ -4,7 +4,6 @@ import { store } from "./store";
 export type SettingsValue = {
   runtime: { databasePath: string; workDirectory: string; concurrency: string };
   llm: { apiKey: string; baseUrl: string; model: string };
-  smart: { selectorStore: string };
 };
 
 export const defaults: SettingsValue = {
@@ -18,18 +17,16 @@ export const defaults: SettingsValue = {
     baseUrl: process.env.WEBUSE_LLM_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1",
     model: process.env.WEBUSE_LLM_MODEL || process.env.OPENAI_MODEL || "gpt-4.1-mini",
   },
-  smart: { selectorStore: process.env.WEBUSE_SELECTOR_STORE || ".webuse/selectors.json" },
 };
 
 function section(value: unknown) { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function text(value: unknown) { return typeof value === "string" ? value : ""; }
 
 export function normalizedSettings(value: unknown): SettingsValue {
-  const root = section(value); const runtime = section(root.runtime); const llm = section(root.llm); const smart = section(root.smart);
+  const root = section(value); const runtime = section(root.runtime); const llm = section(root.llm);
   return {
     runtime: { databasePath: text(runtime.databasePath), workDirectory: text(runtime.workDirectory), concurrency: text(runtime.concurrency) },
     llm: { apiKey: text(llm.apiKey), baseUrl: text(llm.baseUrl), model: text(llm.model) },
-    smart: { selectorStore: text(smart.selectorStore) },
   };
 }
 
@@ -47,7 +44,6 @@ export function effectiveSettings() {
       baseUrl: saved.llm.baseUrl || defaults.llm.baseUrl,
       model: saved.llm.model || defaults.llm.model,
     },
-    smart: { selectorStore: saved.smart.selectorStore || defaults.smart.selectorStore },
   };
 }
 

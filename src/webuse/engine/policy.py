@@ -3,11 +3,42 @@
 import asyncio
 import inspect
 import re
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 
 from ..models import CrawlRequest, FollowRule
+
+
+@dataclass(frozen=True)
+class PagePattern:
+    page_type: str
+    include: tuple[re.Pattern, ...]
+    exclude: tuple[re.Pattern, ...]
+
+    def matches(self, url: str) -> bool:
+        return bool(self.include) and self.allows(url)
+
+    def allows(self, url: str) -> bool:
+        return (
+            not self.include or any(pattern.search(url) for pattern in self.include)
+        ) and not any(pattern.search(url) for pattern in self.exclude)
+
+
+def classify_request(request: CrawlRequest, patterns: list[PagePattern]) -> bool:
+    """Assign an unset page type, or validate the explicitly assigned type."""
+    if request.page_type:
+        return all(
+            pattern.allows(request.url)
+            for pattern in patterns
+            if pattern.page_type == request.page_type
+        )
+    for pattern in patterns:
+        if pattern.matches(request.url):
+            request.page_type = pattern.page_type
+            break
+    return True
 
 
 def coerce_domains(value: Any) -> set[str] | None:
@@ -111,12 +142,12 @@ def same_domain(url: str, origin_url: str) -> bool:
     return domain(url) == domain(origin_url)
 
 
-def request_category(request: Any) -> str:
-    category = getattr(request, "category", None)
-    return str(category) if category else "default"
+def request_page_type(request: Any) -> str:
+    page_type = getattr(request, "page_type", None)
+    return str(page_type) if page_type else "default"
 
 
-def category_values(value: Any) -> set[str]:
+def page_type_values(value: Any) -> set[str]:
     if value is None:
         return set()
     if isinstance(value, str):
@@ -125,10 +156,10 @@ def category_values(value: Any) -> set[str]:
 
 
 def follow_rule_applies(response: Any, rule: FollowRule) -> bool:
-    allowed = category_values(rule.source_category)
+    allowed = page_type_values(rule.source_page_type)
     if not allowed or "*" in allowed:
         return True
-    return request_category(getattr(response, "crawl_request", None)) in allowed
+    return request_page_type(getattr(response, "crawl_request", None)) in allowed
 
 
 def coerce_follow_result(value: Any) -> list[Any]:
@@ -152,12 +183,23 @@ def follow_candidates(response: Any, follow: Any) -> list[Any]:
         elif isinstance(rule, FollowRule):
             if not follow_rule_applies(response, rule):
                 continue
-            if rule.css:
-                for element in response.css(rule.css):
-                    value = element.attr(rule.attr)
-                    if value:
-                        candidates.append(value)
+            for element in rule.select(response):
+                value = element.attr(rule.attr)
+                if value:
+                    candidates.append(value)
     return candidates
+
+
+async def afollow_candidates(response: Any, follow: Any) -> list[Any]:
+    if isinstance(follow, FollowRule):
+        if not follow_rule_applies(response, follow):
+            return []
+        elements = await follow.aselect(response)
+        return [value for element in elements if (value := element.attr(follow.attr))]
+    found = follow_candidates(response, follow)
+    if len(found) == 1 and inspect.isawaitable(found[0]):
+        return coerce_follow_result(await found[0])
+    return found
 
 
 def prepare_followup(
@@ -169,8 +211,8 @@ def prepare_followup(
         else CrawlRequest(url=str(candidate))
     )
     followup.url = urljoin(request.url, followup.url)
-    if rule and rule.category and not followup.category:
-        followup.category = rule.category
+    if rule and rule.page_type and not followup.page_type:
+        followup.page_type = rule.page_type
     if followup.depth == 0:
         followup.depth = request.depth + 1
     followup.parent_url = request.url

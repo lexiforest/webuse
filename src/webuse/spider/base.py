@@ -11,7 +11,8 @@ from pydantic import BaseModel, ValidationError
 
 from ..config import load_config_file
 from ..engine.policy import coerce_domains
-from ..extract import extract_handles_category, extract_items
+from ..engine.pages import compile_pages_config
+from ..extract import extract_handles_page_type, extract_items
 from ..extract.schema import compile_extraction
 from ..exceptions import ConfigError, PipelineError, SpiderError
 from ..models import CrawlRequest, CrawlResult
@@ -21,7 +22,6 @@ from .config import (
     EffectiveSpiderSettings,
     ProjectConfig,
     SpiderConfig,
-    compile_pages_config,
 )
 
 
@@ -52,6 +52,7 @@ class BaseSpider:
     start_urls: Any = ()
     routes: dict[str, Any] = {}
     follow: Any = None
+    pages: Any = None
     extract: Any = None
     item_model: type[BaseModel] | str | None = None
     pipelines: Any = None
@@ -87,23 +88,25 @@ class BaseSpider:
     def on_error(self, exc: Exception, request: CrawlRequest) -> None:
         return None
 
-    def _route_handler(self, category: str | None) -> Any:
-        if not category:
+    def _route_handler(self, page_type: str | None) -> Any:
+        if not page_type:
             return self.parse
-        handler = self.routes.get(category)
+        handler = self.routes.get(page_type)
         if handler is None:
-            method_name = f"parse_{category}"
+            method_name = f"parse_{page_type}"
             handler = getattr(self, method_name, None)
+        if handler is None and page_type == "default":
+            return self.parse
         if handler is None:
-            raise SpiderError(f"No parse route for request category: {category!r}")
+            raise SpiderError(f"No parse route for request page_type: {page_type!r}")
         if isinstance(handler, str):
             handler = getattr(self, handler, None)
             if handler is None:
-                raise SpiderError(f"No parse route for request category: {category!r}")
+                raise SpiderError(f"No parse route for request page_type: {page_type!r}")
         if inspect.isfunction(handler):
             return lambda response: handler(self, response)
         if not callable(handler):
-            raise SpiderError(f"Parse route for category {category!r} is not callable")
+            raise SpiderError(f"Parse route for page_type {page_type!r} is not callable")
         return handler
 
     def _config_path(self) -> Path | None:
@@ -183,13 +186,6 @@ class BaseSpider:
             for key in spider_config.model_fields_set & _SPIDER_CONFIG_FIELDS:
                 if key in {"same_domain", "items"}:
                     continue
-                if key == "pages":
-                    follow, extract = compile_pages_config(
-                        spider_config.pages, same_domain=spider_config.same_domain
-                    )
-                    values["follow"] = follow
-                    values["extract"] = extract
-                    continue
                 if key not in setting_fields:
                     raise ConfigError(f"Spider config {key!r} requires AgenticSpider")
                 value = getattr(spider_config, key)
@@ -218,6 +214,16 @@ class BaseSpider:
             if key in setting_fields:
                 values[key] = crawl_overrides.pop(key)
 
+        if values["pages"] is not None:
+            page_rules = compile_pages_config(
+                values["pages"],
+                same_domain=spider_config.same_domain if spider_config else False,
+            )
+            values["pages"] = page_rules
+            if page_rules.follow is not None and "follow" not in overrides:
+                values["follow"] = page_rules.follow
+            if page_rules.extract is not None and "extract" not in overrides:
+                values["extract"] = page_rules.extract
         values["extract"] = compile_extraction(values["extract"])
         settings = self._settings_class.model_validate(values)
         settings.allowed_domains = coerce_domains(settings.allowed_domains)
@@ -304,11 +310,11 @@ class BaseSpider:
     def _response_handler(
         self, response: Any, settings: EffectiveSpiderSettings
     ) -> Any:
-        category = getattr(getattr(response, "crawl_request", None), "category", None)
+        page_type = getattr(getattr(response, "crawl_request", None), "page_type", None)
         try:
-            return self._route_handler(category)
+            return self._route_handler(page_type)
         except SpiderError:
-            if not extract_handles_category(settings.extract, category):
+            if not extract_handles_page_type(settings.extract, page_type):
                 raise
             return self.parse
 
@@ -353,6 +359,7 @@ class BaseSpider:
         options = {
             "extract": extract,
             "follow": settings.follow,
+            "pages": settings.pages,
             "max_depth": settings.max_depth,
             "max_requests": settings.max_requests,
             "concurrency": settings.concurrency,

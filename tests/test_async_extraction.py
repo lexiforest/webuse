@@ -9,7 +9,7 @@ from crawl_helpers import AsyncFakeClient, PAGES
 from webuse import (
     AsyncItemPipeline,
     AsyncSpider,
-    AsyncLlmSmartResolver,
+    AsyncLlmSelector,
     Response,
     acrawl,
 )
@@ -212,7 +212,7 @@ class ModelClient:
 def test_declarative_extraction_awaits_models_and_closes_owned_clients(
     monkeypatch, spider
 ):
-    from webuse.extract import smart, resolver
+    from webuse.extract import structured, resolver
     from webuse import llm
 
     sessions = []
@@ -233,7 +233,7 @@ def test_declarative_extraction_awaits_models_and_closes_owned_clients(
             assert kwargs["allow_redirects"] is False
             self.payload = kwargs["json"]
             content = (
-                '{"index": 0}'
+                '{"indices": [0]}'
                 if "candidates" in self.payload["messages"][1]["content"]
                 else '["value"]'
             )
@@ -244,7 +244,7 @@ def test_declarative_extraction_awaits_models_and_closes_owned_clients(
             )
 
     monkeypatch.setattr(llm.requests, "AsyncSession", ModelSession)
-    for module in (smart, resolver):
+    for module in (structured, resolver):
         monkeypatch.setattr(
             module,
             "openai_defaults",
@@ -256,16 +256,22 @@ def test_declarative_extraction_awaits_models_and_closes_owned_clients(
     def block_sync(*args, **kwargs):
         pytest.fail("Async extraction must not call synchronous LLM methods")
 
-    monkeypatch.setattr(Document, "llm_extract_first", block_sync)
-    monkeypatch.setattr(Document, "llm_find", block_sync)
+    monkeypatch.setattr(Document, "llm_extract", block_sync)
+    monkeypatch.setattr("webuse.extract.resolver.LlmSelector.select", block_sync)
     rules = {
         "default": {
             "page": {
                 "fields": {
                     "title": "h1",
-                    "value": {"llm_extract": "value"},
-                    "values": {"llm_extract": "values", "all": True},
-                    "selected": {"llm_find": "page"},
+                    "value": {
+                        "llm_extract": "value",
+                        "schema": {"type": "array", "items": {"type": "string"}},
+                    },
+                    "values": {
+                        "llm_extract": "values",
+                        "schema": {"type": "array", "items": {"type": "string"}},
+                    },
+                    "selected": {"llm": "page"},
                 }
             }
         }
@@ -281,7 +287,7 @@ def test_declarative_extraction_awaits_models_and_closes_owned_clients(
                 "https://example.com", extract=rules, client=AsyncFakeClient()
             )
         assert result.items[0]["title"] == "Home"
-        assert result.items[0]["value"] == "value"
+        assert result.items[0]["value"] == ["value"]
         assert result.items[0]["values"] == ["value"]
         assert "Home" in result.items[0]["selected"]
         assert len(sessions) == 3 and all(session.closed for session in sessions)
@@ -291,9 +297,9 @@ def test_declarative_extraction_awaits_models_and_closes_owned_clients(
 
 
 def test_async_document_helpers_preserve_borrowed_clients(monkeypatch):
-    from webuse.extract import smart, resolver
+    from webuse.extract import structured, resolver
 
-    for module in (smart, resolver):
+    for module in (structured, resolver):
         monkeypatch.setattr(
             module, "openai_defaults", lambda: OpenAISettings(model="local")
         )
@@ -301,19 +307,14 @@ def test_async_document_helpers_preserve_borrowed_clients(monkeypatch):
     async def run():
         document = Response(content=b"<h1>hello</h1>")
         client = ModelClient('["hello"]')
-        assert await document.allm_extract_many(
-            ["title", "heading"], client=client
-        ) == {
-            "title": ["hello"],
-            "heading": ["hello"],
-        }
+        assert await document.allm_extract(
+            "title", schema=list[str], client=client
+        ) == ["hello"]
         assert not client.closed
         assert document._tree is None
-        client.content = '{"index": 0}'
+        client.content = '{"indices": [0]}'
         assert (
-            await document.allm_find(
-                "page", resolver=AsyncLlmSmartResolver(client=client)
-            )
+            await document.afind(llm="page", selector=AsyncLlmSelector(client=client))
             is not None
         )
         assert not client.closed

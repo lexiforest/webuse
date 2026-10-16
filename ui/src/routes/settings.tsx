@@ -14,9 +14,6 @@ type SettingsValue = {
     baseUrl: string;
     model: string;
   };
-  smart: {
-    selectorStore: string;
-  };
 };
 
 const defaultSettings: SettingsValue = {
@@ -29,9 +26,6 @@ const defaultSettings: SettingsValue = {
     apiKey: "",
     baseUrl: "https://api.openai.com/v1",
     model: "gpt-4.1-mini",
-  },
-  smart: {
-    selectorStore: "selectors.json",
   },
 };
 
@@ -70,9 +64,6 @@ export default function Settings() {
   };
   const updateLlm = (patch: Partial<SettingsValue["llm"]>) => {
     setSettings(current => ({ ...current, llm: { ...current.llm, ...patch } }));
-  };
-  const updateSmart = (patch: Partial<SettingsValue["smart"]>) => {
-    setSettings(current => ({ ...current, smart: { ...current.smart, ...patch } }));
   };
 
   const load = async () => {
@@ -189,7 +180,7 @@ export default function Settings() {
           <section class="grid gap-6 py-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
             <div>
               <h2 class="text-lg font-semibold text-white">LLM</h2>
-              <p class="mt-1 text-sm text-gray-400">OpenAI-compatible API keys for smart extraction and generation.</p>
+              <p class="mt-1 text-sm text-gray-400">OpenAI-compatible model access for extraction and code generation.</p>
             </div>
             <div class="grid max-w-2xl gap-3">
               <label class="field dark-field">
@@ -233,26 +224,6 @@ export default function Settings() {
             </div>
           </section>
 
-          <section class="grid gap-6 py-6 lg:grid-cols-[14rem_minmax(0,1fr)]">
-            <div>
-              <h2 class="text-lg font-semibold text-white">Smart selectors</h2>
-              <p class="mt-1 text-sm text-gray-400">Local storage for resolved selector state.</p>
-            </div>
-            <div class="grid max-w-2xl gap-3">
-              <label class="field dark-field">
-                <span>Selector store</span>
-                <input
-                  value={settings().smart.selectorStore}
-                  placeholder="Not set locally"
-                  disabled={loading()}
-                  onInput={event => updateSmart({ selectorStore: event.currentTarget.value })}
-                />
-                <span class="text-xs text-gray-400">
-                  Effective: {effectiveSettings().smart.selectorStore}
-                </span>
-              </label>
-            </div>
-          </section>
         </div>
 
         <div class="mt-6 flex justify-end">

@@ -1,20 +1,84 @@
 from __future__ import annotations
 
 import re as re_module
-from typing import TYPE_CHECKING, Any, Iterable
+from typing import Any, Iterable
 from urllib.parse import urljoin
 
 from pydantic import BaseModel, ConfigDict
 from selectolax.lexbor import LexborHTMLParser, LexborNode
 
-from .resolver import aresolve_element, resolve_element
-from .smart import aextract_smart, extract_smart
+from ..selection import validate_selector
+from .resolver import AsyncLlmSelector, LlmSelector
+from .structured import aextract_structured, extract_structured
+from .urls import make_links_absolute
 
-if TYPE_CHECKING:
-    from .resolver import AsyncLlmSmartResolver, LlmSmartResolver
+
+class Selection:
+    """Select nodes, read their values, or explicitly transform content with an LLM."""
+
+    def find_all(
+        self,
+        *,
+        css: str | None = None,
+        llm: str | None = None,
+        selector: LlmSelector | None = None,
+    ) -> list["Element"]:
+        validate_selector(css, llm)
+        if css is not None:
+            if selector is not None:
+                raise ValueError("selector is only valid with llm")
+            return self._css_all(css)
+        return (selector or LlmSelector()).select(llm, self)
+
+    def find(
+        self,
+        *,
+        css: str | None = None,
+        llm: str | None = None,
+        selector: LlmSelector | None = None,
+    ) -> "Element | None":
+        validate_selector(css, llm)
+        if css is not None:
+            if selector is not None:
+                raise ValueError("selector is only valid with llm")
+            return self._css_first(css)
+        matches = self.find_all(llm=llm, selector=selector)
+        return matches[0] if matches else None
+
+    async def afind_all(
+        self,
+        *,
+        css: str | None = None,
+        llm: str | None = None,
+        selector: AsyncLlmSelector | None = None,
+    ) -> list["Element"]:
+        validate_selector(css, llm)
+        if css is not None:
+            return self.find_all(css=css, selector=selector)
+        return await (selector or AsyncLlmSelector()).select(llm, self)
+
+    async def afind(
+        self,
+        *,
+        css: str | None = None,
+        llm: str | None = None,
+        selector: AsyncLlmSelector | None = None,
+    ) -> "Element | None":
+        validate_selector(css, llm)
+        if css is not None:
+            return self.find(css=css, selector=selector)
+        matches = await self.afind_all(llm=llm, selector=selector)
+        return matches[0] if matches else None
+
+    def llm_extract(self, prompt: str, *, schema: Any, **kwargs: Any) -> Any:
+        """Transform content into a validated Python type or JSON Schema value."""
+        return extract_structured(self, prompt, schema=schema, **kwargs)
+
+    async def allm_extract(self, prompt: str, *, schema: Any, **kwargs: Any) -> Any:
+        return await aextract_structured(self, prompt, schema=schema, **kwargs)
 
 
-class Element(BaseModel):
+class Element(Selection, BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     element: LexborNode
@@ -41,17 +105,21 @@ class Element(BaseModel):
         text = self.element.text(separator=separator, strip=strip)
         return " ".join(text.split()) if strip and separator == " " else text
 
-    def css(self, selector: str) -> list["Element"]:
+    def _css_all(self, selector: str) -> list["Element"]:
         return [Element(node, self.base_url) for node in self.element.css(selector)]
 
-    def css_find(self, selector: str) -> "Element | None":
+    def _css_first(self, selector: str) -> "Element | None":
         """Return the first CSS match, or None."""
         node = self.element.css_first(selector)
         return Element(node, self.base_url) if node is not None else None
 
+    def iter_elements(self) -> Iterable["Element"]:
+        for node in self.element.traverse():
+            yield Element(node, self.base_url)
+
     def links(self, attr: str = "href") -> list[str]:
         urls: list[str] = []
-        for node in self.css(f"[{attr}]"):
+        for node in self.find_all(css=f"[{attr}]"):
             value = node.attr(attr)
             if value:
                 urls.append(urljoin(self.base_url or "", value))
@@ -70,7 +138,7 @@ class Element(BaseModel):
         return matches[0] if matches else default
 
 
-class Document:
+class Document(Selection):
     def __init__(self, content: str | bytes, url: str | None = None):
         self._raw = content
         self.url = url
@@ -85,36 +153,13 @@ class Document:
     def _get_tree(self) -> LexborHTMLParser:
         if self._tree is None:
             self._tree = LexborHTMLParser(self.text)
-            base = self._tree.css_first("base[href]")
-            link_base = self.url or ""
-            if base is not None:
-                link_base = urljoin(link_base, base.attributes.get("href") or "")
-            if link_base:
-                for node in self._tree.root.traverse():
-                    for attr, value in node.attributes.items():
-                        if value and attr in {
-                            "href",
-                            "src",
-                            "action",
-                            "formaction",
-                            "poster",
-                            "cite",
-                            "background",
-                            "data",
-                            "longdesc",
-                        }:
-                            if attr == "data" and node.tag != "object":
-                                continue
-                            if node.tag == "base" and attr == "href":
-                                node.attrs[attr] = urljoin(self.url or "", value)
-                                continue
-                            node.attrs[attr] = urljoin(link_base, value)
+            make_links_absolute(self._tree, self.url)
         return self._tree
 
-    def css(self, selector: str) -> list[Element]:
+    def _css_all(self, selector: str) -> list[Element]:
         return [Element(node, self.url) for node in self._get_tree().css(selector)]
 
-    def css_find(self, selector: str) -> Element | None:
+    def _css_first(self, selector: str) -> Element | None:
         """Return the first CSS match, or None, without using an LLM."""
         node = self._get_tree().css_first(selector)
         return Element(node, self.url) if node is not None else None
@@ -125,7 +170,7 @@ class Document:
 
     def links(self, selector: str = "a[href]", attr: str = "href") -> list[str]:
         links: list[str] = []
-        for element in self.css(selector):
+        for element in self.find_all(css=selector):
             value = element.attr(attr)
             if value:
                 links.append(urljoin(self.url or "", value))
@@ -146,49 +191,3 @@ class Document:
     def iter_elements(self) -> Iterable[Element]:
         for node in self._get_tree().root.traverse():
             yield Element(node, self.url)
-
-    def llm_extract(self, prompt: str, **kwargs: Any) -> list[Any]:
-        """Extract all matching values through an LLM."""
-        return extract_smart(self, prompt, first=False, **kwargs)
-
-    def llm_extract_first(self, prompt: str, **kwargs: Any) -> Any:
-        """Extract the first matching value through an LLM."""
-        return extract_smart(self, prompt, first=True, **kwargs)
-
-    def llm_extract_many(
-        self, prompts: list[str], **kwargs: Any
-    ) -> dict[str, list[Any]]:
-        """Run prompts sequentially and map each prompt to its extracted values."""
-        return {prompt: self.llm_extract(prompt, **kwargs) for prompt in prompts}
-
-    def llm_find(
-        self,
-        prompt: str,
-        *,
-        resolver: LlmSmartResolver | None = None,
-    ) -> Element:
-        """Use an LLM resolver to find one element, or raise SmartSelectorError."""
-        return resolve_element(
-            self,
-            prompt,
-            resolver=resolver,
-        )
-
-    async def allm_extract(self, prompt: str, **kwargs: Any) -> list[Any]:
-        return await aextract_smart(self, prompt, first=False, **kwargs)
-
-    async def allm_extract_first(self, prompt: str, **kwargs: Any) -> Any:
-        return await aextract_smart(self, prompt, first=True, **kwargs)
-
-    async def allm_extract_many(
-        self, prompts: list[str], **kwargs: Any
-    ) -> dict[str, list[Any]]:
-        return {prompt: await self.allm_extract(prompt, **kwargs) for prompt in prompts}
-
-    async def allm_find(
-        self,
-        prompt: str,
-        *,
-        resolver: AsyncLlmSmartResolver | None = None,
-    ) -> Element:
-        return await aresolve_element(self, prompt, resolver=resolver)

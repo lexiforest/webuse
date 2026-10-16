@@ -35,6 +35,8 @@ class AgenticSpider(AsyncSpider):
         limits = state.settings.limits
         if state.settings.follow or state.settings.extract:
             raise SpiderError("AgenticSpider uses a goal, not follow/extract rules")
+        if state.settings.pages is not None and state.settings.pages.patterns:
+            raise SpiderError("AgenticSpider uses a goal, not URL page_type routing")
         if not state.settings.dedupe:
             raise SpiderError("AgenticSpider requires dedupe=True")
         if state.settings.max_requests is not None:

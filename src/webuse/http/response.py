@@ -39,7 +39,7 @@ class Response(CurlResponse, Document):
         *,
         method: str = "GET",
         options: RequestOptions | None = None,
-        category: str | None = None,
+        page_type: str | None = None,
         meta: dict[str, Any] | None = None,
         **request_options: Any,
     ) -> CrawlRequest:
@@ -62,6 +62,6 @@ class Response(CurlResponse, Document):
             url=urljoin(self.url, url),
             method=method,
             options=merged_options,
-            category=category,
+            page_type=page_type,
             meta=meta or {},
         )

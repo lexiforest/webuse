@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { nextCronTime, validCron } from "../src/lib/server/cron";
-import { ensureOrchestrator, stopOrchestrator } from "../src/lib/server/orchestrator";
+import { ensureOrchestrator } from "../src/lib/server/orchestrator";
 import { store } from "../src/lib/server/store";
 import { sqlite, transaction } from "../src/lib/server/db";
 
@@ -40,15 +41,37 @@ while (current?.status === "queued" || current?.status === "running") {
 }
 
 assert.equal(current?.status, "failed");
-assert.match(current?.command ?? "", /crawl .*[/\\]project -o /);
+assert.ok(current?.command.includes(`crawl ${project.workspacePath} -o `));
 assert.doesNotMatch(current?.command ?? "", /crawl .*webuse\.(yaml|yml|toml)/);
 assert.match(store.listLogs(run!.id)[0].message as string, /webuse\.cli/);
 if (process.platform !== "win32") {
   const directory = process.env.WEBUSE_WORK_DIR!;
   await mkdir(directory, { recursive: true });
+  const liveRunner = join(directory, "live-runner");
+  await writeFile(liveRunner, `#!${process.execPath}
+const fs = require('node:fs');
+const value = fs.readFileSync('live.txt', 'utf8');
+fs.writeFileSync(process.argv[process.argv.indexOf('-o') + 1], JSON.stringify({ value }) + '\\n');
+fs.writeFileSync('runtime.txt', 'written in workspace');
+`, { mode: 0o755 });
+  const originalPython = process.env.WEBUSE_PYTHON_COMMAND;
+  process.env.WEBUSE_PYTHON_COMMAND = liveRunner;
+  try {
+    const live = store.createJob(project.id)!;
+    writeFileSync(join(project.workspacePath, "live.txt"), "edited after enqueue");
+    ensureOrchestrator();
+    const timeout = Date.now() + 5000;
+    while (["queued", "running"].includes(store.getJob(live.id)!.status)) {
+      assert.ok(Date.now() < timeout, "Live-source run did not finish");
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    assert.equal(store.getJob(live.id)!.status, "succeeded");
+    assert.deepEqual(store.listDataItems(live.id)[0].item, { value: "edited after enqueue" });
+    assert.equal(readFileSync(join(project.workspacePath, "runtime.txt"), "utf8"), "written in workspace");
+    assert.equal(existsSync(join(directory, String(live.id), "project")), false);
+  } finally { process.env.WEBUSE_PYTHON_COMMAND = originalPython; }
   const executable = join(directory, "graceful-runner");
   await writeFile(executable, `#!${process.execPath}\nprocess.on('SIGTERM', () => process.exit(0));\nconsole.log('ready');\nsetInterval(() => {}, 1000);\n`, { mode: 0o755 });
-  const originalPython = process.env.WEBUSE_PYTHON_COMMAND;
   process.env.WEBUSE_PYTHON_COMMAND = executable;
   const graceful = store.createJob(project.id)!;
   ensureOrchestrator();
@@ -71,4 +94,3 @@ if (process.platform !== "win32") {
     assert.equal(store.getJob(graceful.id)?.status, "cancelled", "A graceful exit after Stop must not count as success");
   } finally { process.env.WEBUSE_PYTHON_COMMAND = originalPython; }
 }
-stopOrchestrator();

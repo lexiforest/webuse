@@ -3,7 +3,6 @@ import { assistantRunning, cancelAssistant, runAssistant, type AssistantEvent } 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createWebuseTools, skillPath } from "../src/lib/server/assistant-tools";
-import { versionDirectory } from "../src/lib/server/workspace";
 import { stopOrchestrator } from "../src/lib/server/orchestrator";
 import { store } from "../src/lib/server/store";
 
@@ -61,8 +60,6 @@ try {
   assert.equal(first.files.find(file => file.path === "crawler.py")?.content, "print('after')\n");
   assert.equal(readFileSync(join(project.workspacePath, "generated.txt"), "utf8"), "native shell");
   assert.equal(readFileSync(join(project.workspacePath, "crawler.py"), "utf8"), "print('after')\n");
-  assert.equal(store.getProject(project.id)!.savedVersion, project.savedVersion, "Agent edits must not publish the project");
-  assert.equal(readFileSync(join(versionDirectory(project.id, project.savedVersion!), "crawler.py"), "utf8"), "print('before')\n");
   assert.ok(events.some(event => event.type === "text"));
   assert.equal(events.filter(event => event.type === "tool").length, 6);
   assert.ok(store.getAssistantState(session.id).length > 3);
@@ -97,8 +94,7 @@ try {
   const sampleValue = JSON.parse((sample.content[0] as { text: string }).text);
   assert.equal(sampleValue.status, "failed");
   assert.match(store.getJob(sampleValue.id)?.command ?? "", /--max-requests 2/);
-  assert.equal(store.getProject(project.id)!.savedVersion, project.savedVersion);
-  assert.notEqual(sampleValue.sourceVersion, project.savedVersion);
+  assert.equal(sampleValue.workspacePath, project.workspacePath);
   const expired = store.createJob(project.id, { assistantSample: { maxRequests: 1, deadline: Date.now() - 1 } })!;
   const expiredTools = createWebuseTools(project.id, project.workspacePath);
   // Running another sample also wakes the queue containing the expired job.
@@ -120,5 +116,5 @@ try {
     setTimeout(() => abort.abort(), 50);
     await assert.rejects(pending, /stopped|failed/);
   } finally { process.env.WEBUSE_PYTHON_COMMAND = python; }
-  console.log("Pi assistant passed: native file/shell tools, persistent Python files, version isolation, streaming, cancellation, errors, and workspace locks.");
-} finally { globalThis.fetch = originalFetch; stopOrchestrator(); }
+  console.log("Pi assistant passed: native file/shell tools, persistent Python files, live workspace execution, streaming, cancellation, errors, and workspace locks.");
+} finally { globalThis.fetch = originalFetch; await stopOrchestrator(); }

@@ -13,7 +13,7 @@ from webuse import (
     acrawl,
     crawl,
 )
-from webuse.extract import extract_handles_category, extract_items
+from webuse.extract import extract_handles_page_type, extract_items
 from webuse.extract.schema import compile_extraction
 from webuse.spider.config import SpiderConfig
 
@@ -34,7 +34,7 @@ def test_named_items_select_scopes_and_preserve_metadata():
                     "type": "product",
                     "item_model": Product,
                     "item_css": "article",
-                    "fields": {"title": "a", "url": {"css_find": "a", "attr": "href"}},
+                    "fields": {"title": "a", "url": {"css": "a", "attr": "href"}},
                 },
                 "page": {
                     "fields": {
@@ -71,7 +71,7 @@ def test_named_items_select_scopes_and_preserve_metadata():
 
 
 @pytest.mark.parametrize(
-    "category,item_type",
+    "page_type,item_type",
     [
         (None, "page"),
         ("detail", "product"),
@@ -79,7 +79,7 @@ def test_named_items_select_scopes_and_preserve_metadata():
         ("empty", None),
     ],
 )
-def test_category_selection_and_wildcard(category, item_type):
+def test_page_type_selection_and_wildcard(page_type, item_type):
     rules = compile_extraction(
         {
             "default": {"page": {"fields": {"title": "h1"}}},
@@ -89,24 +89,24 @@ def test_category_selection_and_wildcard(category, item_type):
         }
     )
     response = Response(content=b"<h1>Title</h1>")
-    response.crawl_request = CrawlRequest(url="https://example.com", category=category)
-    assert extract_handles_category(rules, category)
+    response.crawl_request = CrawlRequest(url="https://example.com", page_type=page_type)
+    assert extract_handles_page_type(rules, page_type)
     assert extract_items(response, rules) == (
         [{"title": "Title", "_type": item_type}] if item_type else []
     )
 
 
-def test_unknown_category_without_fallback_produces_no_items():
+def test_unknown_page_type_without_fallback_produces_no_items():
     rules = compile_extraction({"default": {"page": {"fields": {"title": "h1"}}}})
     response = Response(content=b"<h1>Title</h1>")
-    response.crawl_request = CrawlRequest(url="https://example.com", category="other")
-    assert not extract_handles_category(rules, "other")
+    response.crawl_request = CrawlRequest(url="https://example.com", page_type="other")
+    assert not extract_handles_page_type(rules, "other")
     assert extract_items(response, rules) == []
 
 
-def test_category_and_item_names_are_not_inferred_from_reserved_words():
+def test_page_type_and_item_names_are_not_inferred_from_reserved_words():
     response = Response(content=b"<h1>Title</h1>")
-    response.crawl_request = CrawlRequest(url="https://example.com", category="fields")
+    response.crawl_request = CrawlRequest(url="https://example.com", page_type="fields")
     rules = {"fields": {"css": {"fields": {"item_css": "h1"}}}}
     assert extract_items(response, rules) == [{"item_css": "Title", "_type": "css"}]
 
@@ -117,23 +117,23 @@ def test_category_and_item_names_are_not_inferred_from_reserved_words():
         {"item_css": "article"},
         {"fields": []},
         {"fields": {"title": {}}},
-        {"fields": {"title": {"css": "h1", "llm_find": "heading"}}},
+        {"fields": {"title": {"css": "h1", "llm": "heading"}}},
         {"fields": {"title": {"css": "h1", "unknown": True}}},
         {"fields": {"title": {"css": "h1", "all": "yes"}}},
-        {"fields": {"title": {"llm_find": "heading", "all": True}}},
+        {"fields": {"title": {"llm": "heading", "all": "yes"}}},
         {"fields": {"title": {"llm_extract": "heading", "attr": "href"}}},
         {"fields": {"title": {"css": None}}},
         {"fields": {"title": ""}},
         {"fields": {"title": "h1"}, "unknown": True},
     ],
 )
-def test_invalid_rule_reports_its_category_and_item(spec):
+def test_invalid_rule_reports_its_page_type_and_item(spec):
     with pytest.raises(ConfigError, match=r"detail\.product"):
         compile_extraction({"detail": {"product": spec}})
 
 
 @pytest.mark.parametrize("mode", ["sync", "async", "spider", "async_spider", "yaml"])
-def test_invalid_unused_category_fails_before_downloading_or_opening_pipelines(mode):
+def test_invalid_unused_page_type_fails_before_downloading_or_opening_pipelines(mode):
     class UnusedClient:
         def request(self, *args, **kwargs):
             pytest.fail("invalid configuration must fail before downloading")
@@ -147,7 +147,7 @@ def test_invalid_unused_category_fails_before_downloading_or_opening_pipelines(m
         "unvisited": {"product": {"item_css": "article"}},
     }
     options = {"client": UnusedClient()}
-    with pytest.raises(ConfigError, match=r"unvisited\.product\.fields"):
+    with pytest.raises(ConfigError, match=r"unvisited\.product"):
         if mode == "sync":
             crawl("https://example.com", extract=rules, **options)
         elif mode == "async":
@@ -162,8 +162,8 @@ def test_invalid_unused_category_fails_before_downloading_or_opening_pipelines(m
             if mode == "yaml":
                 spider.spider_config = SpiderConfig(
                     pages={
-                        category: {"extract": items}
-                        for category, items in rules.items()
+                        page_type: {"extract": items}
+                        for page_type, items in rules.items()
                     }
                 )
             if mode == "async_spider":

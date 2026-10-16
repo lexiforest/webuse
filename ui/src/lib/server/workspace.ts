@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { databasePath } from "./db";
@@ -21,10 +21,6 @@ export function lockWorkspace(id: number) {
   return () => locks.delete(id);
 }
 export function projectDirectory(id: number) { return join(workspaceRoot, String(id), "working"); }
-export function versionDirectory(id: number, version: string) {
-  if (!/^[a-f0-9]{64}$/.test(version)) throw new Error("Invalid source version.");
-  return join(workspaceRoot, String(id), "versions", version);
-}
 export function includedPath(path: string) {
   return !path.split("/").some(part => omittedNames.has(part) || part === ".env" || (part.startsWith(".env.") && part !== ".env.example"))
     && path !== ".webuse/selectors.json";
@@ -62,7 +58,7 @@ function entries(root: string): Entry[] {
       if (stat.isDirectory()) { visit(path); continue; }
       if (!stat.isFile()) throw new Error(`Unsupported project file: ${path}`);
       bytes += stat.size;
-      if (bytes > 100_000_000 || result.length >= 10_000) throw new Error("Workspace snapshots support up to 100 MB and 10,000 files, excluding environments, caches, and .git.");
+      if (bytes > 100_000_000 || result.length >= 10_000) throw new Error("Workspace editor supports up to 100 MB and 10,000 files, excluding environments, caches, and .git.");
       result.push({ path, hash: hash(readFileSync(full)), mode: stat.mode & 0o777, size: stat.size });
     }
   }
@@ -134,79 +130,6 @@ export function initializeWorkspace(id: number, files: ProjectFile[]) {
   try { writeWorkspace(root, files, readWorkspace(root).revision); }
   catch (error) { rmSync(root, { recursive: true, force: true }); throw error; }
   return root;
-}
-function copyEntries(source: string, target: string, manifest: Entry[]) {
-  mkdirSync(target, { recursive: true });
-  for (const entry of manifest) {
-    const destination = safePath(target, entry.path);
-    mkdirSync(dirname(destination), { recursive: true });
-    copyFileSync(safePath(source, entry.path), destination);
-    chmodSync(destination, entry.mode);
-  }
-}
-export function captureVersion(id: number, root: string, expected?: string) {
-  const manifest = entries(root);
-  const version = revisionOf(manifest);
-  if (expected !== undefined && version !== expected) throw new WorkspaceConflict("Workspace changed before publishing. Reload and review the files.");
-  const destination = versionDirectory(id, version);
-  if (existsSync(destination)) {
-    if (revisionOf(entries(destination)) !== version) throw new Error("Saved source version was modified on disk.");
-    return version;
-  }
-  const temporary = `${destination}.${randomUUID()}`;
-  try {
-    copyEntries(root, temporary, manifest);
-    if (revisionOf(entries(temporary)) !== version || revisionOf(entries(root)) !== version) throw new WorkspaceConflict("Workspace changed while capturing a version. Try again after editing finishes.");
-    renameSync(temporary, destination);
-  } finally { rmSync(temporary, { recursive: true, force: true }); }
-  return version;
-}
-export function materializeVersion(id: number, version: string, target: string) {
-  const source = versionDirectory(id, version);
-  const manifest = entries(source);
-  if (revisionOf(manifest) !== version) throw new Error("Saved source version was modified on disk.");
-  copyEntries(source, target, manifest);
-  if (revisionOf(entries(target)) !== version) throw new Error("Source version changed during copy.");
-}
-export function workspaceChanges(id: number, root: string, version: string | null) {
-  const current = entries(root);
-  const savedRoot = version ? versionDirectory(id, version) : undefined;
-  const saved = savedRoot ? entries(savedRoot) : [];
-  const before = new Map(saved.map(entry => [entry.path, entry]));
-  const after = new Map(current.map(entry => [entry.path, entry]));
-  return [...new Set([...before.keys(), ...after.keys()])].sort().flatMap(path => {
-    const left = before.get(path), right = after.get(path);
-    if (left?.hash === right?.hash && left?.mode === right?.mode) return [];
-    return [{ path, status: !left ? "added" : !right ? "deleted" : "modified" }];
-  });
-}
-export function restoreVersion(id: number, root: string, version: string, expected: string) {
-  checkRevision(root, expected);
-  const source = versionDirectory(id, version);
-  const saved = entries(source);
-  if (revisionOf(saved) !== version) throw new Error("Saved source version was modified on disk.");
-  const current = entries(root);
-  // Check directory collisions before deleting any working files. A directory
-  // may contain excluded secrets or an environment that revert must preserve.
-  for (const entry of saved) {
-    const target = join(root, entry.path);
-    if (existsSync(target) && lstatSync(target).isDirectory()) throw new Error(`Cannot restore file over directory: ${entry.path}. Move the directory first.`);
-  }
-  // Excluded environments, secrets, .git and caches remain untouched.
-  for (const entry of current) rmSync(safePath(root, entry.path));
-  function removeEmpty(directory: string, relative = "") {
-    for (const name of readdirSync(directory)) {
-      const path = relative ? `${relative}/${name}` : name;
-      if (!includedPath(path)) continue;
-      const child = join(directory, name);
-      if (lstatSync(child).isDirectory() && !lstatSync(child).isSymbolicLink()) removeEmpty(child, path);
-    }
-    if (directory !== root && !readdirSync(directory).length) rmSync(directory, { recursive: true });
-  }
-  removeEmpty(root);
-  for (const entry of saved) safePath(root, entry.path);
-  copyEntries(source, root, saved);
-  return readWorkspace(root);
 }
 export async function cloneWorkspace(id: number, url: string) {
   const release = lockWorkspace(id);

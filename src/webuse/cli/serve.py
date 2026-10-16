@@ -31,7 +31,7 @@ def _bundle_entrypoint() -> Path:
 def _node_command() -> str:
     command = shutil.which("node")
     if not command:
-        raise SystemExit("webuse ui requires Node.js 22.19+ on PATH. npm is not required to run the packaged UI.")
+        raise SystemExit("webuse serve requires Node.js 22.19+ on PATH. npm is not required to run the packaged UI.")
     try:
         result = subprocess.run(
             [command, "--version"], capture_output=True, text=True, check=True
@@ -40,7 +40,7 @@ def _node_command() -> str:
         raise SystemExit(f"Could not run Node.js: {error}") from error
     version = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", result.stdout.strip())
     if version is None or tuple(map(int, version.groups())) < (22, 19, 0):
-        raise SystemExit(f"webuse ui requires Node.js 22.19+; found {result.stdout.strip()!r}.")
+        raise SystemExit(f"webuse serve requires Node.js 22.19+; found {result.stdout.strip()!r}.")
     return command
 
 
@@ -83,14 +83,14 @@ def _wait_ready(process: subprocess.Popen, host: str, port: int) -> None:
     raise SystemExit("The UI server did not start within 30 seconds. See the server output above.")
 
 
-def _stop(process: subprocess.Popen) -> None:
+def _stop(process: subprocess.Popen, signum: int = signal.SIGTERM) -> None:
     if process.poll() is not None:
         return
-    # The server and crawler children share a separate process group on POSIX.
-    # Stop that group so a forced shutdown cannot leave crawlers running.
+    # Node forwards the signal to its separately grouped crawler workers and
+    # awaits their cleanup. This group contains the server, not those workers.
     try:
         if os.name == "posix":
-            os.killpg(process.pid, signal.SIGTERM)
+            os.killpg(process.pid, signum)
         else:
             process.terminate()
         process.wait(timeout=5)
@@ -104,7 +104,7 @@ def _stop(process: subprocess.Popen) -> None:
         process.wait()
 
 
-def ui_command(args: argparse.Namespace) -> int:
+def serve_command(args: argparse.Namespace) -> int:
     entrypoint = _bundle_entrypoint()
     node = _node_command()
     host = args.host
@@ -129,7 +129,11 @@ def ui_command(args: argparse.Namespace) -> int:
     except OSError as error:
         raise SystemExit(f"Could not start the UI server: {error}") from error
 
+    stop_signal = signal.SIGTERM
+
     def terminate(signum, _frame):
+        nonlocal stop_signal
+        stop_signal = signum
         raise SystemExit(128 + signum)
 
     previous_term = signal.signal(signal.SIGTERM, terminate)
@@ -143,16 +147,18 @@ def ui_command(args: argparse.Namespace) -> int:
                 print(f"Could not open a browser. Open {url} manually.", file=sys.stderr)
         return process.wait()
     except KeyboardInterrupt:
+        stop_signal = signal.SIGINT
         return 0
     finally:
         try:
-            _stop(process)
+            _stop(process, stop_signal)
         finally:
             signal.signal(signal.SIGTERM, previous_term)
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
-    parser = subparsers.add_parser("ui", help="Start the bundled UI and open it in a browser")
+    description = "Start the local service: UI, Chat, scheduler, and crawler process management"
+    parser = subparsers.add_parser("serve", help=description, description=description)
     parser.add_argument("--host", default="127.0.0.1", help="Bind address (default: 127.0.0.1)")
     parser.add_argument("--port", type=_port, default=DEFAULT_PORT, help="Listen port (default: 2951)")
     parser.add_argument("--no-open", action="store_true", help="Do not open a browser")
@@ -160,4 +166,4 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--data-dir", default=os.environ.get("WEBUSE_UI_DATA_DIR") or str(Path.home() / ".webuse" / "ui"),
         help="Writable data directory (default: ~/.webuse/ui, or WEBUSE_UI_DATA_DIR)",
     )
-    parser.set_defaults(func=ui_command)
+    parser.set_defaults(func=serve_command)

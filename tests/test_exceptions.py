@@ -1,7 +1,7 @@
 import pytest
 
 import webuse
-from webuse.spider.config import follow_rule_from_config
+from webuse.engine.pages import follow_rule_from_config
 from webuse.config import load_config_file
 from webuse.pipelines import JsonlPipeline, create_pipeline
 from webuse.spider import Spider

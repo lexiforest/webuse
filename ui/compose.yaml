@@ -3,7 +3,8 @@ services:
     build:
       context: ..
       dockerfile: ui/Dockerfile
-    command: npm run start
+    init: true
+    stop_grace_period: 15s
     working_dir: /app/ui
     ports:
       - "2951:2951"

@@ -64,7 +64,7 @@ class ${className}(webuse.Spider):
     start_urls = ["${startUrl}"]
 
     def parse(self, response):
-        title = response.css_find("title")
+        title = response.find(css="title")
         yield {
             "url": response.url,
             "title": title.text.strip() if title else "",
@@ -169,7 +169,7 @@ export default function CreateProject() {
                 onInput={event => setGitUrl(event.currentTarget.value)}
               />
               <span class="text-xs text-gray-400">
-                Clone into an editable local workspace. Runs use a published version; future remote changes are not pulled automatically.
+                Clone into an editable local workspace. Runs use the current files on disk; remote changes are not pulled automatically.
               </span>
             </label>
             <Button

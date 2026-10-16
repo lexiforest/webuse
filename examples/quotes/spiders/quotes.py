@@ -10,12 +10,12 @@ class QuotesSpider(webuse.Spider):
     ]
 
     def parse(self, response):
-        for quote in response.css("div.quote"):
+        for quote in response.find_all(css="div.quote"):
             yield {
-                "author": quote.css_find("small.author").text(),
-                "text": quote.css_find("span.text").text(),
+                "author": quote.find(css="small.author").text(),
+                "text": quote.find(css="span.text").text(),
             }
 
-        next_page = response.css_find("li.next a")
+        next_page = response.find(css="li.next a")
         if next_page is not None:
             yield response.follow(next_page.attr("href"))

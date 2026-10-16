@@ -43,7 +43,7 @@ class PageTitleMixin:
     max_depth = 0
 
     def parse(self, response: webuse.Response):
-        title = response.css_find("title")
+        title = response.find(css="title")
         yield PageItem(
             url=response.url,
             title=title.text().strip() if title is not None else "",

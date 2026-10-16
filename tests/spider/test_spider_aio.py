@@ -30,8 +30,8 @@ def test_async_spider_run_is_async_entrypoint():
     ]
 
 
-def test_async_spider_config_extracts_by_request_category(tmp_path):
-    config = tmp_path / "categories.yaml"
+def test_async_spider_config_extracts_by_request_page_type(tmp_path):
+    config = tmp_path / "page_types.yaml"
     config.write_text(
         """
 start_urls:
@@ -41,7 +41,7 @@ pages:
   default:
     follow:
       - css: a.detail
-        category: detail
+        page_type: detail
     extract:
       listing:
         fields:
@@ -65,7 +65,7 @@ pages:
         "https://example.com/detail": b"<html><body><h1>Detail</h1></body></html>",
     }
 
-    class CategoryClient:
+    class PageTypeClient:
         async def request(self, method, url, **kwargs):
             _ = (method, kwargs)
             return Response(url=url, status_code=200, content=pages[url])
@@ -74,7 +74,7 @@ pages:
         spider_config_path = config
 
     async def run_spider():
-        return await ConfigSpider().run(client=CategoryClient())
+        return await ConfigSpider().run(client=PageTypeClient())
 
     result = asyncio.run(run_spider())
 
@@ -84,8 +84,8 @@ pages:
     ]
 
 
-def test_async_spider_config_follow_rule_can_be_limited_to_source_category(tmp_path):
-    config = tmp_path / "source-category.yaml"
+def test_async_spider_config_follow_rule_can_be_limited_to_source_page_type(tmp_path):
+    config = tmp_path / "source-page_type.yaml"
     config.write_text(
         """
 start_urls:
@@ -95,7 +95,7 @@ pages:
   default:
     follow:
       - css: a.detail
-        category: detail
+        page_type: detail
     extract:
       listing:
         fields:
@@ -125,7 +125,7 @@ pages:
         "https://example.com/detail-2": b"<html><body><h1>Detail Two</h1></body></html>",
     }
 
-    class CategoryClient:
+    class PageTypeClient:
         async def request(self, method, url, **kwargs):
             _ = (method, kwargs)
             return Response(url=url, status_code=200, content=pages[url])
@@ -134,7 +134,7 @@ pages:
         spider_config_path = config
 
     async def run_spider():
-        return await ConfigSpider().run(client=CategoryClient())
+        return await ConfigSpider().run(client=PageTypeClient())
 
     result = asyncio.run(run_spider())
 
@@ -151,7 +151,7 @@ def test_async_spider_parse_can_yield_items_and_follow_requests():
         max_depth = 1
 
         async def parse(self, response):
-            yield {"title": response.css_find("h1").text()}
+            yield {"title": response.find(css="h1").text()}
             if response.url == "https://example.com/":
                 yield response.follow("/page-1")
 
@@ -163,17 +163,17 @@ def test_async_spider_parse_can_yield_items_and_follow_requests():
     assert result.items == [{"title": "Home"}, {"title": "Page One"}]
 
 
-def test_async_spider_routes_follow_request_by_category():
+def test_async_spider_routes_follow_request_by_page_type():
     class ExampleSpider(AsyncSpider):
         start_urls = ["https://example.com"]
         max_depth = 1
         routes = {"detail": "parse_detail"}
 
         async def parse(self, response):
-            yield response.follow("/page-1", category="detail")
+            yield response.follow("/page-1", page_type="detail")
 
         async def parse_detail(self, response):
-            yield {"detail": response.css_find("h1").text()}
+            yield {"detail": response.find(css="h1").text()}
 
     async def run_spider():
         return await ExampleSpider().run(client=AsyncFakeClient())

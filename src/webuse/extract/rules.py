@@ -6,16 +6,19 @@ import inspect
 from collections.abc import AsyncIterable, AsyncIterator, Iterable
 from contextlib import aclosing
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from pydantic import BaseModel
 
-from ..exceptions import ConfigError
+from ..exceptions import ConfigError, ExtractionError
 from ..models import CrawlRequest
-from .schema import ExtractionRules, FieldRule, ItemSpec, compile_extraction
-
-if TYPE_CHECKING:
-    from .parser import Document
+from .schema import (
+    ExtractionRules,
+    FieldRule,
+    ItemSpec,
+    StructuredValue,
+    compile_extraction,
+)
 
 
 def element_value(element: Any, attr: str | None) -> Any:
@@ -24,76 +27,59 @@ def element_value(element: Any, attr: str | None) -> Any:
     return element.text()
 
 
-def extract_by_css(scope: Any, rule: FieldRule) -> Any:
-    selector = rule.css
-    attr = rule.attr
-    if selector in {".", "&"}:
-        if rule.all:
-            return [element_value(scope, attr)]
-        return element_value(scope, attr)
-    if rule.all:
-        matches = scope.css(selector)
-        return [element_value(match, attr) for match in matches]
-    match = scope.css_find(selector)
-    return element_value(match, attr) if match else None
+def selected_value(rule, matches):
+    values = [element_value(match, rule.attr) for match in matches]
+    if rule.required and (not values or any(value is None for value in values)):
+        raise ExtractionError(f"Required field has no value: {rule.css or rule.llm}")
+    return values if rule.all else values[0] if values else None
 
 
-def convert_to_document(scope: Any) -> Document:
-    from .parser import Document, Element
-
-    if isinstance(scope, Element):
-        return Document(scope.html(), url=scope.base_url)
-    return scope
+def extract_field(scope, rule: FieldRule):
+    if isinstance(rule, StructuredValue):
+        return scope.llm_extract(rule.llm_extract, schema=rule._output)
+    return selected_value(rule, rule.select(scope))
 
 
-def extract_by_llm_find(scope: Any, rule: FieldRule) -> Any:
-    match = convert_to_document(scope).llm_find(rule.llm_find)
-    return element_value(match, rule.attr)
+async def aextract_field(scope, rule: FieldRule):
+    if isinstance(rule, StructuredValue):
+        return await scope.allm_extract(rule.llm_extract, schema=rule._output)
+    return selected_value(rule, await rule.aselect(scope))
 
 
-def extract_by_css_find(scope: Any, rule: FieldRule) -> Any:
-    match = scope.css_find(rule.css_find)
-    return element_value(match, rule.attr) if match is not None else None
+def select_scopes(response: Any, spec: ItemSpec) -> list[Any]:
+    return response.find_all(css=spec.item_css) if spec.item_css else [response]
 
 
-def extract_by_llm_extract(scope: Any, rule: FieldRule) -> Any:
-    document = convert_to_document(scope)
-    extractor = document.llm_extract if rule.all else document.llm_extract_first
-    return extractor(rule.llm_extract)
-
-
-def extract_item(scope: Any, fields: dict[str, FieldRule]) -> dict[str, Any]:
-    item: dict[str, Any] = {}
-    for key, rule in fields.items():
-        if rule.css is not None:
-            item[key] = extract_by_css(scope, rule)
-        elif rule.css_find is not None:
-            item[key] = extract_by_css_find(scope, rule)
-        elif rule.llm_extract is not None:
-            item[key] = extract_by_llm_extract(scope, rule)
-        else:
-            item[key] = extract_by_llm_find(scope, rule)
-    return item
-
-
-def select_scopes(response: Any, extract: ItemSpec) -> list[Any]:
-    item_css = extract.item_css
-    if item_css:
-        return response.css(item_css)
-    return [response]
+def record_items(value, name, spec):
+    values = value if isinstance(value, list) else [value]
+    items = []
+    for item in values:
+        if isinstance(item, BaseModel):
+            item = item.model_dump()
+        if not isinstance(item, dict):
+            raise ExtractionError(
+                "Record extraction must return an object or an array of objects"
+            )
+        item = dict(item)
+        item.setdefault("_type", spec.type or name)
+        if spec.item_model is not None:
+            item.setdefault("_item_model", spec.item_model)
+        items.append(item)
+    return items
 
 
 def extract_spec_items(response: Any, name: str, spec: ItemSpec) -> list[Any]:
-    fields = spec.fields
-    if not fields:
-        return []
-    items = [extract_item(scope, fields) for scope in select_scopes(response, spec)]
-    item_type = spec.type or name
-    item_model = spec.item_model
-    for item in items:
-        item.setdefault("_type", item_type)
-        if item_model is not None:
-            item.setdefault("_item_model", item_model)
+    items = []
+    for scope in select_scopes(response, spec):
+        if spec.llm_extract is not None:
+            value = scope.llm_extract(spec.llm_extract, schema=spec._output)
+        elif spec.fields:
+            value = {
+                key: extract_field(scope, rule) for key, rule in spec.fields.items()
+            }
+        else:
+            continue
+        items.extend(record_items(value, name, spec))
     return items
 
 
@@ -101,9 +87,9 @@ def extract_specs_for_response(
     response: Any, extract: ExtractionRules
 ) -> list[tuple[str, ItemSpec]]:
     request = getattr(response, "crawl_request", None)
-    category = getattr(request, "category", None)
-    category_key = str(category) if category else "default"
-    selected = extract.root.get(category_key)
+    page_type = getattr(request, "page_type", None)
+    page_type_key = str(page_type) if page_type else "default"
+    selected = extract.root.get(page_type_key)
     if selected is None:
         selected = extract.root.get("*")
     if selected is None:
@@ -112,11 +98,11 @@ def extract_specs_for_response(
     return list(selected.items())
 
 
-def extract_handles_category(extract: Any, category: str | None) -> bool:
+def extract_handles_page_type(extract: Any, page_type: str | None) -> bool:
     if not isinstance(extract, ExtractionRules):
         return False
-    category_key = str(category) if category else "default"
-    return category_key in extract.root or "*" in extract.root
+    page_type_key = str(page_type) if page_type else "default"
+    return page_type_key in extract.root or "*" in extract.root
 
 
 def extract_items(response: Any, extract: Any) -> list[Any]:
@@ -193,30 +179,18 @@ async def aextract_items(response: Any, extract: Any) -> AsyncIterator[Any]:
     if not isinstance(extract, ExtractionRules):
         raise ConfigError("aextract_items requires declarative extraction rules")
     for name, spec in extract_specs_for_response(response, extract):
-        if not spec.fields:
-            continue
         for scope in select_scopes(response, spec):
-            item = {}
-            for key, rule in spec.fields.items():
-                if rule.css is not None:
-                    item[key] = extract_by_css(scope, rule)
-                elif rule.css_find is not None:
-                    item[key] = extract_by_css_find(scope, rule)
-                elif rule.llm_extract is not None:
-                    document = convert_to_document(scope)
-                    extractor = (
-                        document.allm_extract
-                        if rule.all
-                        else document.allm_extract_first
-                    )
-                    item[key] = await extractor(rule.llm_extract)
-                else:
-                    match = await convert_to_document(scope).allm_find(rule.llm_find)
-                    item[key] = element_value(match, rule.attr)
-            item.setdefault("_type", spec.type or name)
-            if spec.item_model is not None:
-                item.setdefault("_item_model", spec.item_model)
-            yield item
+            if spec.llm_extract is not None:
+                value = await scope.allm_extract(spec.llm_extract, schema=spec._output)
+            elif spec.fields:
+                value = {
+                    key: await aextract_field(scope, rule)
+                    for key, rule in spec.fields.items()
+                }
+            else:
+                continue
+            for item in record_items(value, name, spec):
+                yield item
 
 
 async def _aiter_values(value: Any) -> AsyncIterator[Any]:

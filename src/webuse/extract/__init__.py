@@ -1,28 +1,16 @@
-"""HTML parsing, declarative extraction, LLM value extraction, and element lookup."""
+"""DOM selection, deterministic value reading, and structured LLM extraction."""
 
 from .parser import Document, Element
 from .rules import (
     ParseResult,
     aextract_items,
     aextract_response,
-    extract_handles_category,
+    extract_handles_page_type,
     extract_items,
     extract_response,
     normalize_parse_result,
 )
-from .smart import (
-    SMART_EXTRACTION_SYSTEM_PROMPT,
-    SMART_FIRST_EXTRACTION_SYSTEM_PROMPT,
-    coerce_smart_output,
-    extract_smart,
-    aextract_smart,
-)
-from .resolver import (
-    AsyncLlmSmartResolver,
-    LlmSmartResolver,
-    aresolve_element,
-    resolve_element,
-)
+from .resolver import AsyncLlmSelector, LlmSelector
 
 __all__ = [
     "Document",
@@ -30,17 +18,10 @@ __all__ = [
     "ParseResult",
     "aextract_response",
     "aextract_items",
-    "aextract_smart",
-    "AsyncLlmSmartResolver",
-    "aresolve_element",
-    "extract_handles_category",
+    "extract_handles_page_type",
     "extract_items",
     "extract_response",
     "normalize_parse_result",
-    "LlmSmartResolver",
-    "SMART_EXTRACTION_SYSTEM_PROMPT",
-    "SMART_FIRST_EXTRACTION_SYSTEM_PROMPT",
-    "coerce_smart_output",
-    "extract_smart",
-    "resolve_element",
+    "AsyncLlmSelector",
+    "LlmSelector",
 ]

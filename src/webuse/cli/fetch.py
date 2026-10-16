@@ -7,13 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from ..http import request
-from ..exceptions import SmartSelectorError
 from ..llm import openai_defaults
-from ..extract import (
-    LlmSmartResolver,
-    SMART_EXTRACTION_SYSTEM_PROMPT,
-    SMART_FIRST_EXTRACTION_SYSTEM_PROMPT,
-)
+from ..extract import LlmSelector
+from ..extract.structured import OutputSchema
 from .utils import (
     _pair,
     _pairs,
@@ -144,112 +140,70 @@ def _print_fetch_csv(rows: list[Any]) -> None:
         writer.writerow({key: _csv_cell(value) for key, value in row.items()})
 
 
-def _find_resolver(args: argparse.Namespace) -> LlmSmartResolver:
-    settings = openai_defaults()
-    return LlmSmartResolver(
-        model=args.llm_model or settings.model or "gpt-4.1-mini",
-        api_key=args.llm_api_key or settings.api_key,
-        base_url=args.llm_base_url or settings.base_url,
-    )
-
-
 def fetch_command(args: argparse.Namespace) -> int:
-    llm_prompt = args.llm_extract
-    find_prompt = args.llm_find
-    css_find = args.css_find
-    css_selector = args.css
+    output = None
+    if args.llm_extract:
+        if args.schema is None:
+            raise SystemExit("--llm-extract requires --schema (a JSON Schema object)")
+        if args.attr or args.first or args.all_matches:
+            raise SystemExit(
+                "--attr, --first and --all apply only to element selection"
+            )
+        output = OutputSchema(json_arg(args.schema, "--schema"))
+    elif args.schema is not None:
+        raise SystemExit("--schema requires --llm-extract")
+    if args.first and args.all_matches:
+        raise SystemExit("Use only one of --first or --all")
     with ExitStack() as stack:
         request_kwargs = cli_request_options(args, {})
         request_kwargs.update(_body_options(args, stack))
-        response = request(
-            args.method,
-            args.url,
-            **request_kwargs,
-        )
+        response = request(args.method, args.url, **request_kwargs)
     if args.json_output:
-        payload = response.json()
-        _print_fetch_json(payload, args=args)
+        _print_fetch_json(response.json(), args=args)
         return 0
-    if css_selector:
-        matches = response.css(css_selector)
-        first = args.first and not args.all_matches
+    if args.css is not None or args.llm is not None:
+        selector = None
+        if args.llm is not None:
+            selector = LlmSelector(
+                model=args.llm_model,
+                api_key=args.llm_api_key,
+                base_url=args.llm_base_url,
+            )
+        options = {"css": args.css, "llm": args.llm, "selector": selector}
         values = (
-            _element_value(matches[0], args.attr)
-            if first and matches
-            else [_element_value(element, args.attr) for element in matches]
+            _element_value(response.find(**options), args.attr)
+            if args.first
+            else [
+                _element_value(element, args.attr)
+                for element in response.find_all(**options)
+            ]
         )
         _print_extraction(
             args=args,
             response=response,
             values=values,
-            selector=css_selector,
+            selector=args.css or args.llm,
             output_shape=args.output_shape,
             field=args.field,
-            first=first,
+            first=args.first,
         )
         return 0
-    first = args.first and not args.all_matches
-    if llm_prompt:
+    if args.llm_extract:
         settings = openai_defaults()
-        llm_kwargs = {
+        kwargs = {
             key: value
             for key, value in {
                 "model": args.llm_model or settings.model or "gpt-4.1-mini",
                 "api_key": args.llm_api_key or settings.api_key,
                 "base_url": args.llm_base_url or settings.base_url,
-                "system_prompt": args.llm_system_prompt
-                or (
-                    SMART_FIRST_EXTRACTION_SYSTEM_PROMPT
-                    if first
-                    else SMART_EXTRACTION_SYSTEM_PROMPT
-                ),
+                "system_prompt": args.llm_system_prompt,
                 "max_chars": args.llm_max_chars,
                 "temperature": args.llm_temperature,
             }.items()
             if value is not None
         }
-        extractor = response.llm_extract_first if first else response.llm_extract
-        value = extractor(llm_prompt, **llm_kwargs)
-        _print_extraction(
-            args=args,
-            response=response,
-            values=value,
-            selector=llm_prompt,
-            output_shape=args.output_shape,
-            field=args.field,
-            first=first,
-        )
-        return 0
-    if find_prompt or css_find:
-        try:
-            match = (
-                response.css_find(css_find)
-                if css_find
-                else response.llm_find(
-                    find_prompt, resolver=_find_resolver(args)
-                )
-            )
-            if match is None:
-                value = None if first else []
-            else:
-                value = _element_value(match, args.attr)
-                if not first:
-                    value = [value]
-        except SmartSelectorError:
-            failure = args.find_failure
-            if failure == "empty":
-                value = None if first else []
-            else:
-                raise
-        _print_extraction(
-            args=args,
-            response=response,
-            values=value,
-            selector=css_find or find_prompt,
-            output_shape=args.output_shape,
-            field=args.field,
-            first=first,
-        )
+        value = response.llm_extract(args.llm_extract, schema=output, **kwargs)
+        _print_fetch_json(value, args=args)
         return 0
     if args.meta:
         _print_fetch_json(
@@ -289,10 +243,9 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     fetch.add_argument("--llm-temperature", type=float)
     extraction = fetch.add_mutually_exclusive_group()
     extraction.add_argument("--css")
-    extraction.add_argument("--css-find")
     extraction.add_argument("--llm-extract")
-    extraction.add_argument("--llm-find")
-    fetch.add_argument("--find-failure", choices=["error", "empty"], default="error")
+    extraction.add_argument("--llm")
+    fetch.add_argument("--schema", help="JSON Schema for --llm-extract")
     fetch.add_argument("--meta", action="store_true")
     fetch.add_argument("--json-output", action="store_true")
     output_format = fetch.add_mutually_exclusive_group()

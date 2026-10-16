@@ -1,0 +1,29 @@
+/* Match Starlight's desktop TOC breakpoint; leave mobile and print unchanged. */
+@media screen and (min-width: 72rem) {
+  :root {
+    --webuse-toc-width: 13.75rem;
+  }
+
+  .right-sidebar-container {
+    width: var(--webuse-toc-width);
+    max-width: var(--webuse-toc-width);
+    flex-shrink: 0;
+  }
+
+  /* The fixed panel otherwise sizes itself against the viewport. */
+  .right-sidebar {
+    width: var(--webuse-toc-width);
+    max-width: 100%;
+  }
+
+  .right-sidebar-panel .sl-container {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  [data-has-sidebar][data-has-toc] .main-pane {
+    --sl-content-margin-inline: auto;
+    width: calc(100% - var(--webuse-toc-width));
+    min-width: 0;
+  }
+}

@@ -148,23 +148,23 @@ function yamlGraph(files: ProjectFile[], target: string): VisualGraph | undefine
       nodes.push(node(`start-${prefix}-${index}`, `Start: ${spiderName}`, truncate(url), "start"));
     });
 
-    Object.entries(pages).forEach(([category, rawPage], pageIndex) => {
+    Object.entries(pages).forEach(([pageType, rawPage], pageIndex) => {
       const page = asRecord(rawPage);
-      const sourceId = category === "default" ? undefined : `page-${prefix}-${category}`;
+      const sourceId = pageType === "default" ? undefined : `page-${prefix}-${pageType}`;
       if (sourceId) {
-        nodes.push(node(sourceId, `Page: ${category}`, spiderName, "route"));
+        nodes.push(node(sourceId, `Page: ${pageType}`, spiderName, "route"));
       }
       const sourceNodes = sourceId ? [sourceId] : starts.map((_, startIndex) => `start-${prefix}-${startIndex}`);
 
       asList(page.follow).map(asRecord).forEach((rule, ruleIndex) => {
         const followId = `follow-${prefix}-${pageIndex}-${ruleIndex}`;
-        const targetCategory = scalar(rule.category) || "page";
-        const pageId = `page-${prefix}-${targetCategory}`;
+        const targetPageType = scalar(rule.page_type) || "page";
+        const pageId = `page-${prefix}-${targetPageType}`;
         nodes.push(node(followId, "Follow", followSelector(rule), "follow"));
         nodes.push(
           node(
             pageId,
-            `Page: ${targetCategory}`,
+            `Page: ${targetPageType}`,
             rule.same_domain ? "same domain" : spiderName,
             "route",
           ),
@@ -180,7 +180,7 @@ function yamlGraph(files: ProjectFile[], target: string): VisualGraph | undefine
         nodes.push(
           node(
             extractId,
-            `Extract: ${category}`,
+            `Extract: ${pageType}`,
             item.spec.item_css ? `item_css: ${scalar(item.spec.item_css)}` : "document",
             "extract",
           ),
@@ -246,15 +246,15 @@ function routeEntries(content: string) {
   return routes;
 }
 
-function requestCategories(body: string) {
-  const categories = new Set<string>();
-  for (const match of body.matchAll(/category\s*=\s*["']([^"']+)["']/g)) {
-    categories.add(match[1]);
+function requestPageTypes(body: string) {
+  const pageTypes = new Set<string>();
+  for (const match of body.matchAll(/page_type\s*=\s*["']([^"']+)["']/g)) {
+    pageTypes.add(match[1]);
   }
-  if (/yield\s+.*(?:RequestOptions|CrawlRequest|response\.request|response\.follow)\s*\(/.test(body) && categories.size === 0) {
-    categories.add("default");
+  if (/yield\s+.*(?:RequestOptions|CrawlRequest|response\.request|response\.follow)\s*\(/.test(body) && pageTypes.size === 0) {
+    pageTypes.add("default");
   }
-  return [...categories];
+  return [...pageTypes];
 }
 
 function itemOutputs(body: string) {
@@ -306,11 +306,11 @@ function pythonGraph(files: ProjectFile[], target: string): VisualGraph | undefi
       startValues.forEach((_, startIndex) => edges.push({ from: `start-${startIndex}`, to: parseId }));
     }
 
-    const categories = requestCategories(method.body);
-    categories.forEach(category => {
-      const targetMethod = routes.get(category) ?? `parse_${category}`;
-      const routeId = `route-${method.name}-${category}`;
-      nodes.push(node(routeId, `Request: ${category}`, targetMethod, "route"));
+    const pageTypes = requestPageTypes(method.body);
+    pageTypes.forEach(pageType => {
+      const targetMethod = routes.get(pageType) ?? `parse_${pageType}`;
+      const routeId = `route-${method.name}-${pageType}`;
+      nodes.push(node(routeId, `Request: ${pageType}`, targetMethod, "route"));
       edges.push({ from: parseId, to: routeId, label: "yield request" });
     });
 
@@ -470,13 +470,13 @@ export default function ProjectVisual(props: ProjectVisualProps) {
         [
           node("git", "Git checkout", truncate(props.target), "start"),
           node("worker", "Workspace", "editable local checkout", "python"),
-          node("project", "Published version", "captured source for runs", "route"),
+          node("project", "Working files", "current source for runs", "route"),
         ],
         [
           { from: "git", to: "worker" },
           { from: "worker", to: "project" },
         ],
-        ["Git is cloned once into the workspace. Publish a version after editing or updating the checkout."],
+        ["Git is cloned once into the workspace. Runs use the current checkout; use Git to track changes."],
       );
     }
     if (props.type === "python") {

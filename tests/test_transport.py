@@ -47,7 +47,7 @@ def test_native_sessions_preserve_headers_and_add_lazy_parsing(tmp_path, asynchr
     assert response.request.headers["x-default"] == "kept"
     assert response.request.headers["x-request"] == "added"
     assert response._tree is None
-    assert response.css_find("h1").text() == "hello"
+    assert response.find(css="h1").text() == "hello"
     assert response.links() == [path.with_name("next.html").as_uri()]
 
 
@@ -98,7 +98,7 @@ def test_native_response_decoding_headers_json_and_http_errors():
     response.headers = Headers({"Content-Type": "text/html; charset=iso-8859-1"})
     assert response.headers["content-type"].startswith("text/html")
     assert response.text == "<h1>caf\u00e9</h1>"
-    assert response.css_find("h1").text() == "caf\u00e9"
+    assert response.find(css="h1").text() == "caf\u00e9"
     with pytest.raises(HTTPError):
         response.raise_for_status()
     assert Response(content=b'{"ok":true}').json() == {"ok": True}
@@ -132,7 +132,7 @@ def test_top_level_helpers_use_parsing_response(tmp_path, asynchronous):
         if asynchronous
         else webuse.get(path.as_uri())
     )
-    assert response.css_find("h1").text() == "hello"
+    assert response.find(css="h1").text() == "hello"
 
 
 @pytest.mark.parametrize(

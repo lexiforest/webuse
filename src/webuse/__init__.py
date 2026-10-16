@@ -39,12 +39,13 @@ from .exceptions import (
     CloseSpider,
     ConfigError,
     DropItem,
+    ExtractionError,
     IgnoreRequest,
     NotConfigured,
     PipelineError,
     PipelineStateError,
     SignalError,
-    SmartSelectorError,
+    LlmSelectionError,
     SpiderError,
     WebuseError,
 )
@@ -74,7 +75,7 @@ from .pipelines import (
     WebhookPipeline,
 )
 from .signals import SignalBus
-from .extract import AsyncLlmSmartResolver, LlmSmartResolver
+from .extract import AsyncLlmSelector, LlmSelector
 from .spider import AgenticSpider, AsyncSpider, Spider
 
 __version__ = "0.0.1"
@@ -91,7 +92,7 @@ __all__ = [
     "AsyncJsonlPipeline",
     "AsyncSQLitePipeline",
     "AsyncWebhookPipeline",
-    "AsyncLlmSmartResolver",
+    "AsyncLlmSelector",
     "AgenticSpider",
     "AgentLimits",
     "AgentModel",
@@ -110,6 +111,7 @@ __all__ = [
     "CrawlRequest",
     "DefaultRequestHasher",
     "DropItem",
+    "ExtractionError",
     "FollowRule",
     "IgnoreRequest",
     "JsonlPipeline",
@@ -135,8 +137,8 @@ __all__ = [
     "SpiderError",
     "Metrics",
     "WebhookPipeline",
-    "LlmSmartResolver",
-    "SmartSelectorError",
+    "LlmSelector",
+    "LlmSelectionError",
     "WebuseError",
     "__version__",
     "acrawl",

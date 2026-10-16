@@ -41,7 +41,7 @@ def test_async_state_roundtrip_and_atomic_dedupe(redis):
             else AsyncMemoryRequestSeen()
         )
         request = CrawlRequest(
-            url="https://example.com", category="detail", meta={"page": 1}
+            url="https://example.com", page_type="detail", meta={"page": 1}
         )
         await queue.put(request)
         assert await queue.size() == 1

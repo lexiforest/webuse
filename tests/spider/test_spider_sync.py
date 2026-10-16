@@ -141,8 +141,8 @@ pages:
     ]
 
 
-def test_spider_config_extracts_by_request_category(tmp_path):
-    config = tmp_path / "categories.yaml"
+def test_spider_config_extracts_by_request_page_type(tmp_path):
+    config = tmp_path / "page_types.yaml"
     config.write_text(
         """
 start_urls:
@@ -152,7 +152,7 @@ pages:
   default:
     follow:
       - css: a.detail
-        category: detail
+        page_type: detail
     extract:
       listing:
         fields:
@@ -176,7 +176,7 @@ pages:
         "https://example.com/detail": b"<html><body><h1>Detail</h1></body></html>",
     }
 
-    class CategoryClient:
+    class PageTypeClient:
         def request(self, method, url, **kwargs):
             _ = (method, kwargs)
             return Response(url=url, status_code=200, content=pages[url])
@@ -184,7 +184,7 @@ pages:
     class ConfigSpider(Spider):
         spider_config_path = config
 
-    result = ConfigSpider().run(client=CategoryClient())
+    result = ConfigSpider().run(client=PageTypeClient())
 
     assert result.items == [
         {"title": "Listing", "_type": "listing"},
@@ -192,8 +192,8 @@ pages:
     ]
 
 
-def test_spider_config_follow_rule_can_be_limited_to_source_category(tmp_path):
-    config = tmp_path / "source-category.yaml"
+def test_spider_config_follow_rule_can_be_limited_to_source_page_type(tmp_path):
+    config = tmp_path / "source-page_type.yaml"
     config.write_text(
         """
 start_urls:
@@ -203,7 +203,7 @@ pages:
   default:
     follow:
       - css: a.detail
-        category: detail
+        page_type: detail
     extract:
       listing:
         fields:
@@ -233,7 +233,7 @@ pages:
         "https://example.com/detail-2": b"<html><body><h1>Detail Two</h1></body></html>",
     }
 
-    class CategoryClient:
+    class PageTypeClient:
         def request(self, method, url, **kwargs):
             _ = (method, kwargs)
             return Response(url=url, status_code=200, content=pages[url])
@@ -241,7 +241,7 @@ pages:
     class ConfigSpider(Spider):
         spider_config_path = config
 
-    result = ConfigSpider().run(client=CategoryClient())
+    result = ConfigSpider().run(client=PageTypeClient())
 
     assert result.items == [
         {"title": "Listing", "_type": "listing"},
@@ -353,7 +353,7 @@ def test_spider_parse_can_return_items_and_followups():
         max_depth = 1
 
         def parse(self, response):
-            title = response.css_find("h1").text()
+            title = response.find(css="h1").text()
             if response.url == "https://example.com/":
                 return {"title": title}, CrawlRequest(url="https://example.com/page-1")
             return {"title": title}
@@ -369,7 +369,7 @@ def test_spider_parse_can_yield_items_and_follow_requests():
         max_depth = 1
 
         def parse(self, response):
-            yield {"title": response.css_find("h1").text()}
+            yield {"title": response.find(css="h1").text()}
             if response.url == "https://example.com/":
                 yield response.follow("/page-1", meta={"source": "home"})
 
@@ -379,18 +379,18 @@ def test_spider_parse_can_yield_items_and_follow_requests():
     assert any(page.url == "https://example.com/page-1" for page in result.pages)
 
 
-def test_spider_routes_follow_request_by_category():
+def test_spider_routes_follow_request_by_page_type():
     class ParseSpider(Spider):
         start_urls = ["https://example.com"]
         max_depth = 1
         routes = {"detail": "parse_detail"}
 
         def parse(self, response):
-            yield {"title": response.css_find("h1").text()}
-            yield response.follow("/page-1", category="detail")
+            yield {"title": response.find(css="h1").text()}
+            yield response.follow("/page-1", page_type="detail")
 
         def parse_detail(self, response):
-            yield {"detail": response.css_find("h1").text()}
+            yield {"detail": response.find(css="h1").text()}
 
     result = ParseSpider().run(client=FakeClient())
 
@@ -403,10 +403,10 @@ def test_spider_routes_follow_request_by_parse_method_name():
         max_depth = 1
 
         def parse(self, response):
-            yield response.follow("/page-1", category="detail")
+            yield response.follow("/page-1", page_type="detail")
 
         def parse_detail(self, response):
-            yield {"detail": response.css_find("h1").text()}
+            yield {"detail": response.find(css="h1").text()}
 
     result = ParseSpider().run(client=FakeClient())
 
@@ -419,10 +419,10 @@ def test_spider_routes_can_use_handler_function():
         max_depth = 1
 
         def parse(self, response):
-            yield response.follow("/page-1", category="detail")
+            yield response.follow("/page-1", page_type="detail")
 
         def parse_detail(self, response):
-            yield {"detail": response.css_find("h1").text()}
+            yield {"detail": response.find(css="h1").text()}
 
         routes = {"detail": parse_detail}
 
@@ -436,7 +436,7 @@ def test_spider_parse_can_yield_pydantic_items():
         start_urls = ["https://example.com"]
 
         def parse(self, response):
-            yield SampleItem(title=response.css_find("h1").text())
+            yield SampleItem(title=response.find(css="h1").text())
 
     result = ParseSpider().run(client=FakeClient())
 
@@ -450,7 +450,7 @@ def test_response_follow_builds_crawl_request_with_options():
         "../page-1",
         method="POST",
         options=webuse.RequestOptions(headers={"Accept": "text/html"}),
-        category="detail",
+        page_type="detail",
         headers={"User-Agent": "webuse"},
         timeout=3,
         meta={"source": "catalog"},
@@ -458,9 +458,9 @@ def test_response_follow_builds_crawl_request_with_options():
 
     assert request.url == "https://example.com/page-1"
     assert request.method == "POST"
-    assert request.category == "detail"
+    assert request.page_type == "detail"
     assert request.options.headers == {"User-Agent": "webuse"}
     assert request.options.extra_kwargs == {}
     assert request.options.timeout == 3
     assert request.meta == {"source": "catalog"}
-    assert request.model_dump(mode="json")["category"] == "detail"
+    assert request.model_dump(mode="json")["page_type"] == "detail"

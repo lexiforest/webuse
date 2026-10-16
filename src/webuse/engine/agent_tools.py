@@ -474,7 +474,7 @@ class CrawlTools:
             }
         page = self._page(args.page_id)
         if args.view == "links":
-            elements = page.css("a[href]")
+            elements = page.find_all(css="a[href]")
             links = []
             # Link offsets count elements, unlike text/HTML offsets.
             end = args.offset
@@ -499,7 +499,7 @@ class CrawlTools:
     def extract(self, args):
         page = self._page(args.page_id)
         try:
-            elements = page.css(args.css)
+            elements = page.find_all(css=args.css)
         except Exception as exc:
             raise ToolError("Invalid CSS selector") from exc
         values = [e.attr(args.attr) if args.attr else e.text() for e in elements]

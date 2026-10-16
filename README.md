@@ -46,10 +46,10 @@ pip install webuse
 ## Usage
 
 ```
-webuse ui
+webuse serve
 ```
 
-Released packages include the compiled UI. `webuse ui` opens
+Released packages include the compiled UI. `webuse serve` opens
 `http://127.0.0.1:2951/` and runs until you press Ctrl+C. It requires Node.js 22.19+
 on PATH, but no npm install or frontend build. Python-only crawling does not
 require Node. Data is saved in `~/.webuse/ui`; use `--data-dir` to change it,
@@ -60,7 +60,7 @@ endpoint, model, and credentials in Settings before using Chat. Python provider
 helpers already discover LM Studio and Ollama when no provider is configured;
 automatic discovery in UI Chat is still planned. The control plane discovers the
 repository's `.venv/bin/python` automatically during source development.
-The packaged launcher uses the Python interpreter running `webuse ui` for crawlers.
+The packaged launcher uses the Python interpreter running `webuse serve` for crawlers.
 
 ### Building with AI
 
@@ -75,9 +75,9 @@ skill. It can inspect pages, read and edit project files, execute Python checks,
 run small crawls, and inspect their logs and records. Responses and tool activity
 stream into Chat; Stop cancels the current turn. Chat edits persist in a local
 workspace that can also be opened in an external editor. Save files writes editor
-changes to that directory; Publish version captures the source used by manual
-and scheduled runs. Sample crawls capture working files without changing the
-published version. Review or revert unpublished changes in the editor. Pi file,
+changes to that directory. Manual, scheduled, and sample runs use the current
+working files directly, without source snapshots. Use Git to track and restore
+your code; edits can affect queued or running jobs. Pi file,
 shell, and Python tools execute on your computer as the UI user.
 
 Configure a streaming, tool-capable OpenAI-compatible model in Settings. Pi
@@ -104,10 +104,10 @@ import webuse
 
 with webuse.Client(impersonate="chrome", timeout=20) as client:
     response = client.get("https://example.com")
-    title = response.css_find("title")
+    title = response.find(css="title")
     print(title.text() if title is not None else None)
 
-    for link in response.css("a"):
+    for link in response.find_all(css="a"):
         print(link.attr("href"), link.text())
 ```
 
@@ -126,7 +126,7 @@ uv run webuse fetch https://example.com --css "title"
 uv run webuse fetch https://example.com --css "a" --jsonl
 ```
 
-See [smart selectors](docs/src/content/docs/user-guide/smart-selectors.md) for
+See [element selection](docs/src/content/docs/user-guide/extraction.md) for
 model-backed value extraction and element lookup on the current document.
 
 #### Crawl with Python or configuration
@@ -148,7 +148,7 @@ print(result.stats)
 ```
 
 Use `await webuse.acrawl(...)` for async crawling. Larger projects can use
-`webuse.Spider` or `webuse.AsyncSpider`, with custom parsing, request categories,
+`webuse.Spider` or `webuse.AsyncSpider`, with custom parsing, request page types,
 Pydantic item models, and pipelines.
 
 `Spider` and `AsyncSpider` share configuration and helpers through
@@ -157,7 +157,7 @@ Pydantic item models, and pipelines.
 
 Both engines record download failures in `result.errors` and propagate parsing
 or pipeline exceptions. Project concurrency defaults and per-domain limits apply
-to both engines; see the [configuration reference](docs/src/content/docs/development/framework/config.md) for precedence and logging.
+to both engines; see the [configuration reference](docs/src/content/docs/references/config.md) for precedence and logging.
 
 The CLI and harness run project directories with a root `webuse.yaml` and named
 spiders. A small crawler can fit entirely in `books_project/webuse.yaml`:
@@ -203,8 +203,8 @@ uv run webuse crawl --spider books -o books.jsonl
 The CLI runs project directories. Use `fetch` to inspect one page, or use the
 Python library APIs directly.
 
-See the [quick start](docs/src/content/docs/user-guide/quick-start.md), [CLI guide](docs/src/content/docs/user-guide/cli.md), and
-[configuration reference](docs/src/content/docs/development/framework/config.md) for field definitions and examples.
+See the [quick start](docs/src/content/docs/user-guide/quick-start.md), [CLI guide](docs/src/content/docs/references/cli.md), and
+[configuration reference](docs/src/content/docs/references/config.md) for field definitions and examples.
 
 ## Cloud version
 
@@ -255,7 +255,7 @@ Pydantic output model, starting URLs, and a total token budget.
 The runtime validates actions and sends records through the existing pipelines.
 Tools are Python calls inside the crawler, not CLI subprocesses.
 
-See the [agentic spider guide](docs/src/content/docs/user-guide/agentic.md)
+See the [agentic spider guide](docs/src/content/docs/advanced/agentic.md)
 and [Books to Scrape example](examples/agentic_books/spiders/books.py). Use the same
 `webuse crawl` project workflow; an open Chat session is not required.
 
@@ -266,6 +266,11 @@ does not imply either runtime capability.
 
 
 ## Development
+
+An independent Rust crawler prototype lives in
+[`crates/webuse`](crates/webuse/README.md). It runs declarative YAML
+spiders using Tokio, Hyper, JSON Schema, and Rust state/pipelines. It is not yet
+the runtime used by the Python CLI or local UI.
 
 To develop from this repository, use a Python 3.11+ development
 environment and Node.js 22.19 or newer:
@@ -278,7 +283,7 @@ npm run dev
 ```
 
 The build installs locked npm dependencies, compiles the UI, and bundles it into both the
-source distribution and wheel. See [release packaging](docs/src/content/docs/user-guide/deploy.md).
+source distribution and wheel. See [release packaging](docs/src/content/docs/advanced/package-release.md).
 
 The local UI currently launches Python crawler subprocesses. It is a local
 development control plane, not the planned isolated multi-tenant cloud runtime.
@@ -308,6 +313,10 @@ npm run build
 - [Local UI setup](ui/README.md)
 - [Examples](examples/)
 
+## One more thing
+
+We have a rust prototype of webuse, feel free to try it out.
+
 ## License
 
-The project is released under the MIT license.
+MIT.

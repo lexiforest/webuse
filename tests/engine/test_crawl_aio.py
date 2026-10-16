@@ -32,7 +32,7 @@ def test_request_limit_caps_seeds_with_concurrent_workers():
     assert len(requests) == 2
 
 
-def test_acrawl_follow_rule_assigns_request_category():
+def test_acrawl_follow_rule_assigns_request_page_type():
     pages = {
         "https://example.com/": b"""
         <html><body>
@@ -43,7 +43,7 @@ def test_acrawl_follow_rule_assigns_request_category():
         "https://example.com/detail": b"<html><body><h1>Detail</h1></body></html>",
     }
 
-    class CategoryClient:
+    class PageTypeClient:
         async def request(self, method, url, **kwargs):
             _ = (method, kwargs)
             return Response(url=url, status_code=200, content=pages[url])
@@ -53,15 +53,15 @@ def test_acrawl_follow_rule_assigns_request_category():
 
     def parse(response):
         return {
-            "title": response.css_find("h1").text(),
-            "category": response.crawl_request.category,
+            "title": response.find(css="h1").text(),
+            "page_type": response.crawl_request.page_type,
         }
 
     async def run_crawl():
         return await acrawl(
             "https://example.com/",
-            client=CategoryClient(),
-            follow=FollowRule(css="a.detail", category="detail"),
+            client=PageTypeClient(),
+            follow=FollowRule(css="a.detail", page_type="detail"),
             extract=parse,
             max_depth=1,
         )
@@ -69,12 +69,12 @@ def test_acrawl_follow_rule_assigns_request_category():
     result = asyncio.run(run_crawl())
 
     assert result.items == [
-        {"title": "Listing", "category": None},
-        {"title": "Detail", "category": "detail"},
+        {"title": "Listing", "page_type": None},
+        {"title": "Detail", "page_type": "detail"},
     ]
 
 
-def test_acrawl_follow_rule_can_be_limited_to_source_category():
+def test_acrawl_follow_rule_can_be_limited_to_source_page_type():
     pages = {
         "https://example.com/": b"""
         <html><body>
@@ -91,7 +91,7 @@ def test_acrawl_follow_rule_can_be_limited_to_source_category():
         "https://example.com/detail-2": b"<html><body><h1>Detail Two</h1></body></html>",
     }
 
-    class CategoryClient:
+    class PageTypeClient:
         async def request(self, method, url, **kwargs):
             _ = (method, kwargs)
             return Response(url=url, status_code=200, content=pages[url])
@@ -102,11 +102,11 @@ def test_acrawl_follow_rule_can_be_limited_to_source_category():
     async def run_crawl():
         return await acrawl(
             "https://example.com/",
-            client=CategoryClient(),
+            client=PageTypeClient(),
             follow=FollowRule(
-                css="a.detail", source_category="default", category="detail"
+                css="a.detail", source_page_type="default", page_type="detail"
             ),
-            extract=lambda response: {"title": response.css_find("h1").text()},
+            extract=lambda response: {"title": response.find(css="h1").text()},
             max_depth=2,
         )
 

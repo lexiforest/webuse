@@ -20,8 +20,10 @@ from .state import (
     RequestSeen,
     state_info,
 )
+from .pages import compile_pages_config
 from .policy import (
     coerce_requests,
+    classify_request,
     domain,
     follow_allowed,
     follow_candidates,
@@ -36,6 +38,7 @@ def crawl(
     *,
     extract: Any = None,
     follow: Any = None,
+    pages: Any = None,
     max_depth: int = 0,
     max_requests: int | None = None,
     concurrency: int = 10,
@@ -52,7 +55,10 @@ def crawl(
     request_hasher: RequestHasher | None = None,
     signals: SignalBus | None = None,
 ) -> CrawlResult:
-    extract = compile_extraction(extract)
+    page_rules = compile_pages_config(pages)
+    extract = compile_extraction(extract if extract is not None else page_rules.extract)
+    follow = follow if follow is not None else page_rules.follow
+    page_type_patterns = page_rules.patterns
     signal_bus = signals or SignalBus()
     if per_domain is not None and per_domain < 1:
         raise ValueError("per_domain must be positive")
@@ -70,6 +76,32 @@ def crawl(
 
     def state_updated() -> None:
         signal_bus.send("state_updated", **state_info(scheduler_queue, seen))
+
+    def skip_request(request: CrawlRequest, reason: str) -> None:
+        if reason == "duplicate":
+            result.stats.skipped_duplicates += 1
+        else:
+            result.stats.skipped_rules += 1
+        logger.info(
+            "crawl request skipped method={} url={} reason={}",
+            request.method,
+            request.url,
+            reason,
+        )
+        signal_bus.send("request_skipped", request=request, reason=reason)
+
+    def enqueue(request: CrawlRequest, source: str) -> bool:
+        request.url = normalize_url(request.url)
+        if not classify_request(request, page_type_patterns):
+            skip_request(request, "rules")
+            return False
+        if dedupe and seen.contains(hasher.hash(request)):
+            skip_request(request, "duplicate")
+            return False
+        scheduler_queue.put(request)
+        signal_bus.send("request_queued", request=request, source=source)
+        state_updated()
+        return True
 
     def fetch(request: CrawlRequest):
         limit = (
@@ -98,9 +130,7 @@ def crawl(
     try:
         signal_bus.send("state_loaded", **state_info(scheduler_queue, seen))
         for seed in coerce_requests(seeds):
-            scheduler_queue.put(seed)
-            signal_bus.send("request_queued", request=seed, source="start")
-            state_updated()
+            enqueue(seed, "start")
         with ThreadPoolExecutor(max_workers=max(1, concurrency)) as executor:
             pending = {}
             while not scheduler_queue.empty() or pending:
@@ -114,22 +144,18 @@ def crawl(
                     request = scheduler_queue.pop()
                     if request is None:
                         break
+                    request.url = normalize_url(request.url)
+                    if not classify_request(request, page_type_patterns):
+                        skip_request(request, "rules")
+                        state_updated()
+                        continue
                     request_hash = hasher.hash(request)
                     is_new = seen.add(request_hash)
                     state_updated()
                     if dedupe and not is_new:
-                        result.stats.skipped_duplicates += 1
-                        logger.info(
-                            "crawl request skipped method={} url={} reason=duplicate",
-                            request.method,
-                            request.url,
-                        )
-                        signal_bus.send(
-                            "request_skipped", request=request, reason="duplicate"
-                        )
+                        skip_request(request, "duplicate")
                         continue
-                    normalized = normalize_url(request.url)
-                    request.url = normalized
+                    normalized = request.url
                     if not robots_allowed(
                         normalized,
                         enabled=robots_txt,
@@ -306,12 +332,8 @@ def crawl(
                                 "request_skipped", request=next_request, reason="rules"
                             )
                             continue
-                        scheduler_queue.put(next_request)
-                        state_updated()
-                        signal_bus.send(
-                            "request_queued", request=next_request, source="follow"
-                        )
-                        result.stats.followed_links += 1
+                        if enqueue(next_request, "follow"):
+                            result.stats.followed_links += 1
                         if (
                             max_requests is not None
                             and result.stats.queued >= max_requests

@@ -21,3 +21,5 @@ COPY ui /app/ui
 RUN npm run build
 
 EXPOSE 2951
+
+CMD ["node", ".output/server/index.mjs"]

@@ -2,8 +2,12 @@ class WebuseError(Exception):
     """Base exception for webuse."""
 
 
-class SmartSelectorError(WebuseError):
-    """Raised when a smart selector cannot be resolved confidently."""
+class LlmSelectionError(WebuseError):
+    """Raised when a model returns an invalid element selection."""
+
+
+class ExtractionError(WebuseError):
+    """Raised when extracted values violate the output contract."""
 
 
 class ConfigError(WebuseError):

@@ -44,12 +44,12 @@ export function createWebuseTools(projectId: number, directory: string) {
     const job = store.getJob(id);
     if (!job || job.projectId !== projectId) throw new Error("Run not found in this project.");
     const offset = Math.max(0, store.countLogs(id) - 30);
-    return { id, status: job.status, sourceVersion: job.metadata.sourceVersion, items: job.items, logs: store.listLogs(id, 30, offset).map(log => ({ stream: log.stream, message: String(log.message).slice(0, 1000) })), records: store.listDataItems(id, 5).map(row => row.item) };
+    return { id, status: job.status, workspacePath: job.metadata.workspacePath, items: job.items, logs: store.listLogs(id, 30, offset).map(log => ({ stream: log.stream, message: String(log.message).slice(0, 1000) })), records: store.listDataItems(id, 5).map(row => row.item) };
   }
   return [
-    defineTool({ name: "workspace_info", label: "Workspace", description: "Discover workspace path, files, published version, runtime capabilities, and limits.", parameters: Type.Object({}), async execute() {
+    defineTool({ name: "workspace_info", label: "Workspace", description: "Discover workspace path, files, runtime capabilities, and limits.", parameters: Type.Object({}), async execute() {
       const project = store.getProject(projectId)!;
-      return textResult({ projectId, directory, files: project.files.map(file => file.path), omittedFromEditor: project.omitted, savedVersion: project.savedVersion, changes: project.changes, skill: skillPath, python: pythonCommand(), execution: "Trusted local filesystem and subprocess access, not a sandbox", limits: { toolCallsPerTurn: 30, turnSeconds: 300, pythonSeconds: 30, sampleSeconds: 60, sampleRequests: 10, samplesPerTurn: 3 }, capabilities: ["native filesystem tools", "shell execution", "HTTP inspection via curl_cffi", "persistent Python execution", "Webuse sample crawls", "run logs and records"], unavailable: ["web search", "cloud deployment", "managed proxies", "hosted browsers", "CAPTCHA solving", "hosted extraction API"] });
+      return textResult({ projectId, directory, files: project.files.map(file => file.path), omittedFromEditor: project.omitted, skill: skillPath, python: pythonCommand(), execution: "Trusted local filesystem and subprocess access, not a sandbox", limits: { toolCallsPerTurn: 30, turnSeconds: 300, pythonSeconds: 30, sampleSeconds: 60, sampleRequests: 10, samplesPerTurn: 3 }, capabilities: ["native filesystem tools", "shell execution", "HTTP inspection via curl_cffi", "persistent Python execution", "Webuse sample crawls", "run logs and records"], unavailable: ["web search", "cloud deployment", "managed proxies", "hosted browsers", "CAPTCHA solving", "hosted extraction API"] });
     } }),
     defineTool({ name: "fetch_page", label: "Inspect page", description: "Fetch an HTTP(S) page with curl_cffi and return status, final URL, and bounded HTML. No JavaScript rendering.", parameters: Type.Object({ url: Type.String() }), async execute(_id, args, signal) {
       const url = new URL(args.url);
@@ -64,7 +64,7 @@ export function createWebuseTools(projectId: number, directory: string) {
       if (result.stopped || result.exitCode !== 0) throw new Error(result.output || "Python stopped or failed.");
       return textResult(result);
     } }),
-    defineTool({ name: "run_crawl", label: "Sample crawl", description: "Capture current workspace files and run that version through the Webuse queue. Does not publish it. Up to 10 requests and 60 seconds including queue time.", parameters: Type.Object({ maxRequests: Type.Optional(Type.Integer({ minimum: 1, maximum: 10 })) }), async execute(_id, args, signal) {
+    defineTool({ name: "run_crawl", label: "Sample crawl", description: "Run the current workspace files through the Webuse queue. Up to 10 requests and 60 seconds including queue time.", parameters: Type.Object({ maxRequests: Type.Optional(Type.Integer({ minimum: 1, maximum: 10 })) }), async execute(_id, args, signal) {
       signal?.throwIfAborted();
       if (++samples > 3) throw new Error("Sample crawl limit reached for this turn.");
       const job = store.createJob(projectId, { assistantSample: { maxRequests: args.maxRequests ?? 3, deadline: Date.now() + 60_000 } });

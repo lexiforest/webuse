@@ -2,7 +2,7 @@
 
 ## Product direction
 
-Webuse is a local-first crawler development toolkit with a planned managed cloud
+Webuse is a local-first crawler development toolkit with a managed cloud
 environment for production execution. Our primary users are technical users who
 write scraping code with coding agents such as Codex and Claude.
 
@@ -10,10 +10,6 @@ Read [HUMAN.md](HUMAN.md) first: it is the human-maintained source of truth for
 product direction. Never edit HUMAN.md, including formatting or typo fixes. Align
 other documentation with it; when a detail is unspecified, keep it open rather
 than inventing a decision. HUMAN.md takes precedence over derived product docs.
-
-Read [PLAN.md](PLAN.md) for product decisions, delivery sequence, and open questions.
-Use [README.md](README.md) for the public introduction and working examples. Keep
-implemented behavior distinct from roadmap commitments in documentation and UI.
 
 The product must support:
 
@@ -38,6 +34,27 @@ The hosted website creates and executes crawlers in cloud workspaces. Local use
 must remain useful without a Webuse Cloud account. Users may supply their own
 model credentials and infrastructure providers.
 
+Webuse is a local-first crawler development toolkit with a managed cloud
+environment for production execution.
+
+The primary customer is a developer or technical power user who writes scraping
+code with a coding agent, including Codex or Claude. These users
+want inspectable code, freedom to use their own tools, and less work operating
+crawlers against changing websites.
+
+The product promise is: bring a crawler or generate one, validate it locally,
+and deploy it to a prepared environment with the scraping services it needs.
+
+Support three sources of crawler code:
+
+1. **Existing Scrapy projects and other code:** declare how to run them and make
+   minimal integration changes.
+   Adopting the Webuse framework must not be a prerequisite for cloud execution.
+2. **External coding agents:** use Codex, Claude, or another agent with the Python
+   framework, examples, and skills when helpful.
+3. **Built-in Chat:** describe a crawler and generate inspectable project files
+   in Webuse's local or cloud environment.
+
 ## Current implementation and repository map
 
 The repository currently contains a Python scraping framework and a Node/SolidStart
@@ -49,9 +66,9 @@ The Python provider helpers already discover local LM Studio and Ollama servers.
 Built-in Chat embeds Pi's coding-agent SDK with native filesystem and shell tools
 in persistent project directories, plus Webuse HTTP inspection, Python, sample
 crawl, and run inspection tools. Working source is stored on disk; SQLite owns
-metadata and published-version references. Chat edits persist immediately, while
-manual and scheduled jobs pin a published source snapshot at enqueue time.
-Sample jobs capture working files without publishing. Pi owns the agent
+metadata and run records. Open-source manual, scheduled, and sample jobs execute
+the current working directory directly, without source snapshots or publication.
+Users track and restore their code with Git. Chat edits persist immediately. Pi owns the agent
 loop, streaming, session context, retries, and compaction; keep this integration
 small instead of rebuilding those mechanisms. The UI and Node orchestrator remain
 Webuse-owned. The bundled skill lives in `ui/skills/webuse-crawlers/SKILL.md`.
@@ -80,7 +97,7 @@ are not implemented. Custom project tools are trusted code, not sandboxed tools.
 - `src/webuse/http/client.py`: thin curl_cffi session subclasses and top-level helpers.
 - `src/webuse/http/response.py`: HTTP-to-document bridge, follow-up requests, and crawl metadata.
 - `src/webuse/extract/parser.py`: lazy selectolax/Lexbor parsing, CSS selectors, and
-  Document's smart-extraction convenience methods.
+  Document's LLM extraction convenience methods.
 - `src/webuse/extract/`: HTML parsing, declarative extraction, response-handler result adapters,
   LLM value extraction, and element resolution.
 - `src/webuse/llm.py`: model configuration and client helpers.
@@ -88,7 +105,7 @@ are not implemented. Custom project tools are trusted code, not sandboxed tools.
 - `src/webuse/spider/`: shared configuration, per-run state, and sync/async Spider classes.
 - `src/webuse/pipelines/`: ItemPipeline, internal execution helpers, and built-in item destinations.
 - `src/webuse/cli/`: project creation, generation, fetch, crawl, WebSocket commands,
-  and the `webuse ui` launcher for the packaged Node control plane.
+  and the `webuse serve` launcher for the packaged Node control plane.
 - `setup.py`: release build hooks; compile the UI into generated `src/webuse/_ui/`.
 - `src/webuse/config.py`, `models.py`, `exceptions.py`: configuration, shared models,
   and public exceptions.
@@ -139,8 +156,9 @@ are not implemented. Custom project tools are trusted code, not sandboxed tools.
   changes it. A local subprocess runner is not a tenant isolation boundary.
 - Prefer a small, additive deployment contract over a deep framework. Its exact
   schema and arbitrary-script runner are still to be designed.
-- Keep durable workspace state separate from active compute. Scheduled runs
-  should use a saved project version independently of an interactive session.
+- Keep durable workspace state separate from active compute. Open-source runs
+  use working files on disk, independently of an interactive session; users own
+  Git versioning. Cloud source-version guarantees remain a separate design.
 - Do not introduce cloud-only code paths into otherwise portable crawler logic.
   Reveal environment differences before execution instead of silently changing
   crawler behavior.
@@ -244,15 +262,19 @@ The margin definition, vendor costs, and remaining allowances are still open.
   packaging metadata stays in `pyproject.toml`.
 - In documentation examples, enter the project with `cd PROJECT` and run
   generation and crawl commands from there using their current-directory defaults.
-- Plain selectors must work without an LLM. `css_find()` selects the first CSS
-  match; `llm_find()` always invokes the resolver without keyword scoring.
-- Declarative extraction requires category -> named item -> `fields`, with optional
-  `item_css`. Validate before crawling; keep selector-string field shorthand and
+- Plain selectors must work without an LLM. `find(css=...)` and
+  `find_all(css=...)` select existing nodes; explicit `llm=...` selects nodes
+  through a model. Both preserve document order and share missing-match behavior.
+- Declarative extraction uses page type -> named item -> `fields`, or
+  `llm_extract` plus an output `schema`, with optional `item_css`.
+  Validate before crawling; keep selector-string field shorthand and
   Python callbacks, without inferring alternative dictionary shapes.
 - Use selectolax's Lexbor backend for HTML parsing. Support CSS selectors and
-  regex extraction, not XPath. `llm_extract*()` extracts values through an LLM;
-  `llm_find()` resolves one element from the current document without caching.
-  Keep those operations separate across Python, CLI, and configuration.
+  regex extraction, not XPath. `llm_extract(prompt, schema=...)` transforms content
+  into validated data; selection returns existing elements without caching.
+  Use `afind`, `afind_all`, and `allm_extract` for async model calls. Fields and
+  follow rules share `css`/`llm` selectors and `all`; retain the distinction
+  between selection, value reading, structured interpretation, and crawl policy.
 - Preserve machine-friendly CLI output, including JSONL workflows, and align
   config-file naming with Python API naming. Document command-specific formats
   accurately rather than claiming every command emits JSONL by default.
@@ -283,7 +305,7 @@ Editable Python installs skip this build. Never edit or commit `src/webuse/_ui/`
 Use Node's built-in SQLite; do not introduce native Node addons into the portable
 bundle.
 
-`webuse ui` opens the bundled UI on loopback port 2951 using Node.js 22.19+ without
+`webuse serve` opens the bundled UI on loopback port 2951 using Node.js 22.19+ without
 npm. Store runtime data outside the installed package (default `~/.webuse/ui`)
 and run crawlers with the launcher's Python interpreter unless explicitly
 overridden. Verify release artifacts in a fresh Python environment with

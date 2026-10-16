@@ -21,7 +21,7 @@ export async function POST(event: APIEvent) {
     if (project.type === "git") {
       try {
         await cloneWorkspace(project.id, project.target);
-        project = store.publishWorkspace(project.id, store.getProject(project.id)!.revision)!;
+        project = store.getProject(project.id)!;
       } catch (error) { store.deleteProject(project.id); throw error; }
     }
     return json({ project }, 201);
@@ -38,8 +38,8 @@ export async function PATCH(event: APIEvent) {
   if (!id || typeof value?.revision !== "string") return json({ error: "Project id and workspace revision are required." }, 400);
   try {
     const files = projectFiles(value.files);
-    if (!files || (value.action !== "revert" && !Array.isArray(value.files))) return json({ error: "Project files are invalid." }, 400);
-    const project = value.action === "revert" ? store.revertWorkspace(id, value.revision) : store.saveWorkspace(id, files, value.revision);
+    if (!files || !Array.isArray(value.files)) return json({ error: "Project files are invalid." }, 400);
+    const project = store.saveWorkspace(id, files, value.revision);
     return project ? json({ project }) : json({ error: "Project not found." }, 404);
   } catch (error) { return failure(error); }
 }

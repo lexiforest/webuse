@@ -2,14 +2,116 @@ import pytest
 
 from webuse import cli
 from webuse.cli import fetch as fetch_cli
-from webuse.exceptions import SmartSelectorError
+from webuse.exceptions import LlmSelectionError
+
+
+class SelectionResponse:
+    def find(self, **kwargs):
+        matches = self.find_all(**kwargs)
+        return matches[0] if matches else None
+
+
+@pytest.mark.parametrize("jsonl", [False, True])
+def test_fetch_structured_schema_and_model_options(monkeypatch, capsys, jsonl):
+    import json
+    from webuse import Response
+    from types import SimpleNamespace
+
+    calls = []
+
+    class Client:
+        def __init__(self):
+            self.chat = SimpleNamespace(completions=self)
+
+        def create(self, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content='[{"title":"Book","price":12.5}]'
+                        )
+                    )
+                ]
+            )
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        "webuse.extract.structured.create_openai_client", lambda **kw: Client()
+    )
+    monkeypatch.setattr(
+        fetch_cli, "request", lambda *a, **kw: Response(content=b"<p>Book</p>")
+    )
+    schema = {
+        "type": "array",
+        "items": {"type": "object", "required": ["title", "price"]},
+    }
+    args = [
+        "fetch",
+        "https://test/",
+        "--llm-extract",
+        "products",
+        "--schema",
+        json.dumps(schema),
+        "--llm-model",
+        "test",
+        "--llm-temperature",
+        "0.2",
+        "--llm-max-chars",
+        "100",
+    ]
+    if jsonl:
+        args.append("--jsonl")
+    assert cli.main(args) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result == (
+        {"title": "Book", "price": 12.5}
+        if jsonl
+        else [{"title": "Book", "price": 12.5}]
+    )
+    assert calls[0]["model"] == "test" and calls[0]["temperature"] == 0.2
+    assert json.loads(calls[0]["messages"][1]["content"])["schema"] == schema
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["--llm-extract", "product"],
+        ["--schema", '{"type":"string"}'],
+        ["--llm-extract", "product", "--schema", '{"type":"string"}', "--first"],
+        ["--css", "a", "--first", "--all"],
+    ],
+)
+def test_invalid_extraction_options_fail_before_fetch(monkeypatch, args):
+    monkeypatch.setattr(
+        fetch_cli, "request", lambda *a, **kw: pytest.fail("must not fetch")
+    )
+    with pytest.raises(SystemExit):
+        cli.main(["fetch", "https://test/", *args])
+
+
+def test_fetch_model_failure_is_not_an_empty_result(monkeypatch):
+    from webuse import Response
+
+    def invalid(*args, **kwargs):
+        raise LlmSelectionError("Invalid model selection")
+
+    monkeypatch.setattr("webuse.extract.resolver.LlmSelector.select", invalid)
+    monkeypatch.setattr(
+        fetch_cli, "request", lambda *a, **kw: Response(content=b"<p>P</p>")
+    )
+    with pytest.raises(LlmSelectionError):
+        cli.main(["fetch", "https://test/", "--llm", "missing"])
 
 
 def test_fetch_command_with_selector(monkeypatch, capsys):
-    class FakeResponse:
+    class FakeResponse(SelectionResponse):
         url = "https://example.com"
 
-        def css(self, selector):
+        def find_all(self, *, css, **kwargs):
+            selector = css
             assert selector == ".title"
 
             class FakeElement:
@@ -28,7 +130,7 @@ def test_fetch_command_with_selector(monkeypatch, capsys):
 
 
 @pytest.mark.parametrize("first", [False, True])
-@pytest.mark.parametrize("method", ["css_find", "llm_find"])
+@pytest.mark.parametrize("method", ["css", "llm"])
 def test_fetch_finds_element(monkeypatch, capsys, first, method):
     import json
     from types import SimpleNamespace
@@ -39,12 +141,22 @@ def test_fetch_finds_element(monkeypatch, capsys, first, method):
             payload = json.loads(kwargs["messages"][1]["content"])
             assert payload["prompt"] == "primary product link"
             selected = next(c for c in payload["candidates"] if c["tag"] == "a")
-            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
-                content=json.dumps({"index": selected["index"]})
-            ))])
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content=json.dumps({"indices": [selected["index"]]})
+                        )
+                    )
+                ]
+            )
 
-    client = SimpleNamespace(chat=SimpleNamespace(completions=Completions()))
-    monkeypatch.setattr("webuse.extract.resolver.create_openai_client", lambda **kw: client)
+    client = SimpleNamespace(
+        chat=SimpleNamespace(completions=Completions()), close=lambda: None
+    )
+    monkeypatch.setattr(
+        "webuse.extract.resolver.create_openai_client", lambda **kw: client
+    )
     monkeypatch.setattr(
         fetch_cli,
         "request",
@@ -54,8 +166,12 @@ def test_fetch_finds_element(monkeypatch, capsys, first, method):
         ),
     )
     args = [
-        "fetch", "https://example.com/page", "--" + method.replace("_", "-"),
-        "a.primary" if method == "css_find" else "primary product link", "--attr", "href",
+        "fetch",
+        "https://example.com/page",
+        "--" + method.replace("_", "-"),
+        "a.primary" if method == "css" else "primary product link",
+        "--attr",
+        "href",
     ]
     if first:
         args.append("--first")
@@ -67,16 +183,18 @@ def test_fetch_finds_element(monkeypatch, capsys, first, method):
 
 
 @pytest.mark.parametrize("first", [False, True])
-def test_fetch_css_find_missing_match(monkeypatch, capsys, first):
+def test_fetch_css_missing_match(monkeypatch, capsys, first):
     import json
     from webuse import Response
 
     monkeypatch.setattr(
-        fetch_cli, "request", lambda *args, **kwargs: Response(
+        fetch_cli,
+        "request",
+        lambda *args, **kwargs: Response(
             url="https://example.com", content=b"<h1>Title</h1>"
-        )
+        ),
     )
-    args = ["fetch", "https://example.com", "--css-find", "a"]
+    args = ["fetch", "https://example.com", "--css", "a"]
     if first:
         args.append("--first")
     assert cli.main(args) == 0
@@ -84,117 +202,18 @@ def test_fetch_css_find_missing_match(monkeypatch, capsys, first):
     assert result["match" if first else "matches"] == (None if first else [])
 
 
-def test_fetch_rejects_combined_smart_and_llm_find():
+def test_fetch_rejects_combined_extraction_and_llm():
     with pytest.raises(SystemExit) as error:
         cli.build_parser().parse_args(
-            ["fetch", "https://example.com", "--llm-extract", "title", "--llm-find", "link"]
+            ["fetch", "https://example.com", "--llm-extract", "title", "--llm", "link"]
         )
     assert error.value.code == 2
-
-
-def test_fetch_command_with_smart_extraction(monkeypatch, capsys):
-    captured = {}
-
-    class FakeResponse:
-        url = "https://example.com"
-
-        def llm_extract_first(self, prompt, **kwargs):
-            captured["prompt"] = prompt
-            captured["kwargs"] = kwargs
-            return "Alpha Gadget"
-
-    monkeypatch.setattr(fetch_cli, "request", lambda *args, **kwargs: FakeResponse())
-
-    code = cli.main(
-        [
-            "fetch",
-            "https://example.com",
-            "--llm-extract",
-            "Which product is first?",
-            "--llm-model",
-            "test-model",
-            "--llm-max-chars",
-            "100",
-            "--llm-temperature",
-            "0.2",
-            "--output-shape",
-            "item",
-            "--field",
-            "product",
-            "--first",
-        ]
-    )
-    out = capsys.readouterr().out.strip()
-
-    assert code == 0
-    assert out == '{\n  "product": "Alpha Gadget"\n}'
-    assert captured["prompt"] == "Which product is first?"
-    assert captured["kwargs"]["model"] == "test-model"
-    assert captured["kwargs"]["max_chars"] == 100
-    assert captured["kwargs"]["temperature"] == 0.2
-    assert "first matching JSON value" in captured["kwargs"]["system_prompt"]
-
-
-def test_fetch_command_with_explicit_llm_options(monkeypatch, capsys):
-    captured = {}
-
-    class FakeResponse:
-        url = "https://example.com"
-
-        def llm_extract_first(self, prompt, **kwargs):
-            captured["prompt"] = prompt
-            captured["kwargs"] = kwargs
-            return "Configured Title"
-
-    monkeypatch.setattr(fetch_cli, "request", lambda *args, **kwargs: FakeResponse())
-
-    code = cli.main([
-        "fetch", "https://example.com", "--llm-extract", "Extract the primary title",
-        "--first", "--llm-system-prompt", "Return only the title.",
-        "--llm-model", "configured-model", "--llm-base-url", "https://llm.example.com/v1",
-        "--llm-api-key", "test-key", "--output-shape", "item", "--field", "title",
-    ])
-    out = capsys.readouterr().out.strip()
-
-    assert code == 0
-    assert out == '{\n  "title": "Configured Title"\n}'
-    assert captured["prompt"] == "Extract the primary title"
-    assert captured["kwargs"]["model"] == "configured-model"
-    assert captured["kwargs"]["system_prompt"] == "Return only the title."
-    assert captured["kwargs"]["base_url"] == "https://llm.example.com/v1"
-    assert captured["kwargs"]["api_key"] == "test-key"
-
-
-def test_fetch_command_prints_smart_json_array(monkeypatch, capsys):
-    class FakeResponse:
-        url = "https://example.com"
-
-        def llm_extract(self, prompt, **kwargs):
-            assert "JSON array" in kwargs["system_prompt"]
-            return ["Alpha", "Beta"]
-
-    monkeypatch.setattr(fetch_cli, "request", lambda *args, **kwargs: FakeResponse())
-
-    code = cli.main(["fetch", "https://example.com", "--llm-extract", "All titles"])
-    out = capsys.readouterr().out.strip()
-
-    assert code == 0
-    assert out == (
-        "{\n"
-        '  "url": "https://example.com",\n'
-        '  "matches": [\n'
-        '    "Alpha",\n'
-        '    "Beta"\n'
-        "  ],\n"
-        '  "selector": "All titles"\n'
-        "}"
-    )
 
 
 def test_fetch_passes_request_options(monkeypatch, capsys):
     captured = {}
 
-    class FakeResponse:
+    class FakeResponse(SelectionResponse):
         text = "ok\n"
 
     def fake_request(method, url, **kwargs):
@@ -203,11 +222,23 @@ def test_fetch_passes_request_options(monkeypatch, capsys):
 
     monkeypatch.setattr(fetch_cli, "request", fake_request)
 
-    code = cli.main([
-        "fetch", "https://example.com", "--method", "POST", "--timeout", "5",
-        "--allow-redirects", "--impersonate", "chrome", "--header", "User-Agent=webuse",
-        "--json", '{"query": "alpha"}',
-    ])
+    code = cli.main(
+        [
+            "fetch",
+            "https://example.com",
+            "--method",
+            "POST",
+            "--timeout",
+            "5",
+            "--allow-redirects",
+            "--impersonate",
+            "chrome",
+            "--header",
+            "User-Agent=webuse",
+            "--json",
+            '{"query": "alpha"}',
+        ]
+    )
     _ = capsys.readouterr()
 
     assert code == 0
@@ -223,7 +254,7 @@ def test_fetch_passes_request_options(monkeypatch, capsys):
 def test_fetch_command_leaves_impersonation_default_to_client(monkeypatch, capsys):
     captured = {}
 
-    class FakeResponse:
+    class FakeResponse(SelectionResponse):
         text = "ok\n"
 
     def fake_request(method, url, **kwargs):
@@ -246,7 +277,7 @@ def test_fetch_command_supports_body_files_and_request_options(
     upload.write_text("payload", encoding="utf-8")
     captured = {}
 
-    class FakeResponse:
+    class FakeResponse(SelectionResponse):
         text = "ok\n"
 
     def fake_request(method, url, **kwargs):
@@ -309,10 +340,11 @@ def test_fetch_command_outputs_first_attr_as_item(monkeypatch, capsys):
             assert name == "href"
             return self.href
 
-    class FakeResponse:
+    class FakeResponse(SelectionResponse):
         url = "https://example.com"
 
-        def css(self, selector):
+        def find_all(self, *, css, **kwargs):
+            selector = css
             assert selector == "a.product"
             return [FakeElement("/alpha"), FakeElement("/beta")]
 
@@ -344,10 +376,11 @@ def test_fetch_command_can_output_jsonl(monkeypatch, capsys):
         def text(self):
             return "Hello"
 
-    class FakeResponse:
+    class FakeResponse(SelectionResponse):
         url = "https://example.com"
 
-        def css(self, selector):
+        def find_all(self, *, css, **kwargs):
+            selector = css
             assert selector == ".title"
             return [FakeElement()]
 
@@ -373,10 +406,11 @@ def test_fetch_command_outputs_all_matches_as_jsonl(monkeypatch, capsys):
             assert name == "title"
             return self.title
 
-    class FakeResponse:
+    class FakeResponse(SelectionResponse):
         url = "https://books.toscrape.com/"
 
-        def css(self, selector):
+        def find_all(self, *, css, **kwargs):
+            selector = css
             assert selector == ".product_pod h3 a"
             return [FakeElement("Alpha"), FakeElement("Beta")]
 
@@ -408,10 +442,11 @@ def test_fetch_command_outputs_all_items_as_jsonl(monkeypatch, capsys):
         def text(self):
             return "Hello"
 
-    class FakeResponse:
+    class FakeResponse(SelectionResponse):
         url = "https://example.com"
 
-        def css(self, selector):
+        def find_all(self, *, css, **kwargs):
+            selector = css
             assert selector == ".title"
             return [FakeElement(), FakeElement()]
 
@@ -446,10 +481,11 @@ def test_fetch_command_outputs_all_matches_as_csv(monkeypatch, capsys):
             assert name == "title"
             return self.title
 
-    class FakeResponse:
+    class FakeResponse(SelectionResponse):
         url = "https://books.toscrape.com/"
 
-        def css(self, selector):
+        def find_all(self, *, css, **kwargs):
+            selector = css
             assert selector == ".product_pod h3 a"
             return [FakeElement("Alpha"), FakeElement("Beta")]
 
@@ -482,10 +518,11 @@ def test_fetch_command_outputs_item_csv(monkeypatch, capsys):
         def text(self):
             return "Hello"
 
-    class FakeResponse:
+    class FakeResponse(SelectionResponse):
         url = "https://example.com"
 
-        def css(self, selector):
+        def find_all(self, *, css, **kwargs):
+            selector = css
             assert selector == ".title"
             return [FakeElement(), FakeElement()]
 
@@ -514,46 +551,6 @@ def test_fetch_command_outputs_item_csv(monkeypatch, capsys):
 def test_fetch_command_rejects_csv_with_jsonl():
     with pytest.raises(SystemExit):
         cli.main(["fetch", "https://example.com", "--csv", "--jsonl"])
-
-
-def test_fetch_smart_llm_failure_can_emit_empty(monkeypatch, capsys):
-    class FakeResolver:
-        def __init__(self, **kwargs):
-            self.kwargs = kwargs
-
-    class FakeResponse:
-        url = "https://example.com"
-
-        def llm_find(
-            self,
-            prompt,
-            *,
-            resolver=None,
-        ):
-            assert prompt == "missing cta"
-            assert isinstance(resolver, FakeResolver)
-            assert resolver.kwargs["model"] == "test-model"
-            raise SmartSelectorError("missing")
-
-    monkeypatch.setattr(fetch_cli, "LlmSmartResolver", FakeResolver)
-    monkeypatch.setattr(fetch_cli, "request", lambda *args, **kwargs: FakeResponse())
-
-    code = cli.main(
-        [
-            "fetch",
-            "https://example.com",
-            "--llm-model",
-            "test-model",
-            "--llm-find",
-            "missing cta",
-            "--find-failure",
-            "empty",
-        ]
-    )
-    out = capsys.readouterr().out.strip()
-
-    assert code == 0
-    assert '"matches": []' in out
 
 
 def test_malformed_key_value_arguments_have_clear_errors(monkeypatch):

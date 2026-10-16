@@ -124,7 +124,7 @@ def test_real_curl_model_and_page_sessions_keep_credentials_separate(
     assert result.close_reason == "finished"
     assert all("max_tokens" not in payload for payload in payloads)
     assert result.items == [Company(name="Acme")]
-    assert result.pages[0].css_find("h1").text() == "Acme"
+    assert result.pages[0].find(css="h1").text() == "Acme"
     assert result.stats.queued == 2
     assert [
         (path, auth) for path, auth in requests if path != "/v1/chat/completions"

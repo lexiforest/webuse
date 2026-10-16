@@ -4,6 +4,7 @@ from typing import Any, Callable
 from pydantic import BaseModel, ConfigDict, Field
 
 from .agent import AgentRunInfo
+from .selection import SelectionRule
 
 
 class WebuseModel(BaseModel):
@@ -82,19 +83,19 @@ class CrawlRequest(WebuseModel):
     url: str
     method: str = "GET"
     options: RequestOptions = Field(default_factory=RequestOptions)
-    category: str | None = None
+    page_type: str | None = None
     depth: int = 0
     parent_url: str | None = None
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
-class FollowRule(WebuseModel):
+class FollowRule(SelectionRule):
     model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
 
-    css: str | None = None
+    all: bool = True
     attr: str = "href"
-    source_category: str | list[str] | set[str] | tuple[str, ...] | None = None
-    category: str | None = None
+    source_page_type: str | list[str] | set[str] | tuple[str, ...] | None = None
+    page_type: str | None = None
     include: str | None = None
     exclude: str | None = None
     same_domain: bool = False

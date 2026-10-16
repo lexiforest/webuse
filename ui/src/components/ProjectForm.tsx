@@ -44,10 +44,7 @@ export type ProjectFormValue = {
   files?: ProjectFile[];
   revision?: string;
   workspacePath?: string;
-  savedVersion?: string | null;
-  changes?: { path: string; status: string }[];
   omitted?: string[];
-  publishedFiles?: ProjectFile[];
 };
 
 type ProjectFormProps = {
@@ -371,9 +368,6 @@ export default function ProjectForm(props: ProjectFormProps) {
   const [cron, setCron] = createSignal(props.initialValue.cron ?? "");
   const [files, setFiles] = createSignal<ProjectFile[]>(initialFileState);
   const [revision, setRevision] = createSignal(props.initialValue.revision);
-  const [publishedVersion, setPublishedVersion] = createSignal(props.initialValue.savedVersion);
-  const [publishedFiles, setPublishedFiles] = createSignal(props.initialValue.publishedFiles ?? []);
-  const [changes, setChanges] = createSignal(props.initialValue.changes ?? []);
   const [omitted, setOmitted] = createSignal(props.initialValue.omitted ?? []);
   const [externalChange, setExternalChange] = createSignal(false);
   const [selectedPath, setSelectedPath] = createSignal(files()[0]?.path ?? "webuse.yaml");
@@ -415,10 +409,7 @@ export default function ProjectForm(props: ProjectFormProps) {
   const acceptWorkspace = (project: ProjectFormValue) => {
     setFiles(project.files ?? []);
     setRevision(project.revision);
-    setChanges(project.changes ?? []);
     setOmitted(project.omitted ?? []);
-    setPublishedVersion(project.savedVersion);
-    setPublishedFiles(project.publishedFiles ?? []);
     setSavedSnapshot(projectSnapshot({ ...project, files: project.files ?? [] }));
     setExternalChange(false);
   };
@@ -443,12 +434,11 @@ export default function ProjectForm(props: ProjectFormProps) {
       if (explicit) setError(undefined);
     } catch (err) { if (explicit) setError(err instanceof Error ? err.message : String(err)); }
   };
-  const saveFiles = async (revert = false) => {
+  const saveFiles = async () => {
     if (!props.projectId || chatSending() || saving()) return;
-    if (revert && !window.confirm("Restore project files to the published version? Unpublished source changes will be discarded. Environments and excluded files are kept.")) return;
     setSaving(true); setError(undefined);
     try {
-      const response = await fetch(props.endpoint, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ files: files(), revision: revision(), action: revert ? "revert" : "save" }) });
+      const response = await fetch(props.endpoint, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ files: files(), revision: revision() }) });
       if (!response.ok) throw new Error(await readError(response, "Could not save workspace."));
       const data = await response.json() as ProjectSaveResponse;
       if (data.project) acceptWorkspace(data.project);
@@ -745,7 +735,7 @@ export default function ProjectForm(props: ProjectFormProps) {
       let buffer = "";
       let completed = false;
       const receive = (line: string) => {
-        const data = JSON.parse(line) as { type: string; text?: string; tool?: ToolActivity; error?: string; session?: { id: number }; messages?: LLMChatMessage[]; files?: ProjectFile[]; selectedPath?: string; revision?: string; changes?: { path: string; status: string }[]; omitted?: string[] };
+        const data = JSON.parse(line) as { type: string; text?: string; tool?: ToolActivity; error?: string; session?: { id: number }; messages?: LLMChatMessage[]; files?: ProjectFile[]; selectedPath?: string; revision?: string; omitted?: string[] };
         if (data.type === "text") setChatText(current => current + (data.text || ""));
         if (data.type === "status") setChatStatus(data.text || "");
         if (data.type === "tool" && data.tool) {
@@ -762,7 +752,6 @@ export default function ProjectForm(props: ProjectFormProps) {
           if (data.files) {
             setFiles(data.files);
             setRevision(data.revision);
-            setChanges(data.changes ?? []);
             setOmitted(data.omitted ?? []);
             const saved = JSON.parse(savedSnapshot()) as ProjectFormValue;
             setSavedSnapshot(projectSnapshot({ ...saved, files: data.files }));
@@ -923,24 +912,9 @@ export default function ProjectForm(props: ProjectFormProps) {
       <Show when={props.projectId}>
         <div class="mb-3 text-xs text-gray-400">
           <div class="break-all">Workspace: {props.initialValue.workspacePath}</div>
-          <div>Files saved here are available to local editors and Chat. Publish a version to update manual and scheduled runs.</div>
-          <Show when={publishedVersion()}><div>Published version: <code>{publishedVersion()?.slice(0, 12)}</code></div></Show>
+          <div>Runs use the current files on disk. Save edits before running; use Git to track and restore code.</div>
           <Show when={externalChange()}><div class="text-amber-300">Files changed on disk. Reload before saving; your editor changes have been kept.</div></Show>
           <Show when={omitted().length}><div>{omitted().length} binary or large files are available on disk but omitted from this editor.</div></Show>
-          <Show when={changes().length}>
-            <details class="mt-2">
-              <summary class="cursor-pointer">Review {changes().length} unpublished file changes</summary>
-              <For each={changes()}>{change => (
-                <details class="ml-3 mt-2">
-                  <summary class="cursor-pointer">{change.status}: {change.path}</summary>
-                  <div class="grid gap-2 md:grid-cols-2">
-                    <div>Published<pre class="max-h-56 overflow-auto whitespace-pre-wrap bg-gray-950 p-2">{publishedFiles().find(file => file.path === change.path)?.content ?? "(Absent or not previewable)"}</pre></div>
-                    <div>Working file<pre class="max-h-56 overflow-auto whitespace-pre-wrap bg-gray-950 p-2">{files().find(file => file.path === change.path)?.content ?? "(Absent or not previewable)"}</pre></div>
-                  </div>
-                </details>
-              )}</For>
-            </details>
-          </Show>
         </div>
       </Show>
 
@@ -1182,7 +1156,6 @@ export default function ProjectForm(props: ProjectFormProps) {
         <div class="flex justify-end gap-2">
           <Show when={props.projectId}>
             <Button type="button" size="compact" disabled={saving() || chatSending()} onClick={() => void reloadWorkspace(true)}>Reload files</Button>
-            <Button type="button" size="compact" disabled={saving() || chatSending() || !publishedVersion()} onClick={() => void saveFiles(true)}>Revert files</Button>
             <Button type="button" size="compact" disabled={saving() || chatSending()} onClick={() => void saveFiles()}>Save files</Button>
           </Show>
           <ButtonLink

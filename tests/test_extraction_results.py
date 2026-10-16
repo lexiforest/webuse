@@ -12,7 +12,7 @@ from webuse.models import CrawlRequest
 @pytest.mark.parametrize("kind", ["dict", "generator", "tuple", "normalized"])
 def test_engine_and_spider_share_parse_results(kind):
     def parse(response):
-        item = {"title": response.css_find("h1").text()}
+        item = {"title": response.find(css="h1").text()}
         requests = (
             [CrawlRequest(url="/page-1")] if response.crawl_request.depth == 0 else []
         )
@@ -41,7 +41,7 @@ def test_engine_and_spider_share_parse_results(kind):
 @pytest.mark.parametrize("awaitable", [False, True])
 def test_async_engine_and_spider_accept_async_iterables(awaitable):
     async def entries(response):
-        yield {"title": response.css_find("h1").text()}
+        yield {"title": response.find(css="h1").text()}
         if response.crawl_request.depth == 0:
             yield "/page-1"
 

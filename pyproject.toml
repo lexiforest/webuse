@@ -28,6 +28,7 @@ dependencies = [
   "aiofile>=3.12.3",
   "aiosqlite>=0.22.1",
   "redis>=8.1.0",
+  "jsonschema>=4.26",
 ]
 
 [project.optional-dependencies]

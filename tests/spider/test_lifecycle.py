@@ -60,7 +60,7 @@ def test_failed_run_cleans_up_and_spider_can_be_reused(asynchronous, failure):
     )
     assert events == expected
 
-    spider.parse = lambda response: {"title": response.css_find("h1").text()}
+    spider.parse = lambda response: {"title": response.find(css="h1").text()}
     assert run(pipelines=[]).items == [{"title": "Home"}]
     assert spider._run_state is None
 

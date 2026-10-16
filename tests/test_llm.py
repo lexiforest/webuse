@@ -141,19 +141,12 @@ def test_cli_startup_detects_local_openai_defaults_for_llm(monkeypatch, capsys):
     monkeypatch.setattr(llm.requests, "get", fake_get)
     monkeypatch.setattr("webuse.cli.fetch.request", lambda *args, **kwargs: FakeResponse())
 
-    code = cli.main(["fetch", "https://example.com", "--llm-extract", "Extract title"])
+    code = cli.main(["fetch", "https://example.com", "--llm-extract", "Extract title",
+                     "--schema", '{"type":"array","items":{"type":"string"}}'])
     out = capsys.readouterr().out.strip()
 
     assert code == 0
-    assert out == (
-        "{\n"
-        '  "url": "https://example.com",\n'
-        '  "matches": [\n'
-        '    "Local answer"\n'
-        "  ],\n"
-        '  "selector": "Extract title"\n'
-        "}"
-    )
+    assert out == '[\n  "Local answer"\n]'
     assert captured["prompt"] == "Extract title"
     assert captured["kwargs"]["model"] == "local-model"
     assert captured["kwargs"]["api_key"] == "lm-studio"

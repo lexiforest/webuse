@@ -19,13 +19,14 @@ from .async_state import (
     AsyncMemoryRequestSeen,
     async_state_info,
 )
+from .pages import compile_pages_config
 from .policy import (
     arobots_allowed,
     coerce_requests,
-    coerce_follow_result,
+    classify_request,
     domain,
     follow_allowed,
-    follow_candidates,
+    afollow_candidates,
     normalize_url,
     prepare_followup,
 )
@@ -36,6 +37,7 @@ async def acrawl(
     *,
     extract: Any = None,
     follow: Any = None,
+    pages: Any = None,
     max_depth: int = 0,
     max_requests: int | None = None,
     concurrency: int = 10,
@@ -52,7 +54,10 @@ async def acrawl(
     request_hasher: RequestHasher | None = None,
     signals: SignalBus | None = None,
 ) -> CrawlResult:
-    extract = compile_extraction(extract)
+    page_rules = compile_pages_config(pages)
+    extract = compile_extraction(extract if extract is not None else page_rules.extract)
+    follow = follow if follow is not None else page_rules.follow
+    page_type_patterns = page_rules.patterns
     if per_domain is not None and per_domain < 1:
         raise ValueError("per_domain must be positive")
     concurrency = max(1, concurrency)
@@ -76,6 +81,34 @@ async def acrawl(
 
     async def state_signal(name="state_updated"):
         await signal_bus.asend(name, **await async_state_info(queue, seen))
+
+    async def skip_request(request: CrawlRequest, reason: str) -> None:
+        if reason == "duplicate":
+            result.stats.skipped_duplicates += 1
+        else:
+            result.stats.skipped_rules += 1
+        logger.info(
+            "crawl request skipped method={} url={} reason={}",
+            request.method,
+            request.url,
+            reason,
+        )
+        await signal_bus.asend("request_skipped", request=request, reason=reason)
+
+    async def enqueue(request: CrawlRequest, source: str) -> bool:
+        request.url = normalize_url(request.url)
+        if not classify_request(request, page_type_patterns):
+            await skip_request(request, "rules")
+            return False
+        if dedupe and await seen.contains(hasher.hash(request)):
+            await skip_request(request, "duplicate")
+            return False
+        await queue.put(request)
+        async with condition:
+            condition.notify_all()
+        await signal_bus.asend("request_queued", request=request, source=source)
+        await state_signal()
+        return True
 
     async def fetch(request):
         async def download():
@@ -126,22 +159,18 @@ async def acrawl(
                 return
             request_after_downloader = True
             try:
+                request.url = normalize_url(request.url)
+                if not classify_request(request, page_type_patterns):
+                    await skip_request(request, "rules")
+                    await state_signal()
+                    continue
                 request_hash = hasher.hash(request)
                 is_new = await seen.add(request_hash)
                 if dedupe and not is_new:
-                    result.stats.skipped_duplicates += 1
-                    logger.info(
-                        "crawl request skipped method={} url={} reason=duplicate",
-                        request.method,
-                        request.url,
-                    )
-                    await signal_bus.asend(
-                        "request_skipped", request=request, reason="duplicate"
-                    )
+                    await skip_request(request, "duplicate")
                     continue
                 await state_signal()
-                normalized = normalize_url(request.url)
-                request.url = normalized
+                normalized = request.url
                 if not await arobots_allowed(
                     normalized,
                     enabled=robots_txt,
@@ -245,9 +274,7 @@ async def acrawl(
                     (item, None) for item in callback_followups
                 ]
                 for rule in follow_rules:
-                    found = follow_candidates(response, rule)
-                    if len(found) == 1 and inspect.isawaitable(found[0]):
-                        found = coerce_follow_result(await found[0])
+                    found = await afollow_candidates(response, rule)
                     discovered.extend(
                         (candidate, rule if isinstance(rule, FollowRule) else None)
                         for candidate in found
@@ -275,14 +302,8 @@ async def acrawl(
                         break
                     if result.close_reason is not None:
                         break
-                    await queue.put(next_request)
-                    async with condition:
-                        condition.notify_all()
-                    await state_signal()
-                    await signal_bus.asend(
-                        "request_queued", request=next_request, source="follow"
-                    )
-                    result.stats.followed_links += 1
+                    if await enqueue(next_request, "follow"):
+                        result.stats.followed_links += 1
             except IgnoreRequest:
                 result.stats.skipped_ignored += 1
                 logger.info(
@@ -340,9 +361,7 @@ async def acrawl(
     try:
         await state_signal("state_loaded")
         for seed in coerce_requests(seeds):
-            await queue.put(seed)
-            await signal_bus.asend("request_queued", request=seed, source="start")
-            await state_signal()
+            await enqueue(seed, "start")
         workers = [asyncio.create_task(worker()) for _ in range(concurrency)]
         await asyncio.gather(*workers)
         await state_signal()

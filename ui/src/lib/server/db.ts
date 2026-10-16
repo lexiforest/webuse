@@ -31,7 +31,6 @@ sqlite.exec(`
     git_url text,
     config text,
     workspace_path text NOT NULL,
-    saved_version text,
     cron text,
     next_run_at integer,
     created_at integer NOT NULL,

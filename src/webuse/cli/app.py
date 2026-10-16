@@ -12,7 +12,7 @@ _COMMAND_MODULES = [
     "webuse.cli.fetch",
     "webuse.cli.crawl",
     "webuse.cli.websocket",
-    "webuse.cli.ui",
+    "webuse.cli.serve",
 ]
 
 
@@ -28,7 +28,7 @@ def main(argv: list[str] | None = None) -> int:
     configure_logger()
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.command != "ui":
+    if args.command != "serve":
         configure_openai_defaults()
     if getattr(args, "use_async", False):
         return asyncio.run(args.async_func(args))

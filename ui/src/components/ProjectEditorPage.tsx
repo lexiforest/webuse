@@ -66,7 +66,7 @@ export default function ProjectEditorPage(props: ProjectEditorPageProps) {
               initialValue={value()}
               method="PUT"
               projectId={value().id}
-              submitLabel="Publish version"
+              submitLabel="Save project"
               tabBasePath={`/projects/${value().id}`}
             />
           )}

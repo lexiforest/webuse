@@ -7,8 +7,11 @@ type RuntimeState = {
   workspaceLocks: Set<number>;
   orchestrator: {
     active: Map<number, ReturnType<typeof spawn>>;
-    running: Set<number>;
+    running: Map<number, Promise<void>>;
     cancelling: Set<number>;
+    stopping: boolean;
+    shutdown?: Promise<void>;
+    terminations: WeakMap<ReturnType<typeof spawn>, Promise<void>>;
     timer?: ReturnType<typeof setInterval>;
     ticking: boolean;
   };
@@ -21,8 +24,10 @@ export const runtime: RuntimeState = shared.__webuseRuntime ??= {
   workspaceLocks: new Set(),
   orchestrator: {
     active: new Map(),
-    running: new Set(),
+    running: new Map(),
     cancelling: new Set(),
+    stopping: false,
+    terminations: new WeakMap(),
     ticking: false
   }
 };
