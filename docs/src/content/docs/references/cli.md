@@ -22,11 +22,13 @@ cd books_project
 webuse gen books https://books.toscrape.com/
 ```
 
-`webuse gen` puts a Pydantic `BookItem` model and `CleanBookPipeline` in the
-generated spider module, alongside the spider class. These are starter classes
-for the Books to Scrape example. The pipeline runs before the built-in JSONL
-writer through the spider's `items.pipelines.default`, or its Python `pipelines`
-attribute. YAML/TOML configs reference it as `spiders.<name>.CleanBookPipeline`.
+`webuse gen` puts a Pydantic `Item` model and `CleanPipeline` in the
+generated spider module, alongside the spider class. The starter extracts page
+titles and follows same-domain links from the supplied URL; generation does not
+inspect the target site. Customize the model and extraction rules for your data.
+The pipeline runs before the built-in JSONL
+writer through the spider's `pipelines`, or its Python `pipelines`
+attribute. YAML/TOML configs reference it as `spiders.<name>.CleanPipeline`.
 
 Run commands from the project directory, which must contain a root
 `webuse.yaml`, `webuse.yml`, or `webuse.toml`. Generation sanitizes the name
@@ -89,7 +91,7 @@ Set extraction/follow rules in spider config and request options in
 
 ## Local Service
 
-Start the UI, Chat, scheduler, and crawler process management together. Released
+Start the UI, Harness, scheduler, and crawler process management together. Released
 packages include the compiled UI and control plane:
 
 ```bash
@@ -106,8 +108,8 @@ browser, `--host` changes the bind address (default `127.0.0.1`), and
 Crawlers use the same Python interpreter as the launcher unless
 `WEBUSE_PYTHON_COMMAND` is set. `WEBUSE_DB_PATH` and `WEBUSE_WORK_DIR`
 override the database and run paths. This command does not probe Python model
-providers; configure Chat in the UI Settings. See [Harness](../../user-guide/harness/)
-for Chat, [Dashboard](../../user-guide/dashboard/) for runs and schedules, and
+providers; configure Harness in the UI Settings. See [Harness](../../user-guide/harness/)
+for Harness, [Dashboard](../../user-guide/dashboard/) for runs and schedules, and
 [Harness Internals](../../advanced/harness-internals/#source-development) for
 source development.
 

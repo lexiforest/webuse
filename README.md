@@ -66,9 +66,8 @@ name: my_project
 user_agent: chrome
 robots_txt: true
 llm: {}
-concurrency:
-  limit: 5
-  per_domain: 1
+concurrency: 5
+per_domain: 1
 log:
   level: info
   file: stderr
@@ -97,12 +96,10 @@ pages:
       books:
         fields:
           title: title
-items:
-  pipelines:
-    default:
-    - class: spiders.books.CleanBookPipeline
-    - type: jsonl
-      path: output.jsonl
+pipelines:
+- class: spiders.books.CleanPipeline
+- type: jsonl
+  path: output.jsonl
 ```
 
 `spiders/books.py` provides the item model, a cleanup pipeline you can customize,
@@ -110,25 +107,21 @@ and the spider class that loads the YAML:
 
 ```python
 import webuse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
-class BookItem(BaseModel):
+class Item(BaseModel):
     title: str
-    price: str = ""
-    availability: str = Field(
-        default="", description="Raw availability text from the listing page."
-    )
 
 
-class CleanBookPipeline(webuse.ItemPipeline):
-    def process_item(self, item: BookItem):
+class CleanPipeline(webuse.ItemPipeline):
+    def process_item(self, item: Item):
         return item
 
 
 class BooksSpider(webuse.Spider):
     spider_config_path = "spiders/books.yaml"
-    item_model = BookItem
+    item_model = Item
 ```
 
 Run a small crawl from `my_project/`:
@@ -142,7 +135,7 @@ You can write them yourself or use a coding agent with the
 [Webuse crawler skill](ui/skills/webuse-crawlers/SKILL.md). See the
 [quick-start guide](docs/src/content/docs/user-guide/quick-start.md) for examples.
 
-To use the local Chat, code editor, and dashboard:
+To use the local Harness, code editor, and dashboard:
 
 ```bash
 webuse serve
@@ -150,20 +143,15 @@ webuse serve
 
 The packaged UI opens at `http://127.0.0.1:2951/` and requires Node.js 22.19+.
 Configure a streaming, tool-capable OpenAI-compatible model in Settings to use
-Chat. Project files and run data stay on your machine; no Webuse Cloud account
+Harness. Project files and run data stay on your machine; no Webuse Cloud account
 is required. The CLI examples above require neither Node.js nor an LLM.
 
 ## Webuse Cloud
 
-Webuse Cloud is the planned managed environment for running crawlers in
+Webuse Cloud is the a managed environment for running crawlers in
 production, with isolated workspaces, proxies, hosted browsers, CAPTCHA solving,
-Defuddle-based HTML-to-Markdown extraction, and an integrated LLM API. Monitoring,
-streaming logs, failure diagnosis, and data checks are also planned.
-
-The goal is to bring existing Scrapy projects or other crawler code with minimal
-changes, or deploy a crawler built locally. The Webuse framework will be optional,
-with portable projects, downloadable data, and support for your own providers.
-Cloud deployment and these managed services are not implemented in this checkout.
+HTML-to-Markdown extraction, and an integrated LLM API. It also provides Monitoring,
+streaming logs, failure diagnosis, and data checks.
 
 Learn more at [impersonate.pro/webuse](https://impersonate.pro/webuse).
 
@@ -181,6 +169,7 @@ npm run dev
 Run Python checks from the repository root:
 
 ```bash
+uv run ruff check .
 uv run python3 -m compileall src tests
 uv run pytest -q
 ```
@@ -198,8 +187,6 @@ welcome. Include reproduction steps for bugs, update relevant docs, and run the
 checks affected by your change. See [local UI setup](ui/README.md),
 [docs development](docs/README.md), and
 [release packaging](docs/src/content/docs/advanced/package-release.md) for details.
-
-
 
 ## Documentation and development
 

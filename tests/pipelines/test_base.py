@@ -67,8 +67,7 @@ def test_spider_config_jsonl_pipeline_from_toml(tmp_path, with_project):
     (tmp_path / "spiders").mkdir()
     (tmp_path / "spiders/books.toml").write_text(
         """
-[items.pipelines]
-default = [
+pipelines = [
   { type = "jsonl", path = "items.jsonl" },
 ]
 """,
@@ -96,8 +95,7 @@ def test_spider_does_not_search_upwards_for_project_config(tmp_path, monkeypatch
     nested.mkdir(parents=True)
     (project / "webuse.toml").write_text(
         """
-[concurrency]
-limit = 1
+concurrency = 1
 """,
         encoding="utf-8",
     )
@@ -118,8 +116,7 @@ limit = 1
 def test_spider_pipelines_take_precedence_over_spider_config(tmp_path):
     (tmp_path / "books.toml").write_text(
         """
-[items.pipelines]
-default = [
+pipelines = [
   { type = "jsonl", path = "configured.jsonl" },
 ]
 """,
@@ -156,8 +153,7 @@ class MarkPipeline:
     (tmp_path / "spiders").mkdir()
     (tmp_path / "spiders/books.toml").write_text(
         """
-[items.pipelines]
-default = [
+pipelines = [
   { class = "project_pipelines.MarkPipeline" },
 ]
 """,
@@ -201,7 +197,7 @@ def test_run_pipeline_override_takes_precedence(tmp_path):
 def test_empty_pipeline_override_disables_spider_config(tmp_path, asynchronous, override):
     config_path = tmp_path / "books.yaml"
     config_path.write_text(
-        "items:\n  pipelines:\n    default:\n      - type: jsonl\n        path: items.jsonl\n"
+        "pipelines:\n  - type: jsonl\n    path: items.jsonl\n"
     )
 
     class Books(webuse.AsyncSpider if asynchronous else Spider):

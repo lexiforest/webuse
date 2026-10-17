@@ -4,43 +4,33 @@
 
 Webuse is a local-first crawler development toolkit with a managed cloud
 environment for production execution. Our primary users are technical users who
-write scraping code with coding agents such as Codex and Claude.
+write scraping code with coding agents such as Codex and Claude. These users
+want inspectable code, freedom to use their own tools, and less work operating
+crawlers against changing websites.
 
 Read [HUMAN.md](HUMAN.md) first: it is the human-maintained source of truth for
 product direction. Never edit HUMAN.md, including formatting or typo fixes. Align
 other documentation with it; when a detail is unspecified, keep it open rather
 than inventing a decision. HUMAN.md takes precedence over derived product docs.
 
-The product must support:
+Read README.md for the general picture.
 
-- Bringing existing Scrapy projects and other crawler code with minimal changes
-  and no mandatory migration to the Webuse Python framework.
-- Generating new crawlers with the optional framework, CLI, examples, and skills.
-- Generating agentic crawlers whose execution schedules are dynamically controlled
-  by an LLM. This is a runtime capability, not merely AI-generated crawler code.
-- A complete local experience with Chat, an orchestrator, project code, and a
+Read `docs` directory for detailed documentation when necessary.
+
+The product will support:
+
+- Generating new crawlers with the framework, CLI, examples, and skills.
+- A complete local experience with Harness, an orchestrator, project code, and a
   crawler dashboard, including LLM monitoring and advice.
-- Automatic LM Studio and Ollama discovery for local Chat, with explicit provider
-  settings taking precedence.
 - A consistent workflow from local execution to optional cloud deployment.
 - Cloud workspaces with scraping services made available to agents through
   preloaded skills and runtime configuration.
-- A Defuddle-based HTML-to-Markdown extraction API as a planned service.
-- An integrated cloud LLM API for agentic crawlers and analysis.
 - No vendor lock-in: portable crawler projects and all user data downloadable at
   any time. Provider integrations must remain replaceable.
 
 The hosted website creates and executes crawlers in cloud workspaces. Local use
 must remain useful without a Webuse Cloud account. Users may supply their own
 model credentials and infrastructure providers.
-
-Webuse is a local-first crawler development toolkit with a managed cloud
-environment for production execution.
-
-The primary customer is a developer or technical power user who writes scraping
-code with a coding agent, including Codex or Claude. These users
-want inspectable code, freedom to use their own tools, and less work operating
-crawlers against changing websites.
 
 The product promise is: bring a crawler or generate one, validate it locally,
 and deploy it to a prepared environment with the scraping services it needs.
@@ -52,46 +42,45 @@ Support three sources of crawler code:
    Adopting the Webuse framework must not be a prerequisite for cloud execution.
 2. **External coding agents:** use Codex, Claude, or another agent with the Python
    framework, examples, and skills when helpful.
-3. **Built-in Chat:** describe a crawler and generate inspectable project files
+3. **Built-in Harness:** describe a crawler and generate inspectable project files
    in Webuse's local or cloud environment.
 
-## Current implementation and repository map
+## Coding
+
+- Ask the user whether backwards compatibility should be maintained, do NOT make
+  assumption by yourself.
+- Prefer concise, minimal, consistent implementation.
+
+## Repository map
 
 The repository currently contains a Python scraping framework and a Node/SolidStart
-local control plane. Managed cloud deployment, sandboxed tenant workspaces, hosted
-browsers, CAPTCHA vendor integration, and the extraction API are planned work;
-do not imply that they are already available.
+local control plane.
 
-The Python provider helpers already discover local LM Studio and Ollama servers.
-Built-in Chat embeds Pi's coding-agent SDK with native filesystem and shell tools
+Managed cloud deployment, sandboxed tenant workspaces, hosted browsers, CAPTCHA
+vendor integration, and the extraction API are in other private repository;
+Their API is still not public yet. (CHANGE THIS WHEN ITS EXPLICTLY PROVIDED)
+
+### Harness
+
+Built-in Harness embeds Pi's coding-agent SDK with native filesystem and shell tools
 in persistent project directories, plus Webuse HTTP inspection, Python, sample
 crawl, and run inspection tools. Working source is stored on disk; SQLite owns
-metadata and run records. Open-source manual, scheduled, and sample jobs execute
-the current working directory directly, without source snapshots or publication.
-Users track and restore their code with Git. Chat edits persist immediately. Pi owns the agent
-loop, streaming, session context, retries, and compaction; keep this integration
-small instead of rebuilding those mechanisms. The UI and Node orchestrator remain
-Webuse-owned. The bundled skill lives in `ui/skills/webuse-crawlers/SKILL.md`.
+metadata and run records.
+
+Pi owns the agent loop, streaming, session context, retries, and compaction; keep this integration
+small instead of rebuilding those mechanisms.
+
+The scheduler manual, scheduled, and sample jobs execute the spider project directly,
+without source snapshots or publication.
+Users will track and restore their code with Git. Harness edits persist immediately.
+
+The UI and Node orchestrator remain Webuse-owned.
+The bundled skill lives in `ui/skills/webuse-crawlers/SKILL.md`.
 Model endpoints must support streaming OpenAI-compatible tool calls. Local shell/Python
 tools run as the UI user; their time limits are not a security sandbox. Pi session
-entries persist in SQLite. Do not load ambient Pi extensions, skills, or credentials.
-The UI Chat currently uses configured settings; automatic discovery there, LLM
-monitoring/advice, a metrics time-series database, and full data export still need
-implementation. Existing log views poll stored logs; streaming logs are a target.
-Current scheduling uses fixed cron expressions. Agentic scheduling and the
-integrated cloud LLM API are not implemented; existing model-provider helpers
-and Chat calls are not those services.
+entries persist in SQLite.
 
-Separately, `AgenticSpider` / `agentic_crawl()` use the goal to drive follow-up
-requests and extraction through Python tools. Reuse `RequestQueue`, `RequestSeen`,
-and `RequestHasher`. The model uses `queue_push`, `queue_pop`, `seen_add`, and
-`seen_exist`; `queue_pop` releases the current request and downloads the next one.
-The engine stops on an empty queue with no active request, without an LLM finish
-decision. Declared output models, cross-page drafts, and the total token budget
-remain supported. This uses the existing Python project/CLI/pipeline
-workflow, independently of Chat. Keep it distinct from future LLM scheduling.
-Model-written Python, browser actions, durable resume, and a dedicated trace UI
-are not implemented. Custom project tools are trusted code, not sandboxed tools.
+### Files
 
 - `src/webuse/__init__.py`: public Python exports.
 - `src/webuse/http/client.py`: thin curl_cffi session subclasses and top-level helpers.
@@ -114,109 +103,46 @@ are not implemented. Custom project tools are trusted code, not sandboxed tools.
   the run queue, and Python crawler subprocesses.
 - `tests/`, `ui/tests/`: Python tests and control-plane smoke tests.
 - `docs/`: Astro/Starlight documentation site with Markdown pages in
-  `docs/src/content/docs/`; use Node.js 22.19+ and npm to build it.
+  `docs/src/content/docs/`: The docs raw content
 - `examples/`: crawler examples.
-
-## Product and architecture rules
-
-- Keep Chat, Code, and Dashboard connected to the same project and run model.
-  Chat creates and operates crawlers; code defines their behavior; the dashboard
-  exposes runs, records, failures, schedules, and usage without requiring a chat.
-- Agent edits must produce inspectable project files and configuration. Ordinary
-  crawlers must run without an agent or LLM present unless their extraction
-  explicitly depends on one. Agentic crawlers explicitly require model access
-  for dynamic scheduling; do not apply the model-free runtime assumption to them.
-- Keep AI-assisted code generation, monitoring/advice, and agentic scheduling
-  distinct. Agentic scheduling lets an LLM determine when a crawler executes; it
-  does not imply autonomous code repair, deployment, or browser navigation.
-- The orchestrator must validate and enact LLM scheduling decisions within the
-  configured execution and spending limits. The scheduling contract, decision
-  cadence, and model-failure behavior remain open design decisions.
-- Keep crawler logic portable. Separate entry points, dependencies, inputs,
-  secrets, outputs, and service configuration from the execution target.
-- Do not require imported scripts to subclass a Webuse type. Advanced telemetry
-  and record-level features may require an explicit adapter or reporting API.
-- Treat existing Scrapy projects, external-agent code, and built-in Chat code as
-  supported product entry points. Current Webuse CLI support is not proof that a
-  Scrapy project can already run unchanged.
-- Make Run locally and Deploy to cloud explicit choices in the local UI once
-  implemented. Successful local execution does not guarantee cloud success;
-  validate dependencies, network identity, sessions, and service configuration.
-- LLM monitoring should provide evidence-based advice from metrics, logs, failed
-  responses, and data checks. Do not turn advice into unrequested code deployment.
-- Build a simple metrics emitter, a StatsD-like wire protocol, and a time-series
-  database for the dashboard. Reuse the existing `webuse.metrics` emitter where
-  appropriate; the database and dashboard ingestion are not implemented yet.
-- Keep CLI/API discovery consistent. MCP is an optional integration proposal from
-  earlier discussion, not a requirement in the current HUMAN.md; its inclusion,
-  tool set, and delivery scope remain open.
+- Keep Harness, Code, and Dashboard connected to the same project and run model.
+  Harness creates and operates crawlers; code defines their behavior; the dashboard
+  exposes runs, records, failures, schedules, and usage without requiring a Harness session.
 - Keep the CLI as a client of the Python APIs; do not duplicate crawl logic there.
   Keep control-plane orchestration separate from the crawler runtime.
 - Preserve the current Node/Python ownership boundary unless an approved task
   changes it. A local subprocess runner is not a tenant isolation boundary.
 - Prefer a small, additive deployment contract over a deep framework. Its exact
   schema and arbitrary-script runner are still to be designed.
-- Keep durable workspace state separate from active compute. Open-source runs
-  use working files on disk, independently of an interactive session; users own
-  Git versioning. Cloud source-version guarantees remain a separate design.
-- Do not introduce cloud-only code paths into otherwise portable crawler logic.
-  Reveal environment differences before execution instead of silently changing
-  crawler behavior.
 
-## Crawling services and agent integration
+### Rust implementation
 
-The cloud direction is managed proxies, on-demand hosted browsers, a separate
-CAPTCHA solver integration, HTML-to-Markdown extraction, and an integrated LLM API
-for agentic crawlers and analysis. Bright Data must not
-be a required default dependency of the base plan. Vendors and allowances remain
-open decisions, except the worker sizes and Free runtime allowance specified below.
+We have a prototype of the rust implementation in the `crates` directory. In rust,
+all the logic are defined as yaml files.
 
-- Prefer standard proxy and browser interfaces where they preserve existing code.
-  Keep provider integrations replaceable and support user-supplied credentials.
-- Browser hosting is a cloud capability; do not build a new browser engine or make
-  browser automation a mandatory dependency of the Python HTTP framework.
-- Rendering and CAPTCHA handling are separate capabilities. Do not promise that
-  a browser or solver works against every target.
-- Keep HTTP the inexpensive path when sufficient. Browser use, solving, retries,
-  and more expensive proxy routes must respect explicit configuration and budgets.
-- Use Defuddle for HTML-to-Markdown extraction. Input modes, content policy, API
-  contract, and the local equivalent remain design decisions; the engine choice
-  is settled by HUMAN.md.
-- Provide integrated monitoring, streaming logs, diagnosis from failed responses
-  and logs, and data sanity checks as product requirements, not optional extras.
-- Skills explain stable workflows and service APIs. Runtime discovery reports
-  available services, supported options, and remaining allowances.
-- Supply credentials through runtime configuration, never through skill text,
-  prompts, committed files, or generated source.
-- Reuse skills across local coding agents and cloud agents. Cloud preconfiguration
-  should remove setup work, not invent a separate crawler programming model.
-- Document LLM service capabilities through skills/discovery and supply provider
-  access through runtime configuration. Preserve local/user-supplied model access;
-  cloud API shape, supported models, and included inference allowances remain open.
+## Cloud offering
 
-## Cloud execution constraints
+Webuse Cloud is implemented in another private repo. Here are the things we need to
+prepare for the cloud execution.
 
-The business planning baseline is $99/month with a target margin of at least 50%.
-HUMAN.md sets Pro and Free environments to 1 vCPU and 2 GiB RAM. Pro is monthly;
-Free includes four hours of runtime. Pro runtime hours, whether Free hours renew,
-the allocation scope, concurrency, and service allowances are not specified. Do
-not interpret monthly as unlimited compute or four hours as a monthly reset.
-The margin definition, vendor costs, and remaining allowances are still open.
-
-- Treat customer code as untrusted, whether launched through Chat, SSH, or a job.
-- Enforce resource limits and usage accounting outside user-controlled code.
-- Bound CPU, memory, temporary disk, process growth, duration, concurrency, logs,
-  results, network traffic, and paid service consumption.
-- Isolate customer workspaces from other tenants, host administration, cluster
-  credentials, internal services, and cloud instance credentials.
+- Treat customer code as untrusted, whether launched through Harness, SSH, or a job.
+- The local UI is smiliar to the cloud one, but without permissions and quotas.
 - SSH is a proposed workspace access method, not permission to bypass isolation
   or allowances. Its authentication and lifecycle are still open.
 - Kubernetes is the starting orchestration platform. The sandbox runtime and
   tenant isolation design are not selected yet.
 - Provide a Docker image for the isolated agent environment. The current UI image
   is a control-plane image, not that environment or a complete isolation boundary.
-- Do not treat Kubernetes resource quotas as a monthly billing system. Cloud
-  execution also needs a usage ledger and cutoff enforcement.
+- Prefer standard proxy and browser interfaces where they preserve existing code.
+  Keep provider integrations replaceable and support user-supplied credentials.
+- Keep HTTP the inexpensive path when sufficient. Browser use, solving, retries,
+  and more expensive proxy routes must respect explicit configuration and budgets.
+- Skills explain stable workflows and service APIs. Runtime discovery reports
+  available services, supported options, and remaining allowances.
+- Supply credentials through runtime configuration, never through skill text,
+  prompts, committed files, or generated source.
+- Reuse skills across local coding agents and cloud agents. Cloud preconfiguration
+  should remove setup work, not invent a separate crawler programming model.
 
 ## Python and crawl conventions
 
@@ -236,13 +162,10 @@ The margin definition, vendor costs, and remaining allowances are still open.
   a separate Webuse Python WebSocket API or re-export curl_cffi socket types.
 - Wire request options consistently across sync, async, and CLI surfaces where
   applicable.
-- Webuse has not released its first version. Keep only the current APIs and
-  formats: do not add compatibility aliases, migration helpers, legacy schema
-  branches, or tests for superseded interfaces. Update callers and docs directly.
 - Keep crawl logic function-based in `engine/`, with lightweight Spider and
   ItemPipeline idioms. Spider compiles configuration, the engine owns crawl
   policy, and spiders run pipelines using internal helpers in `pipelines/utils.py`.
-- Keep `items.pipelines` in spider configuration, including inline spider entries,
+- Keep `pipelines` in spider configuration, including inline spider entries,
   rather than project defaults. Shared implementations may live in `pipelines.py`;
   configured pipeline paths resolve relative to the project root.
 - Project creation does not generate root `items.py` or `pipelines.py`. Spider
@@ -258,8 +181,7 @@ The margin definition, vendor costs, and remaining allowances are still open.
   Direct Python library APIs
   remain usable without a project; Scrapy/arbitrary-script adapters are planned.
 - Use YAML for Webuse configuration in documentation, examples, and new project
-  scaffolds. TOML loading and explicit generation remain supported; Python
-  packaging metadata stays in `pyproject.toml`.
+  scaffolds. TOML loading and explicit generation remain supported, but not mentioned.
 - In documentation examples, enter the project with `cd PROJECT` and run
   generation and crawl commands from there using their current-directory defaults.
 - Plain selectors must work without an LLM. `find(css=...)` and
@@ -277,9 +199,11 @@ The margin definition, vendor costs, and remaining allowances are still open.
   between selection, value reading, structured interpretation, and crawl policy.
 - Preserve machine-friendly CLI output, including JSONL workflows, and align
   config-file naming with Python API naming. Document command-specific formats
-  accurately rather than claiming every command emits JSONL by default.
+  accurately rather than claiming every command emits JSONL by default. However, when
+  printing to an interactive shell, make the output indented for JSON output.
 
-## Dependencies and verification
+
+## Development
 
 Use `uv` for Python dependency management; do not use `pip install` directly.
 
@@ -320,12 +244,8 @@ prose.
 
 ## Editing rules
 
-- Never edit HUMAN.md. It is maintained exclusively by the user.
-- Use `apply_patch` for file edits.
-- Keep files ASCII unless the file already requires Unicode.
+- Use `ruff` to format the code.
+- Never edit HUMAN.md. It is managed exclusively by the maintainer.
 - Preserve unrelated user changes, including staged work.
 - Do not add generated runtime data, credentials, or selector state to the repo.
-- Update PLAN.md when a product decision is explicitly settled; proposals and
-  implementation tasks must remain visibly separate from confirmed decisions.
-- Do not treat this roadmap as authorization to implement every planned feature.
 - DO NOT COMMIT for the user.

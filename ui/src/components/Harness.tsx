@@ -7,7 +7,7 @@ import Button from "~/components/Button";
 
 marked.setOptions({ async: false, breaks: true, gfm: true });
 
-export type LLMChatMessage = {
+export type HarnessMessage = {
   role: "user" | "assistant";
   content: string;
   metadata?: {
@@ -18,8 +18,8 @@ export type LLMChatMessage = {
 
 export type ToolActivity = { id: string; name: string; status: "running" | "succeeded" | "failed" };
 
-type LLMChatProps = {
-  messages?: LLMChatMessage[];
+type HarnessProps = {
+  messages?: HarnessMessage[];
   value: string;
   pending?: boolean;
   loading?: boolean;
@@ -50,7 +50,7 @@ function renderMarkdown(text: string) {
     : html;
 }
 
-export default function LLMChat(props: LLMChatProps) {
+export default function Harness(props: HarnessProps) {
   const userName = () => props.userName || "You";
   const assistantName = () => props.assistantName || "Assistant";
 

@@ -157,7 +157,7 @@ def serve_command(args: argparse.Namespace) -> int:
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
-    description = "Start the local service: UI, Chat, scheduler, and crawler process management"
+    description = "Start the local service: UI, Harness, scheduler, and crawler process management"
     parser = subparsers.add_parser("serve", help=description, description=description)
     parser.add_argument("--host", default="127.0.0.1", help="Bind address (default: 127.0.0.1)")
     parser.add_argument("--port", type=_port, default=DEFAULT_PORT, help="Listen port (default: 2951)")

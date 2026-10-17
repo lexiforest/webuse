@@ -162,7 +162,7 @@ class BaseSpider:
                 base_dir=project_base_dir,
                 asynchronous=self._async_pipelines,
             )
-        specs = spider_config.pipeline_specs() if spider_config is not None else None
+        specs = spider_config.pipelines if spider_config is not None else None
         base_dir = project_base_dir
         if base_dir is None and self.spider_config_path is not None:
             base_dir = Path(self.spider_config_path).parent
@@ -184,18 +184,21 @@ class BaseSpider:
         spider_config = spider_config or self._spider_config()
         if spider_config is not None:
             for key in spider_config.model_fields_set & _SPIDER_CONFIG_FIELDS:
-                if key in {"same_domain", "items"}:
+                if key in {"same_domain", "pipelines"}:
                     continue
                 if key not in setting_fields:
                     raise ConfigError(f"Spider config {key!r} requires AgenticSpider")
                 value = getattr(spider_config, key)
                 values[key] = value
 
-        concurrency_defaults = project_config.concurrency if project_config else {}
         if values["concurrency"] is None:
-            values["concurrency"] = concurrency_defaults.get("limit", 10)
+            values["concurrency"] = (
+                project_config.concurrency if project_config else None
+            ) or 10
         if values["per_domain"] is None:
-            values["per_domain"] = concurrency_defaults.get("per_domain")
+            values["per_domain"] = (
+                project_config.per_domain if project_config else None
+            )
         if values["robots_txt"] is None:
             values["robots_txt"] = (
                 project_config.robots_txt

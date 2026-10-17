@@ -26,7 +26,8 @@ def test_create_command_scaffolds_project(tmp_path, capsys):
     assert "books.toscrape.com" not in str(config)
     assert "crawl" not in config
     assert config["llm"] == {}
-    assert config["concurrency"] == {"limit": 5, "per_domain": 1}
+    assert config["concurrency"] == 5
+    assert config["per_domain"] == 1
 
 
 def test_create_command_refuses_non_empty_folder_without_force(tmp_path):

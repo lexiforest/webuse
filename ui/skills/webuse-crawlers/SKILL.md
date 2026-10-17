@@ -1,6 +1,6 @@
 ---
 name: webuse-crawlers
-description: Create, inspect, test, and debug portable Webuse crawler projects using the local Chat tools.
+description: Create, inspect, test, and debug portable Webuse crawler projects using the local Harness tools.
 ---
 
 # Webuse crawler development
@@ -39,15 +39,15 @@ single-file crawl targets are not supported. Use `webuse create DIRECTORY` to
 scaffold a project, enter it with `cd DIRECTORY`, and use `webuse gen` to add
 registered spiders. Documentation examples should use these current-directory defaults.
 
-Configure `items.pipelines` in each spider's YAML/TOML config, or under its
+Configure `pipelines` in each spider's YAML/TOML config, or under its
 `spiders.<name>` entry when inline. Project-level settings do not supply item
 pipelines. Shared pipeline implementations can live in `pipelines.py`; configured
 paths resolve relative to the project root. Python spiders can set `pipelines`,
 and `run(pipelines=...)` overrides the chain. Pipelines require Pydantic items;
 set `Spider.item_model` or an extractor's `item_model` when returning dictionaries.
-`create` does not generate root item or pipeline modules. `gen` defines `BookItem`
-and `CleanBookPipeline` in the generated spider module; YAML/TOML references use
-`spiders.<name>.CleanBookPipeline`. Shared modules can be added when needed.
+`create` does not generate root item or pipeline modules. `gen` defines `Item`
+and `CleanPipeline` in the generated spider module; YAML/TOML references use
+`spiders.<name>.CleanPipeline`. Shared modules can be added when needed.
 Use `gen --async` to generate an `AsyncSpider` with YAML, TOML, or `--python-only`.
 The regular `crawl` command automatically awaits Python `AsyncSpider` classes.
 

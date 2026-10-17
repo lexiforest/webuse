@@ -19,7 +19,7 @@ import {
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
 import Button, { ButtonLink } from "~/components/Button";
-import LLMChat, { type LLMChatMessage, type ToolActivity } from "~/components/LLMChat";
+import Harness, { type HarnessMessage, type ToolActivity } from "~/components/Harness";
 import ProjectVisual from "~/components/ProjectVisual";
 import {
   Collapsible,
@@ -375,19 +375,19 @@ export default function ProjectForm(props: ProjectFormProps) {
   const [error, setError] = createSignal<string>();
   const [fileSidebarOpen, setFileSidebarOpen] = createSignal(true);
   const [expanded, setExpanded] = createSignal(false);
-  const [chatWidth, setChatWidth] = createSignal(352);
-  const [resizingChat, setResizingChat] = createSignal(false);
-  const [chatInput, setChatInput] = createSignal("");
-  const [chatMessages, setChatMessages] = createSignal<LLMChatMessage[]>([]);
-  const [chatError, setChatError] = createSignal<string>();
-  const [chatSessionId, setChatSessionId] = createSignal<number>();
-  const [chatLoading, setChatLoading] = createSignal(false);
-  const [chatSending, setChatSending] = createSignal(false);
-  const [chatText, setChatText] = createSignal("");
-  const [chatTools, setChatTools] = createSignal<ToolActivity[]>([]);
-  const [chatStatus, setChatStatus] = createSignal("");
-  let chatRequest: AbortController | undefined;
-  onCleanup(() => chatRequest?.abort());
+  const [harnessWidth, setHarnessWidth] = createSignal(352);
+  const [resizingHarness, setResizingHarness] = createSignal(false);
+  const [harnessInput, setHarnessInput] = createSignal("");
+  const [harnessMessages, setHarnessMessages] = createSignal<HarnessMessage[]>([]);
+  const [harnessError, setHarnessError] = createSignal<string>();
+  const [harnessSessionId, setHarnessSessionId] = createSignal<number>();
+  const [harnessLoading, setHarnessLoading] = createSignal(false);
+  const [harnessSending, setHarnessSending] = createSignal(false);
+  const [harnessText, setHarnessText] = createSignal("");
+  const [harnessTools, setHarnessTools] = createSignal<ToolActivity[]>([]);
+  const [harnessStatus, setHarnessStatus] = createSignal("");
+  let harnessRequest: AbortController | undefined;
+  onCleanup(() => harnessRequest?.abort());
   const [activeTab, setActiveTab] = createSignal<ProjectFormTab>(
     props.defaultTab ?? "settings",
   );
@@ -414,14 +414,14 @@ export default function ProjectForm(props: ProjectFormProps) {
     setExternalChange(false);
   };
   const reloadWorkspace = async (explicit = false) => {
-    if (!props.projectId || chatSending() || saving()) return;
+    if (!props.projectId || harnessSending() || saving()) return;
     if (explicit && isDirty() && !window.confirm("Discard unsaved editor changes and reload files from disk?")) return;
     const loadedRevision = revision();
     try {
       const response = await fetch(props.endpoint);
       if (!response.ok) throw new Error(await readError(response, "Could not reload workspace."));
       const data = await response.json() as ProjectSaveResponse;
-      if (!data.project || chatSending() || saving() || loadedRevision !== revision()) return;
+      if (!data.project || harnessSending() || saving() || loadedRevision !== revision()) return;
       if (!explicit && isDirty()) {
         if (data.project.revision !== revision()) setExternalChange(true);
         return;
@@ -435,7 +435,7 @@ export default function ProjectForm(props: ProjectFormProps) {
     } catch (err) { if (explicit) setError(err instanceof Error ? err.message : String(err)); }
   };
   const saveFiles = async () => {
-    if (!props.projectId || chatSending() || saving()) return;
+    if (!props.projectId || harnessSending() || saving()) return;
     setSaving(true); setError(undefined);
     try {
       const response = await fetch(props.endpoint, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ files: files(), revision: revision() }) });
@@ -481,7 +481,7 @@ export default function ProjectForm(props: ProjectFormProps) {
       return;
     }
 
-    if (chatSending()) {
+    if (harnessSending()) {
       event.preventDefault();
       setTimeout(blockAssistantLeave, 0);
       return;
@@ -511,7 +511,7 @@ export default function ProjectForm(props: ProjectFormProps) {
     onCleanup(() => window.removeEventListener("popstate", syncTabFromPath));
 
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!isDirty() && !chatSending()) {
+      if (!isDirty() && !harnessSending()) {
         return;
       }
       event.preventDefault();
@@ -526,7 +526,7 @@ export default function ProjectForm(props: ProjectFormProps) {
 
     const projectId = props.projectId;
     if (projectId) {
-      setChatLoading(true);
+      setHarnessLoading(true);
       void (async () => {
         try {
           const response = await fetch(`/api/assistant-project?project_id=${projectId}`);
@@ -535,20 +535,20 @@ export default function ProjectForm(props: ProjectFormProps) {
           }
           const data = await readJsonResponse<{
             session?: { id: number };
-            messages?: LLMChatMessage[];
+            messages?: HarnessMessage[];
           }>(response);
-          setChatSessionId(data.session?.id);
-          setChatMessages(data.messages ?? []);
+          setHarnessSessionId(data.session?.id);
+          setHarnessMessages(data.messages ?? []);
         } catch (err) {
-          setChatError(err instanceof Error ? err.message : "Failed to load assistant history");
+          setHarnessError(err instanceof Error ? err.message : "Failed to load assistant history");
         } finally {
-          setChatLoading(false);
+          setHarnessLoading(false);
         }
 
         const pendingPrompt = window.sessionStorage.getItem(pendingPromptKey(projectId));
         if (pendingPrompt) {
           window.sessionStorage.removeItem(pendingPromptKey(projectId));
-          await sendChatMessage(pendingPrompt);
+          await sendHarnessMessage(pendingPrompt);
         }
       })();
     }
@@ -581,7 +581,7 @@ export default function ProjectForm(props: ProjectFormProps) {
     }
   };
 
-  const startChatResize = (event: PointerEvent) => {
+  const startHarnessResize = (event: PointerEvent) => {
     event.preventDefault();
     const pointerId = event.pointerId;
     const target = event.currentTarget as HTMLElement;
@@ -591,16 +591,16 @@ export default function ProjectForm(props: ProjectFormProps) {
     }
 
     target.setPointerCapture(pointerId);
-    setResizingChat(true);
+    setResizingHarness(true);
 
     const onMove = (moveEvent: PointerEvent) => {
       const rect = editor.getBoundingClientRect();
       const nextWidth = rect.right - moveEvent.clientX;
       const maxWidth = Math.max(280, rect.width - 360);
-      setChatWidth(Math.round(Math.min(Math.max(nextWidth, 280), maxWidth)));
+      setHarnessWidth(Math.round(Math.min(Math.max(nextWidth, 280), maxWidth)));
     };
     const onDone = () => {
-      setResizingChat(false);
+      setResizingHarness(false);
       if (target.hasPointerCapture(pointerId)) {
         target.releasePointerCapture(pointerId);
       }
@@ -615,7 +615,7 @@ export default function ProjectForm(props: ProjectFormProps) {
   };
 
   const updateSelectedFile = (patch: Partial<ProjectFile>) => {
-    if (chatSending() || saving()) return;
+    if (harnessSending() || saving()) return;
     const currentPath = selectedFile()?.path;
     if (!currentPath) {
       return;
@@ -635,7 +635,7 @@ export default function ProjectForm(props: ProjectFormProps) {
   };
 
   const addFile = () => {
-    if (chatSending() || saving()) return;
+    if (harnessSending() || saving()) return;
     const path = window.prompt("New file path", "spiders/new_spider.py")?.trim();
     if (!path) {
       return;
@@ -650,7 +650,7 @@ export default function ProjectForm(props: ProjectFormProps) {
   };
 
   const renameFile = (path: string, nextPathValue: string) => {
-    if (chatSending() || saving()) return;
+    if (harnessSending() || saving()) return;
     const nextPath = nextPathValue.trim();
     if (!nextPath) {
       return;
@@ -680,7 +680,7 @@ export default function ProjectForm(props: ProjectFormProps) {
   };
 
   const deleteFile = (path: string) => {
-    if (chatSending() || saving()) return;
+    if (harnessSending() || saving()) return;
     if (files().length <= 1) {
       return;
     }
@@ -692,32 +692,32 @@ export default function ProjectForm(props: ProjectFormProps) {
     setSelectedPath(next[0]?.path ?? "webuse.yaml");
   };
 
-  const sendChatMessage = async (initialPrompt?: string) => {
-    if (chatSending() || saving()) return;
-    const prompt = (initialPrompt ?? chatInput()).trim();
+  const sendHarnessMessage = async (initialPrompt?: string) => {
+    if (harnessSending() || saving()) return;
+    const prompt = (initialPrompt ?? harnessInput()).trim();
     if (!prompt) {
       return;
     }
     if (!props.projectId) {
-      setChatError("Save the project before using the LLM assistant.");
+      setHarnessError("Save the project before using Harness.");
       return;
     }
 
-    setChatError(undefined);
-    setChatSending(true);
-    setChatText(""); setChatTools([]); setChatStatus("");
-    chatRequest = new AbortController();
-    setChatMessages(current => [...current, { role: "user", content: prompt }]);
-    setChatInput("");
+    setHarnessError(undefined);
+    setHarnessSending(true);
+    setHarnessText(""); setHarnessTools([]); setHarnessStatus("");
+    harnessRequest = new AbortController();
+    setHarnessMessages(current => [...current, { role: "user", content: prompt }]);
+    setHarnessInput("");
 
     try {
       const response = await fetch("/api/assistant-project", {
         method: "POST",
-        signal: chatRequest.signal,
+        signal: harnessRequest.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId: props.projectId,
-          sessionId: chatSessionId(),
+          sessionId: harnessSessionId(),
           message: prompt,
           files: files(),
           revision: revision(),
@@ -735,20 +735,20 @@ export default function ProjectForm(props: ProjectFormProps) {
       let buffer = "";
       let completed = false;
       const receive = (line: string) => {
-        const data = JSON.parse(line) as { type: string; text?: string; tool?: ToolActivity; error?: string; session?: { id: number }; messages?: LLMChatMessage[]; files?: ProjectFile[]; selectedPath?: string; revision?: string; omitted?: string[] };
-        if (data.type === "text") setChatText(current => current + (data.text || ""));
-        if (data.type === "status") setChatStatus(data.text || "");
+        const data = JSON.parse(line) as { type: string; text?: string; tool?: ToolActivity; error?: string; session?: { id: number }; messages?: HarnessMessage[]; files?: ProjectFile[]; selectedPath?: string; revision?: string; omitted?: string[] };
+        if (data.type === "text") setHarnessText(current => current + (data.text || ""));
+        if (data.type === "status") setHarnessStatus(data.text || "");
         if (data.type === "tool" && data.tool) {
           const tool = data.tool;
-          setChatTools(current => current.some(item => item.id === tool.id) ? current.map(item => item.id === tool.id ? tool : item) : [...current, tool]);
-          setChatStatus("");
+          setHarnessTools(current => current.some(item => item.id === tool.id) ? current.map(item => item.id === tool.id ? tool : item) : [...current, tool]);
+          setHarnessStatus("");
         }
         if (data.type === "error") throw new Error(data.error || "Assistant failed.");
         if (data.type === "result") {
           completed = true;
-          if (data.session?.id) setChatSessionId(data.session.id);
-          if (data.messages) setChatMessages(data.messages);
-          if (data.error) setChatError(data.error);
+          if (data.session?.id) setHarnessSessionId(data.session.id);
+          if (data.messages) setHarnessMessages(data.messages);
+          if (data.error) setHarnessError(data.error);
           if (data.files) {
             setFiles(data.files);
             setRevision(data.revision);
@@ -772,21 +772,21 @@ export default function ProjectForm(props: ProjectFormProps) {
         if (!completed) throw new Error("Assistant connection ended before the result arrived.");
       } finally { reader.releaseLock(); }
     } catch (err) {
-      setChatError(err instanceof Error ? err.message : "Assistant request failed");
+      setHarnessError(err instanceof Error ? err.message : "Assistant request failed");
     } finally {
-      setChatSending(false);
-      chatRequest = undefined;
+      setHarnessSending(false);
+      harnessRequest = undefined;
       // Recover persistent edits even when the stream disconnected before its final event.
       void reloadWorkspace();
     }
   };
 
-  const stopChat = async () => {
-    setChatStatus("Stopping...");
+  const stopHarness = async () => {
+    setHarnessStatus("Stopping...");
     try {
       const response = await fetch(`/api/assistant-project?project_id=${props.projectId}`, { method: "DELETE" });
       if (!response.ok) throw new Error("Could not stop the assistant.");
-    } catch (error) { setChatError(error instanceof Error ? error.message : String(error)); }
+    } catch (error) { setHarnessError(error instanceof Error ? error.message : String(error)); }
   };
 
   const deriveConfig = () => {
@@ -859,7 +859,7 @@ export default function ProjectForm(props: ProjectFormProps) {
 
   const submitProject = async (event: SubmitEvent) => {
     event.preventDefault();
-    if (chatSending() || saving()) return;
+    if (harnessSending() || saving()) return;
     setError(undefined);
     setSaving(true);
 
@@ -1005,7 +1005,7 @@ export default function ProjectForm(props: ProjectFormProps) {
 
               <div
                 class={`project-file-editor ${fileSidebarOpen() ? "" : "project-file-editor-tree-collapsed"}`}
-                style={{ "--project-chat-width": `${chatWidth()}px` }}
+                style={{ "--project-harness-width": `${harnessWidth()}px` }}
               >
                 <Show when={fileSidebarOpen()}>
                   <aside class="project-file-tree">
@@ -1060,7 +1060,7 @@ export default function ProjectForm(props: ProjectFormProps) {
                         <For each={codeLines()}>{line => <div>{highlightYamlLine(line)}</div>}</For>
                       </pre>
                       <textarea
-                        readOnly={chatSending() || saving()}
+                        readOnly={harnessSending() || saving()}
                         spellcheck={false}
                         value={selectedContent()}
                         wrap="off"
@@ -1077,7 +1077,7 @@ export default function ProjectForm(props: ProjectFormProps) {
                         <For each={codeLines()}>{line => <div>{highlightPythonLine(line)}</div>}</For>
                       </pre>
                       <textarea
-                        readOnly={chatSending() || saving()}
+                        readOnly={harnessSending() || saving()}
                         spellcheck={false}
                         value={selectedContent()}
                         wrap="off"
@@ -1091,7 +1091,7 @@ export default function ProjectForm(props: ProjectFormProps) {
                         <For each={lineNumbers()}>{number => <div>{number}</div>}</For>
                       </div>
                       <textarea
-                        readOnly={chatSending() || saving()}
+                        readOnly={harnessSending() || saving()}
                         class="code-editor"
                         spellcheck={false}
                         value={selectedContent()}
@@ -1104,42 +1104,42 @@ export default function ProjectForm(props: ProjectFormProps) {
                 </div>
 
                 <div
-                  aria-label="Resize LLM chat"
-                  class={`project-chat-resizer ${resizingChat() ? "project-chat-resizer-active" : ""}`}
+                  aria-label="Resize Harness"
+                  class={`project-harness-resizer ${resizingHarness() ? "project-harness-resizer-active" : ""}`}
                   role="separator"
                   tabIndex={0}
-                  onPointerDown={startChatResize}
+                  onPointerDown={startHarnessResize}
                 />
 
-                <aside class="project-llm-chat">
+                <aside class="project-harness">
                   <div class="flex items-center gap-2 border-b border-gray-800 px-3 py-2 text-sm font-medium text-gray-200">
                     <FiMessageSquare size={14} stroke-width={2} aria-hidden="true" />
-                    <span>Webuse Agent</span>
+                    <span>Harness</span>
                   </div>
                   <div class="flex min-h-0 flex-1 flex-col p-3">
-                    <LLMChat
-                      messages={chatMessages()}
-                      value={chatInput()}
-                      pending={chatSending()}
-                      streamedText={chatText()}
-                      tools={chatTools()}
-                      pendingText={chatStatus()}
-                      onCancel={stopChat}
-                      loading={chatLoading()}
+                    <Harness
+                      messages={harnessMessages()}
+                      value={harnessInput()}
+                      pending={harnessSending()}
+                      streamedText={harnessText()}
+                      tools={harnessTools()}
+                      pendingText={harnessStatus()}
+                      onCancel={stopHarness}
+                      loading={harnessLoading()}
                       disabled={!props.projectId}
-                      placeholder={props.projectId ? "Ask about this project" : "Save the project before using LLM"}
+                      placeholder={props.projectId ? "Ask about this project" : "Save the project before using Harness"}
                       emptyTitle="No messages yet"
                       emptyDescription="Ask the assistant to inspect, edit, and test this crawler. Python tools run on this computer."
                       assistantName="webuse"
                       onValueChange={value => {
-                        setChatInput(value);
-                        setChatError(undefined);
+                        setHarnessInput(value);
+                        setHarnessError(undefined);
                       }}
-                      onSubmit={sendChatMessage}
+                      onSubmit={sendHarnessMessage}
                     />
-                    <Show when={chatError()}>
+                    <Show when={harnessError()}>
                       <div class="mt-2 rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-                        {chatError()}
+                        {harnessError()}
                       </div>
                     </Show>
                   </div>
@@ -1155,15 +1155,15 @@ export default function ProjectForm(props: ProjectFormProps) {
 
         <div class="flex justify-end gap-2">
           <Show when={props.projectId}>
-            <Button type="button" size="compact" disabled={saving() || chatSending()} onClick={() => void reloadWorkspace(true)}>Reload files</Button>
-            <Button type="button" size="compact" disabled={saving() || chatSending()} onClick={() => void saveFiles()}>Save files</Button>
+            <Button type="button" size="compact" disabled={saving() || harnessSending()} onClick={() => void reloadWorkspace(true)}>Reload files</Button>
+            <Button type="button" size="compact" disabled={saving() || harnessSending()} onClick={() => void saveFiles()}>Save files</Button>
           </Show>
           <ButtonLink
             class="!text-xs !leading-4"
             href="/projects"
             size="compact"
             onClick={event => {
-              if (chatSending()) {
+              if (harnessSending()) {
                 event.preventDefault();
                 blockAssistantLeave();
               }
@@ -1171,7 +1171,7 @@ export default function ProjectForm(props: ProjectFormProps) {
           >
             Cancel
           </ButtonLink>
-          <Button class="!text-xs !leading-4" variant="primary" size="compact" type="submit" disabled={saving() || chatSending()}>
+          <Button class="!text-xs !leading-4" variant="primary" size="compact" type="submit" disabled={saving() || harnessSending()}>
             {saving() ? "Saving..." : props.submitLabel}
           </Button>
         </div>

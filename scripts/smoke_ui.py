@@ -204,7 +204,7 @@ def main():
         server.shutdown()
         server.server_close()
         thread.join()
-    print("Installed UI passed: assets, SQLite, crawler records, and Pi Chat tools/streaming.")
+    print("Installed UI passed: assets, SQLite, crawler records, and Pi Harness tools/streaming.")
 
 
 if __name__ == "__main__":

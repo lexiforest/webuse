@@ -74,7 +74,7 @@ def test_registered_spider_inherits_project_settings_outside_cwd(
         )
         entry = "module: nested.books" if kind == "module" else "path: nested/books.py"
     (root / "webuse.yaml").write_text(
-        f"name: project\nconcurrency:\n  limit: 2\n  per_domain: 1\nspiders:\n  books:\n    {entry}\n"
+        f"name: project\nconcurrency: 2\nper_domain: 1\nspiders:\n  books:\n    {entry}\n"
     )
     observed = []
     # Inspect effective options without bypassing the real engine.
@@ -120,11 +120,7 @@ def test_registered_spiders_have_independent_pipelines(
     ]:
         config = {
             "start_urls": [url],
-            "items": {
-                "pipelines": {
-                    "default": [{"type": "jsonl", "path": f"{name}.jsonl"}]
-                }
-            },
+            "pipelines": [{"type": "jsonl", "path": f"{name}.jsonl"}],
             "pages": {
                 "default": {
                     "extract": {

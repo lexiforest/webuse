@@ -2,9 +2,8 @@ name: test
 user_agent: chrome
 robots_txt: true
 
-concurrency:
-  limit: 5
-  per_domain: 1
+concurrency: 5
+per_domain: 1
 
 spiders:
   books:

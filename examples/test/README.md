@@ -26,5 +26,5 @@ webuse fetch https://books.toscrape.com/ --css "article.product_pod h3 a" --attr
 
 `spiders/books.py` contains the `BookItem` model and `CleanBookPipeline` alongside
 the spider class.
-Configure item processing in each spider's `items.pipelines` section, or its
+Configure item processing in each spider's `pipelines` section, or its
 Python `pipelines` attribute.

@@ -163,24 +163,37 @@ def test_async_follow_callback_can_return_one_relative_url():
     assert result.visited == {"https://example.com/", "https://example.com/next"}
 
 
-def test_project_concurrency_precedence():
-    project = ProjectConfig(concurrency={"limit": 2, "per_domain": 1})
+@pytest.mark.parametrize("base", [Spider, AsyncSpider])
+def test_project_concurrency_precedence(base):
+    project = ProjectConfig(concurrency=2, per_domain=1)
 
     def settings(spider, **overrides):
         return spider._resolve_settings(overrides, project_config=project)[0]
 
-    assert settings(Spider()).concurrency == 2
-    assert settings(Spider()).per_domain == 1
+    assert settings(base()).concurrency == 2
+    assert settings(base()).per_domain == 1
 
-    class Custom(Spider):
+    class Custom(base):
         concurrency = 3
+        per_domain = 2
 
     assert settings(Custom()).concurrency == 3
-    spider = Custom(spider_config=SpiderConfig(concurrency=4))
+    assert settings(Custom()).per_domain == 2
+    spider = Custom(spider_config=SpiderConfig(concurrency=4, per_domain=3))
     assert settings(spider).concurrency == 4
-    assert settings(spider, concurrency=5).concurrency == 5
+    assert settings(spider).per_domain == 3
+    assert settings(spider, concurrency=5, per_domain=4).concurrency == 5
+    assert settings(spider, concurrency=5, per_domain=4).per_domain == 4
+    defaults = base()._resolve_settings({}, project_config=ProjectConfig())[0]
+    assert defaults.concurrency == 10
+    assert defaults.per_domain is None
+
+
+@pytest.mark.parametrize("field", ["concurrency", "per_domain"])
+@pytest.mark.parametrize("value", [0, -1, True, 1.5, "2"])
+def test_project_concurrency_requires_positive_integers(field, value):
     with pytest.raises(ValueError):
-        ProjectConfig(concurrency={"per_domain": 0})
+        ProjectConfig.model_validate({field: value})
 
 
 @pytest.mark.parametrize("asynchronous", [False, True])

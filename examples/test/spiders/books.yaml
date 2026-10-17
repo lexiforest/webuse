@@ -5,12 +5,10 @@ allowed_domains:
   - books.toscrape.com
 max_depth: 1
 
-items:
-  pipelines:
-    default:
-      - class: spiders.books.CleanBookPipeline
-      - type: jsonl
-        path: output.jsonl
+pipelines:
+  - class: spiders.books.CleanBookPipeline
+  - type: jsonl
+    path: output.jsonl
 
 pages:
   default:

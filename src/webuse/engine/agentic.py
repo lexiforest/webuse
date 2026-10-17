@@ -1,4 +1,4 @@
-"""Serial request queue with goal-driven parsing, independent of Chat."""
+"""Serial request queue with goal-driven parsing, independent of Harness."""
 
 import asyncio
 import inspect

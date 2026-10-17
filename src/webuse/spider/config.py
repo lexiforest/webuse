@@ -15,19 +15,10 @@ class ProjectConfig(WebuseModel):
     user_agent: str | None = None
     llm: dict[str, Any] = Field(default_factory=dict)
     robots_txt: bool | None = None
-    concurrency: dict[str, Any] = Field(default_factory=dict)
+    concurrency: int | None = Field(default=None, ge=1, strict=True)
+    per_domain: int | None = Field(default=None, ge=1, strict=True)
     log: dict[str, Any] = Field(default_factory=dict)
     spiders: dict[str, Any] = Field(default_factory=dict)
-
-    @field_validator("concurrency")
-    @classmethod
-    def validate_concurrency(cls, value: dict[str, Any]) -> dict[str, Any]:
-        if value.keys() - {"limit", "per_domain"}:
-            raise ValueError("concurrency supports only limit and per_domain")
-        for key, limit in value.items():
-            if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
-                raise ValueError(f"concurrency.{key} must be a positive integer")
-        return value
 
 
 class SpiderConfig(WebuseModel):
@@ -48,13 +39,7 @@ class SpiderConfig(WebuseModel):
     allowed_domains: Any = None
     request_defaults: dict[str, Any] | None = None
     same_domain: bool = False
-    items: dict[str, Any] = Field(default_factory=dict)
-
-    def pipeline_specs(self) -> Any:
-        pipelines = self.items.get("pipelines")
-        if isinstance(pipelines, dict):
-            return pipelines.get("default")
-        return pipelines
+    pipelines: list[Any] = Field(default_factory=list)
 
 
 class EffectiveSpiderSettings(WebuseModel):

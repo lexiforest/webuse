@@ -13,9 +13,8 @@ llm: {{}}
 #   model: gpt-4.1-mini
 #   api_key: sk-...
 #   base_url: https://api.openai.com/v1
-concurrency:
-  limit: 5
-  per_domain: 1
+concurrency: 5
+per_domain: 1
 log:
   level: info
   file: stderr
@@ -55,7 +54,7 @@ webuse fetch https://books.toscrape.com/ --css "article.product_pod h3 a" --attr
 
 `webuse gen` puts the item model and cleanup pipeline in the generated spider
 module, such as `spiders/books.py`.
-Configure item processing in each spider's `items.pipelines` section, or its
+Configure item processing in each spider's `pipelines` section, or its
 Python `pipelines` attribute.
 """,
         ".gitignore": """.webuse/

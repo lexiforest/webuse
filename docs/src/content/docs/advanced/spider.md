@@ -45,7 +45,7 @@ one of the concrete classes; `AsyncSpider` is not a subtype of `Spider`.
 Project configuration comes from `config_path`, or a config file directly inside
 `project_dir`; spiders do not search parent directories. Constructor overrides
 set instance attributes. Pipeline precedence is separate: `run(pipelines=...)`,
-then `self.pipelines`, then the spider config's `items.pipelines`. Project config
+then `self.pipelines`, then the spider config's `pipelines`. Project config
 does not supply pipelines. Passing `pipelines=[]` disables them.
 An instance rejects overlapping runs; use separate spiders for concurrent runs.
 Sequential runs get fresh state, including after a failure.

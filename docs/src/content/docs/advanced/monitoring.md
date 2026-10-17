@@ -35,5 +35,5 @@ See [Signals](../../references/signals/) for setup, event payloads, and metric n
 
 The Node control plane collects run logs and output records. Dashboard views and
 the harness's run-inspection tool read this stored evidence for the same job.
-Chat's streamed tool activity is separate from crawler log streaming.
+Harness's streamed tool activity is separate from crawler log streaming.
 

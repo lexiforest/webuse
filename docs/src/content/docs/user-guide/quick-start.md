@@ -177,9 +177,8 @@ name: books_project
 user_agent: chrome  # By default, the curl_cffi "chrome" impersonation is used
 robots_txt: true    # Obey the robots.txt rule
 llm: {}             # LLM to use
-concurrency:        # Concurrency limits
-  limit: 5
-  per_domain: 1
+concurrency: 5
+per_domain: 1
 log:                # Logging to stderr by default
   level: info
   file: stderr
@@ -197,26 +196,22 @@ don't need any custom logic:
 
 ```py
 import webuse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
-class BookItem(BaseModel):
+class Item(BaseModel):
     title: str
-    price: str = ""
-    availability: str = Field(
-        default="", description="Raw availability text from the listing page."
-    )
 
 
 # This is a no-op, just to demostrate that you can clean the item here.
-class CleanBookPipeline(webuse.ItemPipeline):
-    def process_item(self, item: BookItem):
+class CleanPipeline(webuse.ItemPipeline):
+    def process_item(self, item: Item):
         return item
 
 
 class BooksSpider(webuse.Spider):
     spider_config_path = "spiders/books.yaml"
-    item_model = BookItem
+    item_model = Item
 ```
 
 The `books.yaml` contains the configuration for the spider:
@@ -237,12 +232,10 @@ pages:
       books:                 # Name of the extracted items
         fields:              # Fields in the extracted item
           title: title
-items:
-  pipelines:                 # Pipelines to process the items from the spider
-    default:                 # The default route
-    - class: spiders.books.CleanBookPipeline  # Use a custome processing pipeline
-    - type: jsonl            # Use the builtin jsonl pipeline to save the item
-      path: output.jsonl     # The output filename
+pipelines:                 # Pipelines to process the items from the spider
+- class: spiders.books.CleanPipeline  # Use a custome processing pipeline
+- type: jsonl            # Use the builtin jsonl pipeline to save the item
+  path: output.jsonl     # The output filename
 ```
 
 You can now run the spider with:
@@ -254,12 +247,22 @@ webuse crawl books_project --spider books -o books.jsonl
 
 `-o` selects JSONL, CSV, or SQLite output by file extension. The generated
 spider also has its own pipeline writing `output.jsonl` inside the project.
-Edit `items.pipelines` in `spiders/books.yaml` to change that destination.
+Edit `pipelines` in `spiders/books.yaml` to change that destination.
 
 
 ### Define extraction in YAML
 
-To add more extraction and following fields, simply edit the `books.yaml` file.
+To extract book-specific fields, first extend the generated `Item` model in
+`spiders/books.py`:
+
+```python
+class Item(BaseModel):
+    title: str
+    price: str = ""
+    availability: str = ""
+```
+
+Then edit `spiders/books.yaml` to define the extraction and follow rules.
 
 For example, replace `pages` with the rules below and set `max_depth: 2`.
 The `default` page type handles book listings, while `detail` handles individual
@@ -301,7 +304,7 @@ needed for these declarative page types.
 On listings, `item_css` selects each book container and field selectors run inside
 it. On detail pages, omitting `item_css` extracts one record from the whole page.
 This example emits both listing records and detail records; they are separate
-items, not merged. The detail fields fit the generated `BookItem` model.
+items, not merged. The detail fields fit the extended `Item` model.
 
 `max_depth: 2` allows two link hops from a start URL, including a detail page
 reached through the next listing page. Increase it to follow more pagination.

@@ -81,16 +81,17 @@ def _spider_config_toml(name: str, url: str, *, pipelines: list[dict[str, str]])
     allowed_domains = (
         f'allowed_domains = ["{parsed.netloc}"]\n' if parsed.netloc else ""
     )
-    item_config = ""
+    pipeline_config = ""
     if pipelines:
         entries = "\n".join(
             "  { " + ", ".join(f'{key} = "{value}"' for key, value in spec.items()) + " },"
             for spec in pipelines
         )
-        item_config = f"\n[items.pipelines]\ndefault = [\n{entries}\n]\n"
+        pipeline_config = f"pipelines = [\n{entries}\n]\n"
     return f'''name = "{name}"
 start_urls = ["{url}"]
 {allowed_domains}max_depth = 1
+{pipeline_config}
 
 [[pages.default.follow]]
 css = "a"
@@ -98,7 +99,7 @@ same_domain = true
 
 [pages.default.extract.{_module_name(name)}.fields]
 title = "title"
-{item_config}'''
+'''
 
 
 def _spider_config_yaml(name: str, url: str, *, pipelines: list[dict[str, str]]) -> str:
@@ -106,8 +107,8 @@ def _spider_config_yaml(name: str, url: str, *, pipelines: list[dict[str, str]])
     allowed_domains = (
         f"allowed_domains:\n  - {parsed.netloc}\n" if parsed.netloc else ""
     )
-    item_config = (
-        yaml.safe_dump({"items": {"pipelines": {"default": pipelines}}}, sort_keys=False)
+    pipeline_config = (
+        yaml.safe_dump({"pipelines": pipelines}, sort_keys=False)
         if pipelines
         else ""
     )
@@ -124,7 +125,7 @@ pages:
       {_module_name(name)}:
         fields:
           title: title
-{item_config}"""
+{pipeline_config}"""
 
 
 def _spider_template(
@@ -140,19 +141,15 @@ def _spider_template(
     base_class = "AsyncSpider" if asynchronous else "Spider"
     module = _module_name(name)
     definitions = '''import webuse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
-class BookItem(BaseModel):
+class Item(BaseModel):
     title: str
-    price: str = ""
-    availability: str = Field(
-        default="", description="Raw availability text from the listing page."
-    )
 
 
-class CleanBookPipeline(webuse.ItemPipeline):
-    def process_item(self, item: BookItem):
+class CleanPipeline(webuse.ItemPipeline):
+    def process_item(self, item: Item):
         return item
 
 
@@ -161,7 +158,7 @@ class CleanBookPipeline(webuse.ItemPipeline):
         config_path = f"spiders/{module}{config_suffix}"
         return definitions + f'''class {class_name}(webuse.{base_class}):
     spider_config_path = "{config_path}"
-    item_model = BookItem
+    item_model = Item
 '''
 
     allowed_domains = (
@@ -169,9 +166,9 @@ class CleanBookPipeline(webuse.ItemPipeline):
     )
     return definitions + f'''class {class_name}(webuse.{base_class}):
     name = "{name}"
-    item_model = BookItem
+    item_model = Item
     pipelines = [
-        CleanBookPipeline(),
+        CleanPipeline(),
         {{"type": "jsonl", "path": "output.jsonl"}},
     ]
     start_urls = ["{url}"]
@@ -211,7 +208,7 @@ def gen_command(args: argparse.Namespace) -> int:
     config_content = None
     config_suffix = None
     pipelines = [
-        {"class": f"spiders.{module}.CleanBookPipeline"},
+        {"class": f"spiders.{module}.CleanPipeline"},
         {"type": "jsonl", "path": "output.jsonl"},
     ]
     if use_toml:

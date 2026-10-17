@@ -43,7 +43,7 @@ def test_gen_creates_registered_project_spider(
         cli.main(
             [
                 "gen",
-                "books",
+                "pages",
                 "https://example.com",
                 "--directory",
                 str(project),
@@ -54,20 +54,20 @@ def test_gen_creates_registered_project_spider(
         == 0
     )
     payload = json.loads(capsys.readouterr().out)
-    spider_path = project / "spiders/books.py"
+    spider_path = project / "spiders/pages.py"
     assert payload["path"] == str(spider_path)
-    assert "item_model = BookItem" in spider_path.read_text()
-    assert "class BookItem(BaseModel):" in spider_path.read_text()
-    assert "class CleanBookPipeline(webuse.ItemPipeline):" in spider_path.read_text()
+    assert "item_model = Item" in spider_path.read_text()
+    assert "class Item(BaseModel):" in spider_path.read_text()
+    assert "class CleanPipeline(webuse.ItemPipeline):" in spider_path.read_text()
     assert "def main" not in spider_path.read_text()
     config = load_config_file(project / "webuse.yaml")
-    assert config["spiders"]["books"] == {"path": "spiders/books.py"}
+    assert config["spiders"]["pages"] == {"path": "spiders/pages.py"}
     if suffix:
-        config_path = project / f"spiders/books{suffix}"
+        config_path = project / f"spiders/pages{suffix}"
         assert payload["config"] == str(config_path)
         assert load_config_file(config_path)["start_urls"] == ["https://example.com"]
-        assert load_config_file(config_path)["items"]["pipelines"]["default"] == [
-            {"class": "spiders.books.CleanBookPipeline"},
+        assert load_config_file(config_path)["pipelines"] == [
+            {"class": "spiders.pages.CleanPipeline"},
             {"type": "jsonl", "path": "output.jsonl"},
         ]
     else:
@@ -100,19 +100,19 @@ def test_gen_creates_registered_project_spider(
         else spider.run(client=GeneratedPageClient(), max_requests=1)
     )
     assert len(result.items) == 1
-    assert result.items[0].title == "Home"
-    assert (project / "output.jsonl").is_file()
+    assert result.items[0].model_dump() == {"title": "Home"}
+    assert json.loads((project / "output.jsonl").read_text()) == {"title": "Home"}
     if asynchronous:
         from webuse.engine import aio
 
         monkeypatch.setattr(aio, "AsyncClient", AsyncGeneratedPageClient)
         # The generated AsyncSpider runs through the ordinary crawl command.
         assert cli.main(
-            ["crawl", str(project), "--spider", "books", "--max-requests", "1"]
+            ["crawl", str(project), "--spider", "pages", "--max-requests", "1"]
         ) == 0
         records = (project / "output.jsonl").read_text().splitlines()
         assert len(records) == 2
-        assert all(json.loads(record)["title"] == "Home" for record in records)
+        assert all(json.loads(record) == {"title": "Home"} for record in records)
 
 
 @pytest.mark.parametrize("args", [[], ["--python-only"], ["--toml"]])

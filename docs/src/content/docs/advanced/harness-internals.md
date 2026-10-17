@@ -75,7 +75,7 @@ Paths below are relative to `ui/`.
 
 <figure>
   <a href="../../diagrams/harness-execution.png">
-    <img src="../../diagrams/harness-execution.png" width="1536" height="1024" loading="lazy" decoding="async" alt="Chat edits working files, then queues a run. The orchestrator launches a crawler that reads those files, writes JSONL records during execution, and sends logs. After a successful exit, the orchestrator imports the records for the UI." />
+    <img src="../../diagrams/harness-execution.png" width="1536" height="1024" loading="lazy" decoding="async" alt="Harness edits working files, then queues a run. The orchestrator launches a crawler that reads those files, writes JSONL records during execution, and sends logs. After a successful exit, the orchestrator imports the records for the UI." />
   </a>
   <figcaption>Records are written during execution and imported into the UI after success. Stored logs can be viewed while the run is active.</figcaption>
 </figure>
@@ -87,7 +87,7 @@ credentials out of skill text and generated source. Ambient Pi extensions,
 skills, and credentials are not loaded.
 
 Pi's native file and shell tools operate in the persistent project directory.
-Chat edits persist immediately. Manual, scheduled, and sample runs execute the
+Harness edits persist immediately. Manual, scheduled, and sample runs execute the
 current workspace directly, without source snapshots. Users manage history with
 Git. SQLite stores metadata and Pi session entries; source files stay on disk.
 

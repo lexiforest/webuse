@@ -32,7 +32,8 @@ The schema is `ProjectConfig` in `src/webuse/spider/config.py`.
 | `name` | String | Unset | Project name. |
 | `user_agent` | String | Unset | Default agent name for robots.txt matching. |
 | `robots_txt` | Boolean | Unset | Default robots.txt policy. |
-| `concurrency` | Mapping | `{}` | Total and per-domain concurrency defaults. |
+| `concurrency` | Positive integer | Unset | Default maximum simultaneous page downloads per crawl. |
+| `per_domain` | Positive integer | Unset | Default maximum simultaneous page downloads per hostname and port. |
 | `llm` | Mapping | `{}` | Model settings scoped to each spider run. |
 | `log` | Mapping | `{}` | Logging settings applied by `webuse crawl`. |
 | `spiders` | Mapping | `{}` | Registered spider names and targets; must be nonempty to crawl. |
@@ -45,9 +46,8 @@ name: books-project
 user_agent: chrome
 robots_txt: true
 llm: {}
-concurrency:
-  limit: 5
-  per_domain: 1
+concurrency: 5
+per_domain: 1
 log:
   level: info
   file: stderr
@@ -72,14 +72,15 @@ a mapping identifying a target:
 File paths resolve relative to the project root. Python targets may define
 `Spider` or `AsyncSpider`; specify a class when a module contains multiple spiders.
 
-### `concurrency`
+### `concurrency` and `per_domain`
 
 | Field | Type | Fallback | Purpose |
 | --- | --- | --- | --- |
-| `limit` | Positive integer | `10` | Maximum simultaneous page downloads across the crawl. |
+| `concurrency` | Positive integer | `10` | Maximum simultaneous page downloads across the crawl. |
 | `per_domain` | Positive integer | No separate limit | Maximum simultaneous page downloads per hostname and port. |
 
-Spider settings and run arguments override these defaults. Robots lookups are
+Both fields are top-level project settings, using the same names as spider
+settings. Spider settings and run arguments override these defaults. Robots lookups are
 separate from page-download limits. Per-host override maps are not supported.
 
 ### `log`
@@ -144,7 +145,7 @@ run override. Omitted fields retain values supplied by those other sources.
 | `allowed_domains` | String or list | Unrestricted | Allowed hostnames, including ports when applicable. |
 | `request_defaults` | Mapping | Unset | Default HTTP request options. |
 | `same_domain` | Boolean | `false` | Default for configured follow rules' `same_domain`. |
-| `items` | Mapping | `{}` | This spider's pipeline configuration. |
+| `pipelines` | List | `[]` | Ordered pipeline specifications for this spider. |
 
 ### Settings precedence
 
@@ -161,43 +162,64 @@ Pipeline precedence is separate; see [Item pipelines](#item-pipelines).
 
 ### Agentic configuration
 
-For `AgenticSpider`, put `goal`, `start_urls`, scope settings, and `limits` in the
-spider YAML file. Keep the Pydantic `item_model` and hooks in the Python subclass,
-and connect the file with `spider_config_path`. Register that Python subclass in
-the project; a config-only registry entry does not select the agentic runtime.
-See the [agentic spider walkthrough](../../advanced/agentic/) for a complete
-example.
+`AgenticSpider` adds `goal` and `limits` to the spider settings. Register a Python
+subclass and load its YAML through `spider_config_path`; a config-only registry
+entry does not select the agentic runtime. The Pydantic `item_model` and hooks
+belong in the subclass.
 
-`goal` must be nonblank. `limits` requires only a positive `max_tokens`, the
-total model token budget. `max_requests`, `max_turns`, `max_seconds`,
-`max_output_tokens`, and `max_page_bytes` are optional positive caps, all unset
-by default. Context paging settings are `observation_chars` (8000, minimum 256)
-and `memory_chars` (4000, minimum 256). `memory_chars` bounds the serialized
-working-memory notes sent on every turn; it doesn't limit the number of pages
-retained by the runtime.
-Unknown budget fields are rejected. Ordinary spiders reject `goal` and `limits`.
+```yaml
+name: books
+goal: Collect book titles and prices.
+start_urls:
+  - https://books.toscrape.com/
+allowed_domains:
+  - books.toscrape.com
+limits:
+  max_tokens: 100000
+```
 
-When `max_output_tokens` is omitted or null, Webuse omits the API's output-token
-limit and uses the provider's default. A positive value opts into a per-response
-cap. The total crawl token budget sums the provider's reported
-`usage.total_tokens`; no prompt-size estimate is reserved before requests.
-Without an output cap,
-one response can exceed the remaining budget; the run then stops before executing
-its tool calls or making another model request.
+`goal` must be nonblank. Both fields follow [settings precedence](#settings-precedence),
+including arguments to `AgenticSpider.run()`. Ordinary spiders reject these fields.
+See [Agentic Crawlers](../../advanced/agentic/) for a complete project example.
 
-Both fields follow the settings precedence above, including arguments to
-`AgenticSpider.run()`. A supplied `limits` mapping replaces the whole budget
-configuration rather than merging individual fields. The top-level `max_requests`
-setting can further tighten the agent's request budget, but cannot increase it.
-Agentic spiders have no default `max_depth` limit and require deduplication; omit
-static `pages` rules because the model chooses navigation and extraction actions.
-The runtime uses the normal request queue, seen set, and request hasher. Pass
-`request_queue`, `request_seen`, or `request_hasher` to `AgenticSpider.run()` or
-`agentic_crawl()` to supply existing state implementations. These interfaces are
-synchronous; remote backends can block the serial agent loop. Persisting queue
-and seen state alone does not restore downloaded pages or unfinished records.
-The engine ends on queue exhaustion with no active request, without a model
-completion judgment.
+#### `limits`
+
+The schema is `AgentLimits` in `src/webuse/agent.py`.
+
+| Field | Type | Default | Purpose |
+| --- | --- | --- | --- |
+| `max_tokens` | Positive integer | Required | Total model token budget for the run. |
+| `max_requests` | Positive integer | Unset | Maximum crawl requests. |
+| `max_turns` | Positive integer | Unset | Maximum model turns. |
+| `max_seconds` | Positive number | Unset | Maximum run duration in seconds. |
+| `max_output_tokens` | Positive integer | Provider default | Output-token cap per model response. |
+| `max_page_bytes` | Positive integer | Unset | Maximum downloaded response size in bytes. |
+| `observation_chars` | Integer, at least 256 | `8000` | Character window for page observations. |
+| `memory_chars` | Integer, at least 256 | `4000` | Maximum serialized working-memory characters sent each turn. |
+
+Unknown fields are rejected. A supplied `limits` mapping replaces the whole
+configuration rather than merging individual fields. Top-level `max_requests`
+can tighten `limits.max_requests`, but cannot increase it. `memory_chars` limits
+working-memory notes, not the number of retained pages.
+
+Token usage sums the provider's reported `usage.total_tokens`; no prompt-size
+estimate is reserved before requests. Omitting `max_output_tokens` or setting it
+to null uses the provider's default. A response can exceed the remaining total
+budget; the run then stops before executing its tool calls or requesting another
+model response.
+
+#### Crawl settings and state
+
+Agentic spiders require deduplication and have no default `max_depth` limit.
+Static `pages` rules are omitted because the model chooses navigation and
+extraction actions. The engine stops when the queue is empty and no request is
+active, without a model completion decision.
+
+`request_queue`, `request_seen`, and `request_hasher` arguments to
+`AgenticSpider.run()` or `agentic_crawl()` accept the normal crawl-state
+implementations. These interfaces are synchronous; remote backends can block the
+agent loop. Persisting queue and seen state does not restore downloaded pages
+or unfinished records.
 
 ### `request_defaults`
 
@@ -434,17 +456,14 @@ for Python handlers, follow-up requests, and page type routing.
 
 ## Item pipelines
 
-`items.pipelines` belongs to the spider configuration. It accepts an ordered list
-of pipeline specifications, or a mapping with that list under `default`.
-Project-level `items` is not supported.
+`pipelines` belongs to the spider configuration. It accepts an ordered list
+of pipeline specifications. Project-level `pipelines` is not supported.
 
 ```yaml
-items:
-  pipelines:
-    default:
-      - class: spiders.books.CleanBookPipeline
-      - type: jsonl
-        path: output.jsonl
+pipelines:
+  - class: spiders.books.CleanPipeline
+  - type: jsonl
+    path: output.jsonl
 ```
 
 | Specification | Purpose |
@@ -461,13 +480,13 @@ See [Pipelines](../pipelines/) for processing behavior and custom implementation
 Pipelines process Pydantic `BaseModel` items. For dictionaries, set the named
 extractor's `item_model` or Python `Spider.item_model` to validate and convert them.
 Generated models and cleanup pipelines live in the spider module, such as
-`spiders.books.BookItem` and `spiders.books.CleanBookPipeline`.
+`spiders.books.Item` and `spiders.books.CleanPipeline`.
 
 Pipeline chains resolve from highest to lowest, replacing the entire chain:
 
 1. `pipelines=[...]` passed to `Spider.run()` or `AsyncSpider.run()`.
 2. Python `Spider.pipelines`.
-3. The spider configuration's `items.pipelines`.
+3. The spider configuration's `pipelines`.
 
 An explicit empty list disables pipelines. Configured paths and custom class
 imports resolve relative to the project root. Without a project, file-based

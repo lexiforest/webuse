@@ -5,7 +5,7 @@ description: "Architecture and ownership boundaries of the Python runtime and lo
 
 Webuse has two main components: a Python crawler runtime and a Node control
 plane. The runtime fetches pages and produces records. The control plane connects
-Chat, project files, schedules, and the dashboard.
+Harness, project files, schedules, and the dashboard.
 
 <figure>
   <a href="../../diagrams/architecture-overview.png">
@@ -48,7 +48,7 @@ The Node server serves the UI and APIs and runs the orchestrator in the same
 process. The orchestrator owns fixed cron schedules and the job queue, launching
 a Python subprocess through `webuse crawl` for each run.
 
-Chat, the editor, and crawler jobs share project files on disk. Manual, scheduled,
+Harness, the editor, and crawler jobs share project files on disk. Manual, scheduled,
 and sample jobs execute those working files directly; users manage code history
 with Git. SQLite stores project metadata, run records, and Pi conversation
 entries. Pi owns the coding-agent loop; Webuse supplies project tools and the UI.

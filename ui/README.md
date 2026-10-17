@@ -66,13 +66,13 @@ processes. Runtime settings saved through the UI override work directory and
 concurrency. Cron schedules use UTC. The database path is fixed at process
 startup.
 
-Configure the Chat model, endpoint, and credentials in Settings. Automatic LM
+Configure the Harness model, endpoint, and credentials in Settings. Automatic LM
 Studio/Ollama discovery exists in the Python helpers; integrating that discovery
-into UI Chat is planned. Explicit settings should take precedence.
+into UI Harness is planned. Explicit settings should take precedence.
 
 ## Pi assistant
 
-Chat embeds `@earendil-works/pi-coding-agent`, with no separate Pi process or
+Harness embeds `@earendil-works/pi-coding-agent`, with no separate Pi process or
 account. The configured OpenAI-compatible endpoint must support streaming and
 tool calls. Pi manages the tool loop, context compaction, retries, and cancellation.
 Session entries and tool history are stored in the UI's SQLite database; ambient
@@ -91,7 +91,7 @@ dashboard. No web-search provider or browser tool is configured.
 ### Working files and Git
 
 The Files view displays the workspace path for opening it in an external editor.
-Chat edits persist immediately. Save files writes editor buffers to disk; Save
+Harness edits persist immediately. Save files writes editor buffers to disk; Save
 project also saves project settings. Manual, scheduled, and sample jobs execute
 those working files directly. Webuse does not publish, copy, or restore source
 snapshots. Use Git yourself for code history and rollback. Changes made after
@@ -99,9 +99,9 @@ queueing are visible when a job starts; edits during a run can affect that run.
 Git imports clone once into an editable workspace; remote updates are explicit.
 
 The editor polls for disk changes, reloads clean buffers, and preserves dirty
-buffers with a conflict notice. Saves and Chat submissions carry a content
+buffers with a conflict notice. Saves and Harness submissions carry a content
 revision; stale submissions return HTTP 409. Reload files discards editor buffers
-after confirmation. API writes are blocked during a Chat turn.
+after confirmation. API writes are blocked during a Harness turn.
 
 Storage layout beneath `WEBUSE_WORKSPACE_DIR`:
 
@@ -133,7 +133,7 @@ minutes and 30 tool calls; Python checks have a 30-second limit and bounded
 output. Each turn can request three sample crawls, each limited to 10 requests
 and 60 seconds including queue time. The browser editor previews at most 100 text
 files, 256 KB per file and 2 MB total; native tools can access larger files on disk.
-The editor is read-only during a Chat turn. Shell and Python execute with the UI
+The editor is read-only during a Harness turn. Shell and Python execute with the UI
 user's access and are not sandboxed. Cloud isolation,
 resource accounting, and managed crawling services remain separate work.
 
@@ -157,7 +157,7 @@ bundle has no platform-specific SQLite addon.
 
 ## Local and cloud roadmap
 
-- Accept existing Scrapy projects, external-agent code, and built-in Chat output;
+- Accept existing Scrapy projects, external-agent code, and built-in Harness output;
   the current runner only handles Webuse projects.
 - Offer Run locally and Deploy to cloud using one project/deployment contract.
 - Have the LLM monitor crawlers and provide evidence-based advice.
@@ -175,7 +175,7 @@ environments and described through preloaded skills.
 
 The current scheduler uses fixed cron expressions. Agentic scheduling remains to
 be implemented: the model determines execution timing and the orchestrator enacts
-it within configured limits, independently of an open Chat session. Local mode
+it within configured limits, independently of an open Harness session. Local mode
 uses configured model access; the cloud LLM service provides managed access.
 Scheduling policy, decision cadence, and model-failure behavior remain open.
 

@@ -30,9 +30,9 @@ In webuse, `webuse.yaml` covers the role of Scrapy's project settings.
 | `USER_AGENT` | `user_agent` |
 | `SPIDER_MODULES` / `NEWSPIDER_MODULE` | explicit `spiders` entries in `webuse.yaml` |
 | `ROBOTSTXT_OBEY` | `robots_txt: true` |
-| `CONCURRENT_REQUESTS` | `concurrency.limit` |
-| `CONCURRENT_REQUESTS_PER_DOMAIN` | `concurrency.per_domain` |
-| `ITEM_PIPELINES` | `items.pipelines.default` in each spider config |
+| `CONCURRENT_REQUESTS` | `concurrency` |
+| `CONCURRENT_REQUESTS_PER_DOMAIN` | `per_domain` |
+| `ITEM_PIPELINES` | `pipelines` in each spider config |
 | `FEEDS` | `crawl -o` or an explicit item pipeline |
 | `DOWNLOAD_MIDDLEWARES` | signals, request options, and project code |
 | retry, proxies, TLS, cookies, redirects | `curl_cffi` request options |
@@ -43,9 +43,8 @@ Example project config:
 name: my_project
 user_agent: Mozilla/5.0 MyProject/1.0
 robots_txt: true
-concurrency:
-  limit: 16
-  per_domain: 1
+concurrency: 16
+per_domain: 1
 log:
   level: info
   file: stderr
@@ -55,12 +54,10 @@ log:
 Item pipelines belong in each spider's YAML config:
 
 ```yaml
-items:
-  pipelines:
-    default:
-      - class: spiders.books.CleanBookPipeline
-      - type: jsonl
-        path: output.jsonl
+pipelines:
+  - class: spiders.books.CleanBookPipeline
+  - type: jsonl
+    path: output.jsonl
 ```
 
 ### Commands
@@ -175,14 +172,15 @@ pages:
 ```
 
 Unlike Scrapy item loaders, a single page type may run multiple named
-extractors under `extract.<page_type>.items`. This lets one page emit, for
+extractors under `pages.<page_type>.extract`. This lets one page emit, for
 example, product summaries and category records without custom Python code.
 
 ## Items and Pipelines
 
-webuse item pipelines process Pydantic `BaseModel` items. The project-level
-pipeline config is the default for all spiders, unless `Spider.pipelines` is
-set.
+Webuse item pipelines process Pydantic `BaseModel` items. Configure `pipelines`
+in each spider. Python `Spider.pipelines` overrides that configuration, and
+`run(pipelines=...)` takes highest precedence. Projects do not define pipeline
+defaults.
 
 ```python
 import webuse

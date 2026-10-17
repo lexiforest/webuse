@@ -50,7 +50,7 @@ project's run history, return to **Projects** and click **Runs** beside it.
 
 Click **Logs** on the run's row to read its output. For a failed run, look for an
 error message that explains what went wrong. You can take that message back to
-Chat and ask for help fixing the crawler.
+Harness and ask for help fixing the crawler.
 
 > **Screenshot placeholder:** Logs view with the selected run and an example
 > crawler message visible.
@@ -64,10 +64,10 @@ incomplete or incorrect data.
 > record with fields such as title, price, and URL.
 
 If you need to change the crawler, return to **Projects**, click **Edit**, and
-make the change in Chat or the file editor. Save editor changes, test a sample,
+make the change in Harness or the file editor. Save editor changes, test a sample,
 and run it again. Edits can affect queued or running jobs; use Git for code history.
 
-Samples requested in Chat also appear in the dashboard and use the same working files.
+Samples requested in Harness also appear in the dashboard and use the same working files.
 
 ## 4. Set a Schedule
 
@@ -89,7 +89,7 @@ stops future scheduled runs; use **Cancel** for jobs already queued or running.
 ## 5. Keep Scheduled Runs Active
 
 Leave `webuse serve` running and keep the computer awake for scheduled crawls.
-You can close the browser or Chat; the service continues running. Pressing
+You can close the browser or Harness; the service continues running. Pressing
 **Ctrl+C** in the service terminal stops it and interrupts active crawls.
 
 Reopen the dashboard to check the latest runs, logs, and records. For deployment
