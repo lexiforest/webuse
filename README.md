@@ -18,7 +18,6 @@ to the target site.
 
 If you're writing a lot crawlers, soon you or your assistant will create a home-made
 framework across different projects for these common tasks.
-
 `webuse` is here to be the framework you has been or will be building, along with
 a harness on how to write crawlers on top of the framework, and finally
 the process manager and metrics dashboard.
@@ -26,13 +25,13 @@ the process manager and metrics dashboard.
 Besides, you can also bring your existing scripts to the orchestrator, and it can
 also manage the process for you.
 
-Warning
 
-`webuse` is intended for programmers, not non-technical users. At least you should
-know what the http protocol is.
-
-Even the harness part requires you understand what the model generates. Unlike other
-AI projects, we don't promise magic. Code is still code, not plain English.
+> [!WARNING]
+> `webuse` is intended for programmers, not non-technical users. At least you should
+> know what the http protocol is.
+>
+> Even the harness part requires you understand what the model generates. Unlike other
+> AI projects, we don't promise magic. Code is still code, not plain English.
 
 
 ## Install
@@ -43,237 +42,134 @@ Requires Python 3.11 or newer. Add the Python package to your project:
 pip install webuse
 ```
 
-## Usage
+## Quick start
 
+Inspect a page from the command line:
+
+```bash
+webuse fetch https://example.com --css "title"
 ```
+
+Create a project and generate a starter spider:
+
+```bash
+webuse create my_project
+cd my_project
+webuse gen books https://books.toscrape.com/
+```
+
+This generates three main files. `webuse.yaml` holds project defaults and
+registers the spider:
+
+```yaml
+name: my_project
+user_agent: chrome
+robots_txt: true
+llm: {}
+concurrency:
+  limit: 5
+  per_domain: 1
+log:
+  level: info
+  file: stderr
+  append: true
+spiders:
+  books:
+    path: spiders/books.py
+```
+
+`spiders/books.yaml` defines the starting URL, follow rules, extraction, and
+pipelines. The starter follows links on the same domain and extracts page titles:
+
+```yaml
+name: books
+start_urls:
+  - https://books.toscrape.com/
+allowed_domains:
+  - books.toscrape.com
+max_depth: 1
+pages:
+  default:
+    follow:
+      - css: a
+        same_domain: true
+    extract:
+      books:
+        fields:
+          title: title
+items:
+  pipelines:
+    default:
+    - class: spiders.books.CleanBookPipeline
+    - type: jsonl
+      path: output.jsonl
+```
+
+`spiders/books.py` provides the item model, a cleanup pipeline you can customize,
+and the spider class that loads the YAML:
+
+```python
+import webuse
+from pydantic import BaseModel, Field
+
+
+class BookItem(BaseModel):
+    title: str
+    price: str = ""
+    availability: str = Field(
+        default="", description="Raw availability text from the listing page."
+    )
+
+
+class CleanBookPipeline(webuse.ItemPipeline):
+    def process_item(self, item: BookItem):
+        return item
+
+
+class BooksSpider(webuse.Spider):
+    spider_config_path = "spiders/books.yaml"
+    item_model = BookItem
+```
+
+Run a small crawl from `my_project/`:
+
+```bash
+webuse crawl --spider books --max-requests 3 -o books.jsonl
+```
+
+Edit the generated files in `spiders/` to define what to follow and extract.
+You can write them yourself or use a coding agent with the
+[Webuse crawler skill](ui/skills/webuse-crawlers/SKILL.md). See the
+[quick-start guide](docs/src/content/docs/user-guide/quick-start.md) for examples.
+
+To use the local Chat, code editor, and dashboard:
+
+```bash
 webuse serve
 ```
 
-Released packages include the compiled UI. `webuse serve` opens
-`http://127.0.0.1:2951/` and runs until you press Ctrl+C. It requires Node.js 22.19+
-on PATH, but no npm install or frontend build. Python-only crawling does not
-require Node. Data is saved in `~/.webuse/ui`; use `--data-dir` to change it,
-`--port` to change the port, or `--no-open` to skip opening the browser.
+The packaged UI opens at `http://127.0.0.1:2951/` and requires Node.js 22.19+.
+Configure a streaming, tool-capable OpenAI-compatible model in Settings to use
+Chat. Project files and run data stay on your machine; no Webuse Cloud account
+is required. The CLI examples above require neither Node.js nor an LLM.
 
-Open the URL printed by Vite, by default `http://127.0.0.1:2951/`. Configure the model
-endpoint, model, and credentials in Settings before using Chat. Python provider
-helpers already discover LM Studio and Ollama when no provider is configured;
-automatic discovery in UI Chat is still planned. The control plane discovers the
-repository's `.venv/bin/python` automatically during source development.
-The packaged launcher uses the Python interpreter running `webuse serve` for crawlers.
+## Webuse Cloud
 
-### Building with AI
+Webuse Cloud is the planned managed environment for running crawlers in
+production, with isolated workspaces, proxies, hosted browsers, CAPTCHA solving,
+Defuddle-based HTML-to-Markdown extraction, and an integrated LLM API. Monitoring,
+streaming logs, failure diagnosis, and data checks are also planned.
 
-These are three views of the same crawler project:
+The goal is to bring existing Scrapy projects or other crawler code with minimal
+changes, or deploy a crawler built locally. The Webuse framework will be optional,
+with portable projects, downloadable data, and support for your own providers.
+Cloud deployment and these managed services are not implemented in this checkout.
 
-- **Chat** expresses intent and helps create, edit, and debug the crawler.
-- **Code** holds the implementation and configuration that users can inspect.
-- **Dashboard** makes execution status, logs, and extracted records visible.
+Learn more at [impersonate.pro/webuse](https://impersonate.pro/webuse).
 
-Chat is powered by [Pi](https://pi.dev/), with Webuse tools and a bundled crawler
-skill. It can inspect pages, read and edit project files, execute Python checks,
-run small crawls, and inspect their logs and records. Responses and tool activity
-stream into Chat; Stop cancels the current turn. Chat edits persist in a local
-workspace that can also be opened in an external editor. Save files writes editor
-changes to that directory. Manual, scheduled, and sample runs use the current
-working files directly, without source snapshots. Use Git to track and restore
-your code; edits can affect queued or running jobs. Pi file,
-shell, and Python tools execute on your computer as the UI user.
+## Development and contributing
 
-Configure a streaming, tool-capable OpenAI-compatible model in Settings. Pi
-conversation context persists locally; no Pi account or separate Pi installation
-is required. Automatic UI model discovery and cloud isolation remain planned.
-
-The product direction is to keep this experience consistent locally and in cloud.
-The local UI will offer Run locally and Deploy to cloud. Local projects can run
-on the user's machine and later be deployed. Projects
-created on the hosted website run in cloud workspaces. Cloud deployment is not
-implemented in the current CLI.
-
-Local success does not guarantee cloud success: dependencies, proxy identity,
-geography, cookies, and network access can differ. Deployment should validate
-these differences and provide failure evidence. LLM monitoring should use that
-evidence to advise users, without silently deploying repairs.
-
-### Building from scratch
-
-#### Fetch and extract
-
-```python
-import webuse
-
-with webuse.Client(impersonate="chrome", timeout=20) as client:
-    response = client.get("https://example.com")
-    title = response.find(css="title")
-    print(title.text() if title is not None else None)
-
-    for link in response.find_all(css="a"):
-        print(link.attr("href"), link.text())
-```
-
-Use `AsyncClient` and `await client.get(...)` for async requests. Regex
-selectors are also available. Plain selectors work without an LLM.
-
-Clients inherit curl_cffi sessions and accept its native HTTP arguments, such as
-`allow_redirects`. Responses retain native headers, cookies, streaming, and
-`raise_for_status()`, with Webuse's parsing methods added. Use
-`async with client.stream("GET", url)` for async streaming.
-
-The CLI supports the same basic workflow:
-
-```bash
-uv run webuse fetch https://example.com --css "title"
-uv run webuse fetch https://example.com --css "a" --jsonl
-```
-
-See [element selection](docs/src/content/docs/user-guide/extraction.md) for
-model-backed value extraction and element lookup on the current document.
-
-#### Crawl with Python or configuration
-
-```python
-import webuse
-
-result = webuse.crawl(
-    ["https://example.com"],
-    follow=webuse.FollowRule(css="a", same_domain=True),
-    extract={"default": {"page": {"fields": {"title": "h1"}}}},
-    max_depth=1,
-    concurrency=5,
-    per_domain=1,
-)
-
-print(result.items)
-print(result.stats)
-```
-
-Use `await webuse.acrawl(...)` for async crawling. Larger projects can use
-`webuse.Spider` or `webuse.AsyncSpider`, with custom parsing, request page types,
-Pydantic item models, and pipelines.
-
-`Spider` and `AsyncSpider` share configuration and helpers through
-`webuse.spider.base.BaseSpider`. Subclass `Spider` for synchronous `run()` or
-`AsyncSpider` for `await run()`; `AsyncSpider` is not a subclass of `Spider`.
-
-Both engines record download failures in `result.errors` and propagate parsing
-or pipeline exceptions. Project concurrency defaults and per-domain limits apply
-to both engines; see the [configuration reference](docs/src/content/docs/references/config.md) for precedence and logging.
-
-The CLI and harness run project directories with a root `webuse.yaml` and named
-spiders. A small crawler can fit entirely in `books_project/webuse.yaml`:
-
-```yaml
-name: books_project
-spiders:
-  books:
-    start_urls:
-      - https://books.toscrape.com/
-    allowed_domains:
-      - books.toscrape.com
-    max_depth: 49
-    pages:
-      default:
-        follow:
-          - css: .next a
-        extract:
-          books:
-            item_css: .product_pod
-            fields:
-              title:
-                css: h3 a
-                attr: title
-              price: .price_color
-```
-
-Run it and write the extracted records to JSONL:
-
-```bash
-uv run webuse crawl books_project --spider books -o books.jsonl
-```
-
-To generate a new spider, create a project first:
-
-```bash
-uv run webuse create my_project
-cd my_project
-uv run webuse gen books https://books.toscrape.com/
-uv run webuse crawl --spider books -o books.jsonl
-```
-
-The CLI runs project directories. Use `fetch` to inspect one page, or use the
-Python library APIs directly.
-
-See the [quick start](docs/src/content/docs/user-guide/quick-start.md), [CLI guide](docs/src/content/docs/references/cli.md), and
-[configuration reference](docs/src/content/docs/references/config.md) for field definitions and examples.
-
-## Cloud version
-
-Webuse Cloud will focus on the work around a production crawler:
-
-| Service | Intended benefit |
-| --- | --- |
-| Isolated agent environments and background runs | Use a provided Docker image for the agent workspace, then execute saved crawlers independently of a laptop or chat session |
-| Managed proxies | Connect crawlers to geographic routing, rotation, and sticky sessions without managing provider setup |
-| Hosted browsers | Run JavaScript interactions through a browser endpoint compatible with existing automation code |
-| CAPTCHA integration | Handle supported challenges through a separate solver provider with controlled spending |
-| Defuddle-based extraction API | Convert HTML pages into Markdown for downstream consumption |
-| Integrated LLM API | Provide model access for agentic crawler scheduling and analysis |
-| Monitoring and streaming logs | Follow crawler progress and inspect failures while runs execute |
-| Diagnosis and data sanity checks | Use logs and failed responses to distinguish request failures, blocks, and broken extraction |
-
-A simple metrics emitter, StatsD-like wire format, and time-series database will
-feed the dashboard and monitoring advice. Existing counters and polled logs are
-the starting point, not the complete monitoring service.
-
-The cloud agent will have Webuse skills preloaded to explain these APIs and
-workflows. Live capability discovery will describe the services and allowances
-actually available in its workspace. Runtime configuration will supply endpoints
-and credentials separately from prompts and generated code. MCP is an optional
-integration proposal; its inclusion, tool contract, and delivery scope remain open.
-
-The framework will remain optional for cloud deployment. Existing code should be
-able to use standard service endpoints; richer record-level monitoring may need a
-small adapter. SSH access is also proposed for users connecting their own tools.
-
-The planned Pro and Free environments both have 1 vCPU and 2 GiB RAM. Pro is a
-monthly plan; Free includes four hours of runtime. Pro runtime hours, Free renewal
-timing, concurrency, and paid-service allowances remain unspecified. These are
-planning targets, not an available cloud subscription from this checkout.
-
-Providers, API contracts, remaining allowances, and launch sequencing are still
-being designed. Browser rendering and CAPTCHA solving are separate capabilities, and
-coverage will depend on the target site and provider. These are roadmap items,
-not services available from this checkout.
-
-## Agentic crawlers(Experimental)
-
-
-`AgenticSpider` lets an LLM control a crawl while it runs: choose links, inspect
-pages, and assemble records across pages. The engine stops when the request queue
-is empty and no request is being processed. Declare a goal,
-Pydantic output model, starting URLs, and a total token budget.
-The runtime validates actions and sends records through the existing pipelines.
-Tools are Python calls inside the crawler, not CLI subprocesses.
-
-See the [agentic spider guide](docs/src/content/docs/advanced/agentic.md)
-and [Books to Scrape example](examples/agentic_books/spiders/books.py). Use the same
-`webuse crawl` project workflow; an open Chat session is not required.
-
-LLM scheduling of future crawler runs is a separate planned capability. The
-current orchestrator uses fixed cron schedules. AI-generated crawler code alone
-does not imply either runtime capability.
-
-
-
-## Development
-
-An independent Rust crawler prototype lives in
-[`crates/webuse`](crates/webuse/README.md). It runs declarative YAML
-spiders using Tokio, Hyper, JSON Schema, and Rust state/pipelines. It is not yet
-the runtime used by the Python CLI or local UI.
-
-To develop from this repository, use a Python 3.11+ development
-environment and Node.js 22.19 or newer:
+Use Python 3.11+, uv, and Node.js 22.19+ with npm. From the repository root:
 
 ```bash
 uv sync --extra dev
@@ -282,22 +178,14 @@ npm ci
 npm run dev
 ```
 
-The build installs locked npm dependencies, compiles the UI, and bundles it into both the
-source distribution and wheel. See [release packaging](docs/src/content/docs/advanced/package-release.md).
-
-The local UI currently launches Python crawler subprocesses. It is a local
-development control plane, not the planned isolated multi-tenant cloud runtime.
-See [ui/README.md](ui/README.md) for runtime configuration and deployment commands.
-
-Python checks:
+Run Python checks from the repository root:
 
 ```bash
-uv sync --extra dev
 uv run python3 -m compileall src tests
 uv run pytest -q
 ```
 
-UI checks, from `ui/`:
+Run UI checks from `ui/`:
 
 ```bash
 npm run typecheck
@@ -305,13 +193,20 @@ npm test
 npm run build
 ```
 
+Bug reports, documentation improvements, examples, and focused pull requests are
+welcome. Include reproduction steps for bugs, update relevant docs, and run the
+checks affected by your change. See [local UI setup](ui/README.md),
+[docs development](docs/README.md), and
+[release packaging](docs/src/content/docs/advanced/package-release.md) for details.
+
+
 
 ## Documentation and development
 
 - [Documentation index](docs/src/content/docs/index.md)
-- [Build and preview the Astro docs](docs/README.md)
-- [Local UI setup](ui/README.md)
-- [Examples](examples/)
+- [Build and preview docs](docs/README.md)
+- [Local dashboard setup](ui/README.md)
+- [Comprehensive examples](examples/)
 
 ## One more thing
 
