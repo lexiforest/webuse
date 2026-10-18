@@ -1,2 +1,3 @@
 include setup.py
 graft src/webuse/_ui
+graft src/webuse/_docs

@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onMount } from "solid-js";
 import { parse as parseYaml } from "yaml";
+import { visualSpiders } from "~/lib/project-config";
 
 type ProjectFile = {
   path: string;
@@ -9,7 +10,6 @@ type ProjectFile = {
 type ProjectVisualProps = {
   files: ProjectFile[];
   target: string;
-  type: string;
 };
 
 type VisualNodeKind = "start" | "follow" | "extract" | "item" | "database" | "route" | "python" | "note";
@@ -74,6 +74,7 @@ function followSelector(rule: Record<string, unknown>) {
   if (typeof rule.css === "string") {
     return `css: ${rule.css}`;
   }
+  if (typeof rule.llm === "string") return `llm: ${rule.llm}`;
   return "follow rule";
 }
 
@@ -86,17 +87,6 @@ function itemExtractors(extract: Record<string, unknown>) {
   return Object.entries(extract)
     .map(([name, value]) => ({ name, spec: asRecord(value) }))
     .filter(item => Object.keys(item.spec).length > 0);
-}
-
-function inlineSpiders(parsed: Record<string, unknown>) {
-  const spiders = asRecord(parsed.spiders);
-  const entries = Object.entries(spiders)
-    .map(([name, value]) => ({ name, config: asRecord(value) }))
-    .filter(entry => {
-      const keys = Object.keys(entry.config);
-      return keys.length > 0 && !("path" in entry.config) && !("module" in entry.config) && !("config" in entry.config);
-    });
-  return entries;
 }
 
 function yamlGraph(files: ProjectFile[], target: string): VisualGraph | undefined {
@@ -115,13 +105,14 @@ function yamlGraph(files: ProjectFile[], target: string): VisualGraph | undefine
       ["Fix webuse.yaml to render the workflow graph."],
     );
   }
-  const spiders = inlineSpiders(parsed);
-  const notes: string[] = [];
+  const { spiders, notes } = visualSpiders(parsed, files);
   if (Object.keys(asRecord(parsed.spiders)).length > 0 && spiders.length === 0) {
+    const python = pythonGraph(files, target);
+    if (python) { python.notes.push(...notes); return python; }
     return graph(
       [node("external", "External spiders", "Use referenced Python or YAML spider files", "note")],
       [],
-      ["Inline spider configs render here. Referenced spider files are shown by the Python view."],
+      notes,
     );
   }
 
@@ -465,23 +456,6 @@ export default function ProjectVisual(props: ProjectVisualProps) {
   let renderVersion = 0;
 
   const visual = createMemo(() => {
-    if (props.type === "git" && props.files.length === 0) {
-      return graph(
-        [
-          node("git", "Git checkout", truncate(props.target), "start"),
-          node("worker", "Workspace", "editable local checkout", "python"),
-          node("project", "Working files", "current source for runs", "route"),
-        ],
-        [
-          { from: "git", to: "worker" },
-          { from: "worker", to: "project" },
-        ],
-        ["Git is cloned once into the workspace. Runs use the current checkout; use Git to track changes."],
-      );
-    }
-    if (props.type === "python") {
-      return pythonGraph(props.files, props.target) ?? yamlGraph(props.files, props.target) ?? graph([], [], []);
-    }
     return yamlGraph(props.files, props.target) ?? pythonGraph(props.files, props.target) ?? graph([], [], []);
   });
 

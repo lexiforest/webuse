@@ -1,10 +1,19 @@
 from types import SimpleNamespace
 
+import pytest
+
 from webuse import cli
 from webuse import llm
 
 
+@pytest.fixture(autouse=True)
+def isolated_config(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.chdir(tmp_path)
+
+
 def _reset(monkeypatch):
+    monkeypatch.delenv("WEBUSE_LOCAL_MODEL_HOST", raising=False)
     monkeypatch.setattr(llm, "_DEFAULT_SETTINGS", None)
     monkeypatch.delenv("WEBUSE_LLM_API_KEY", raising=False)
     monkeypatch.delenv("WEBUSE_LLM_BASE_URL", raising=False)
@@ -139,10 +148,20 @@ def test_cli_startup_detects_local_openai_defaults_for_llm(monkeypatch, capsys):
             return ["Local answer"]
 
     monkeypatch.setattr(llm.requests, "get", fake_get)
-    monkeypatch.setattr("webuse.cli.fetch.request", lambda *args, **kwargs: FakeResponse())
+    monkeypatch.setattr(
+        "webuse.cli.fetch.request", lambda *args, **kwargs: FakeResponse()
+    )
 
-    code = cli.main(["fetch", "https://example.com", "--llm-extract", "Extract title",
-                     "--schema", '{"type":"array","items":{"type":"string"}}'])
+    code = cli.main(
+        [
+            "fetch",
+            "https://example.com",
+            "--llm-extract",
+            "Extract title",
+            "--schema",
+            '{"type":"array","items":{"type":"string"}}',
+        ]
+    )
     out = capsys.readouterr().out.strip()
 
     assert code == 0
@@ -151,3 +170,57 @@ def test_cli_startup_detects_local_openai_defaults_for_llm(monkeypatch, capsys):
     assert captured["kwargs"]["model"] == "local-model"
     assert captured["kwargs"]["api_key"] == "lm-studio"
     assert captured["kwargs"]["base_url"] == "http://127.0.0.1:1234/v1"
+
+
+def test_discover_all_local_models_and_docker_host(monkeypatch):
+    _reset(monkeypatch)
+    monkeypatch.setenv("WEBUSE_LOCAL_MODEL_HOST", "host.docker.internal")
+    seen = []
+
+    def get(url, **kwargs):
+        seen.append(url)
+        assert kwargs["allow_redirects"] is False
+        models = (
+            ["studio-a", "studio-b", "studio-a"] if ":1234/" in url else ["ollama-a"]
+        )
+        return SimpleNamespace(
+            status_code=200,
+            json=lambda: {
+                "data": [{"id": model} for model in models] + [None, {}, {"id": ""}]
+            },
+        )
+
+    monkeypatch.setattr(llm.requests, "get", get)
+    models = llm.discover_local_openai_settings()
+    assert [model.model for model in models] == ["studio-a", "studio-b", "ollama-a"]
+    assert seen == [
+        "http://host.docker.internal:1234/v1/models",
+        "http://host.docker.internal:11434/v1/models",
+    ]
+
+
+def test_discovery_skips_unavailable_or_malformed_servers(monkeypatch):
+    _reset(monkeypatch)
+
+    def get(url, **kwargs):
+        if ":1234/" in url:
+            raise OSError("offline")
+        return SimpleNamespace(status_code=200, json=lambda: {"data": "invalid"})
+
+    monkeypatch.setattr(llm.requests, "get", get)
+    assert llm.discover_local_openai_settings() == []
+    assert llm.detect_local_openai_settings() is None
+
+
+def test_model_listing_passes_credentials_without_redirects(monkeypatch):
+    def get(url, **kwargs):
+        assert url == "https://model.example/v1/models"
+        assert kwargs["headers"] == {"Authorization": "Bearer test-key"}
+        assert kwargs["allow_redirects"] is False
+        return SimpleNamespace(
+            raise_for_status=lambda: None,
+            json=lambda: {"data": [{"id": "a"}, {"id": "a"}, {"id": "b"}]},
+        )
+
+    monkeypatch.setattr(llm.requests, "get", get)
+    assert llm.openai_model_ids("https://model.example/v1/", "test-key") == ["a", "b"]

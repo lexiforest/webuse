@@ -11,7 +11,7 @@ queueing, deduplication, scope, concurrency, and result aggregation.
 | --- | --- |
 | `base.py` | `BaseSpider`: configuration, route lookup, item conversion, and common crawl options; `SpiderRun`: state for one invocation. |
 | `sync.py` / `aio.py` | `Spider` / `AsyncSpider`: run pipelines and connect response handlers to `crawl()` / `acrawl()`. |
-| `config.py` | Project, spider, and effective run configuration models. |
+| `config.py` | Project, spider, and effective execution configuration models. |
 | `../engine/pages.py` | Shared compilation of `pages` into URL patterns, follow rules, and extraction rules. |
 | `../extract/rules.py` | Declarative extraction and normalization into `ParseResult(items, requests)`. |
 | `../extract/schema.py` | Validate page type/item/field structure and normalize selector strings before opening pipelines. |
@@ -21,13 +21,20 @@ queueing, deduplication, scope, concurrency, and result aggregation.
 `Spider` and `AsyncSpider` are sibling subclasses of `BaseSpider`. Users subclass
 one of the concrete classes; `AsyncSpider` is not a subtype of `Spider`.
 
-## From configuration to a run
+For new projects, keep crawl configuration in `spiders/<name>.yaml` and connect
+it through the class's `spider_config_path`. Put custom parsers, item models,
+hooks, and pipeline implementations in the Python module. The class attributes
+described below are supported API options, not a requirement to move YAML settings
+into Python when adding custom behavior. See the
+[custom parsing example](../../user-guide/quick-start/#custom-parsing-with-python-and-yaml).
+
+## From configuration to an execution
 
 1. `run()` loads project configuration and scopes the project's LLM settings
    with `use_openai_settings()`.
 2. `_resolve_settings()` starts with instance attributes and `start()`, overlays
    explicitly supplied spider-config fields, fills project defaults, then applies
-   run overrides. It compiles declarative `pages` into follow/extract rules and
+   execution overrides. It compiles declarative `pages` into follow/extract rules and
    validates the result as `EffectiveSpiderSettings`.
 3. `_prepare_run()` resolves pipelines and a signal bus into a `SpiderRun`.
    `_activate_run()` exposes it as `_run_state` for the duration of execution.
@@ -47,8 +54,8 @@ Project configuration comes from `config_path`, or a config file directly inside
 set instance attributes. Pipeline precedence is separate: `run(pipelines=...)`,
 then `self.pipelines`, then the spider config's `pipelines`. Project config
 does not supply pipelines. Passing `pipelines=[]` disables them.
-An instance rejects overlapping runs; use separate spiders for concurrent runs.
-Sequential runs get fresh state, including after a failure.
+An instance rejects overlapping executions; use separate spiders for concurrent executions.
+Sequential executions get fresh state, including after a failure.
 
 ## Responses, routes, and pipelines
 
@@ -77,7 +84,7 @@ response and pipeline order for each item. Other pipeline errors propagate.
 
 Spiders call the internal `_process_items()` / `_aprocess_items()` helpers in
 `pipelines/utils.py`. The sync engine invokes response handlers sequentially;
-`AsyncSpider` processes items inside its fixed crawl workers, with no run-wide
+`AsyncSpider` processes items inside its fixed crawl workers, with no execution-wide
 pipeline lock or separate item task queue. Pipelines protect their own shared
 resources when needed. Lifecycle
 context managers in the same module handle opening and cleanup. `AsyncSpider`

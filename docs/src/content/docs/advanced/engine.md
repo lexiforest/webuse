@@ -37,7 +37,7 @@ loop and reuses the queue, seen set, and request hasher.
 | `__init__.py` | Export `crawl()`, `acrawl()`, and request-state interfaces and implementations. |
 | `sync.py` | Blocking `crawl()`: concurrent downloads in a thread pool, sequential parsing on the calling thread. |
 | `aio.py` | Async `acrawl()`: fixed workers consume the selected async frontier directly; a condition coordinates idle workers and exhaustion. |
-| `pages.py` | Compile page patterns, follow rules, and extraction before a run. |
+| `pages.py` | Compile page patterns, follow rules, and extraction before an execution. |
 | `policy.py` | Prepare requests and URLs, check robots.txt, discover links, and enforce depth, domain, page type, and follow rules. |
 | `state.py` | Queue, seen-set, and fingerprint contracts; memory and Redis implementations. |
 | `async_state.py` | Async queue/seen protocols, memory and Redis backends, and awaited state counts. |

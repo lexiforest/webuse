@@ -13,12 +13,11 @@ assert.equal(nextCronTime("0 * * * *", Date.UTC(2026, 8, 4, 0, 1)), Date.UTC(202
 
 const project = store.createProject({
   name: "Smoke",
-  type: "yaml",
   target: "https://example.com",
   cron: "0 * * * *",
   files: [{ path: "webuse.yaml", content: "spiders:\n  smoke:\n    start_urls:\n      - https://example.com\n" }],
 });
-assert.ok(project.nextRunAt);
+assert.ok(project.nextExecutionAt);
 store.saveSettings({ llm: { model: "local-test" } });
 assert.equal((store.getSettings().llm as { model: string }).model, "local-test");
 assert.throws(transaction(() => {
@@ -28,22 +27,22 @@ assert.throws(transaction(() => {
 assert.equal(store.getProject(project.id)!.files.length, 1);
 assert.equal(store.getProject(project.id)!.name, "Smoke");
 assert.equal(sqlite.isTransaction, false);
-const run = store.createJob(project.id);
-assert.ok(run);
+const execution = store.createJob(project.id);
+assert.ok(execution);
 ensureOrchestrator();
 
 const deadline = Date.now() + 5000;
-let current = store.getJob(run!.id);
+let current = store.getJob(execution!.id);
 while (current?.status === "queued" || current?.status === "running") {
   if (Date.now() > deadline) throw new Error("Crawler process did not finish before the smoke-test timeout.");
   await new Promise(resolve => setTimeout(resolve, 50));
-  current = store.getJob(run!.id);
+  current = store.getJob(execution!.id);
 }
 
 assert.equal(current?.status, "failed");
 assert.ok(current?.command.includes(`crawl ${project.workspacePath} -o `));
 assert.doesNotMatch(current?.command ?? "", /crawl .*webuse\.(yaml|yml|toml)/);
-assert.match(store.listLogs(run!.id)[0].message as string, /webuse\.cli/);
+assert.match(store.listLogs(execution!.id)[0].message as string, /webuse\.cli/);
 if (process.platform !== "win32") {
   const directory = process.env.WEBUSE_WORK_DIR!;
   await mkdir(directory, { recursive: true });
@@ -62,7 +61,7 @@ fs.writeFileSync('runtime.txt', 'written in workspace');
     ensureOrchestrator();
     const timeout = Date.now() + 5000;
     while (["queued", "running"].includes(store.getJob(live.id)!.status)) {
-      assert.ok(Date.now() < timeout, "Live-source run did not finish");
+      assert.ok(Date.now() < timeout, "Live-source execution did not finish");
       await new Promise(resolve => setTimeout(resolve, 25));
     }
     assert.equal(store.getJob(live.id)!.status, "succeeded");
@@ -86,7 +85,7 @@ fs.writeFileSync('runtime.txt', 'written in workspace');
     const peer = await import(peerPath);
     peer.ensureOrchestrator();
     assert.equal(store.getJob(graceful.id)?.status, "running");
-    assert.equal(peer.cancelRun(graceful.id), true);
+    assert.equal(peer.cancelExecution(graceful.id), true);
     while (store.getJob(graceful.id)?.status === "running") {
       assert.ok(Date.now() < timeout, "Test runner did not stop");
       await new Promise(resolve => setTimeout(resolve, 25));

@@ -26,7 +26,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => {
 child.on('message', () => console.log('ready:' + child.pid));
 `, { mode: 0o755 });
 process.env.WEBUSE_PYTHON_COMMAND = executable;
-const project = store.createProject({ name: "Shutdown", type: "python", target: "https://test/", files: [] });
+const project = store.createProject({ name: "Shutdown", target: "https://test/", files: [] });
 const first = store.createJob(project.id)!;
 const pending = store.createJob(project.id)!;
 let close: () => Promise<void> = async () => {};

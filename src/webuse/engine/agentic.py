@@ -109,7 +109,7 @@ async def agentic_crawl(
 
     The token budget counts provider-reported usage across all responses.
     Usage is checked after each response. With no output cap, a single response may
-    exceed the remaining run budget; no further actions execute in that case.
+    exceed the remaining execution budget; no further actions execute in that case.
     This is a local guard, not a billing ledger.
     A provided client/model belongs to the caller. Cancellation propagates;
     crawl_finished receives the partial result.
@@ -393,7 +393,7 @@ async def agentic_crawl(
         info.completion_reason = "Elapsed time budget exhausted"
     except asyncio.CancelledError:
         result.close_reason = "cancelled"
-        info.completion_reason = "Run cancelled"
+        info.completion_reason = "Execution cancelled"
         raise
     except Exception as exc:
         result.close_reason = "error"

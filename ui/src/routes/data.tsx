@@ -1,9 +1,9 @@
 import { useNavigate, useSearchParams } from "@solidjs/router";
-import { For, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js";
+import { For, Show, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js";
 
-import Button from "~/components/Button";
+import { Button } from "~/components/ui/button";
 import Pagination from "~/components/Pagination";
-import RunViewerLayout, { type RunViewerRun } from "~/components/RunViewerLayout";
+import ExecutionViewerLayout, { type ExecutionSummary } from "~/components/ExecutionViewerLayout";
 
 type DataItem = {
   id: number;
@@ -12,7 +12,7 @@ type DataItem = {
   item: Record<string, unknown>;
 };
 
-type Run = RunViewerRun;
+type Execution = ExecutionSummary;
 
 const jsonTokenPattern =
   /("(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"(?=\s*:)|"(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*"|true|false|null|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|[{}\[\],:])/g;
@@ -59,12 +59,12 @@ function highlightJson(value: Record<string, unknown>): JSX.Element[] {
 export default function Data() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [runs, setRuns] = createSignal<Run[]>([]);
+  const [executions, setExecutions] = createSignal<Execution[]>([]);
   const [dataItems, setDataItems] = createSignal<DataItem[]>([]);
   const pageSize = 20;
   const [page, setPage] = createSignal(1);
-  const selectedRunId = () => String(searchParams.run_id ?? "");
-  const selectedRun = () => runs().find(run => String(run.id) === selectedRunId());
+  const selectedExecutionId = () => String(searchParams.execution_id ?? "");
+  const selectedExecution = () => executions().find(execution => String(execution.id) === selectedExecutionId());
   const totalPages = () => Math.max(1, Math.ceil(dataItems().length / pageSize));
   const currentPage = () => Math.min(page(), totalPages());
   const pageDataItems = createMemo(() => {
@@ -72,52 +72,55 @@ export default function Data() {
     return dataItems().slice(start, start + pageSize);
   });
 
-  const loadRuns = async () => {
-    const response = await fetch("/api/runs");
+  const loadExecutions = async () => {
+    const response = await fetch("/api/executions");
     if (!response.ok) {
       return;
     }
-    const data = (await response.json()) as { runs: Run[] };
-    setRuns(data.runs);
+    const data = (await response.json()) as { executions: Execution[] };
+    setExecutions(data.executions);
   };
 
-  const loadData = async (runId = selectedRunId()) => {
-    if (!runId) {
+  const loadData = async (executionId = selectedExecutionId()) => {
+    if (!executionId) {
       setDataItems([]);
       return;
     }
-    const response = await fetch(`/api/data?run_id=${runId}`);
+    const response = await fetch(`/api/data?execution_id=${executionId}`);
     if (!response.ok) {
       return;
     }
     const data = (await response.json()) as { dataItems: DataItem[] };
-    setDataItems(data.dataItems);
+    if (executionId === selectedExecutionId()) setDataItems(data.dataItems);
   };
 
   onMount(() => {
-    void loadRuns().then(() => loadData());
+    void loadExecutions().then(() => loadData());
     const timer = window.setInterval(() => {
-      void loadRuns();
+      void loadExecutions();
       void loadData();
     }, 2000);
     onCleanup(() => window.clearInterval(timer));
   });
 
   return (
-    <RunViewerLayout
+    <ExecutionViewerLayout
       currentTab="data"
       title="Data"
-      description="Items emitted by crawler runs"
-      action={<Button type="button" disabled={!selectedRunId()}>Export JSONL</Button>}
-      runs={runs}
-      selectedRunId={selectedRunId}
-      selectedRun={selectedRun}
+      description="Items emitted by crawler executions"
+      action={<Show when={selectedExecutionId()} fallback={<Button variant="outline" disabled>Export JSONL</Button>}>
+        <a class="inline-flex rounded border border-gray-600 bg-gray-800 px-3 py-2 text-sm hover:bg-gray-700"
+          href={`/api/data?execution_id=${encodeURIComponent(selectedExecutionId())}&format=jsonl`} download={`execution-${selectedExecutionId()}.jsonl`}>Export JSONL</a>
+      </Show>}
+      executions={executions}
+      selectedExecutionId={selectedExecutionId}
+      selectedExecution={selectedExecution}
       emptyContentTitle="Data items"
-      emptySelectionText="Select a run to view data."
-      onSelectRun={run => {
-        navigate(`/data?run_id=${run.id}`);
+      emptySelectionText="Select an execution to view data."
+      onSelectExecution={execution => {
+        navigate(`/data?execution_id=${execution.id}`);
         setPage(1);
-        void loadData(String(run.id));
+        void loadData(String(execution.id));
       }}
     >
       <div class="grid min-w-0 gap-3">
@@ -141,6 +144,6 @@ export default function Data() {
         itemLabel="items"
         onPageChange={setPage}
       />
-    </RunViewerLayout>
+    </ExecutionViewerLayout>
   );
 }

@@ -6,9 +6,9 @@ import { store } from "../src/lib/server/store";
 import { sqlite } from "../src/lib/server/db";
 import { cloneWorkspace, lockWorkspace, workspaceRoot } from "../src/lib/server/workspace";
 
-const project = store.createProject({ name: "Workspace", type: "python", target: "https://example.com", files: [{ path: "crawler.py", content: "original" }] });
-assert.throws(() => store.createProject({ name: "Invalid", type: "python", target: "https://example.com", files: [{ path: "../escape", content: "bad" }] }), /Invalid/);
-const afterFailure = store.createProject({ name: "After failure", type: "python", target: "https://example.com", files: [] });
+const project = store.createProject({ name: "Workspace", target: "https://example.com", files: [{ path: "crawler.py", content: "original" }] });
+assert.throws(() => store.createProject({ name: "Invalid", target: "https://example.com", files: [{ path: "../escape", content: "bad" }] }), /Invalid/);
+const afterFailure = store.createProject({ name: "After failure", target: "https://example.com", files: [] });
 assert.ok(afterFailure.id > project.id + 1, "Failed creation must not reuse a filesystem identity");
 const root = project.workspacePath;
 assert.equal(readFileSync(join(root, "crawler.py"), "utf8"), "original");
@@ -73,7 +73,7 @@ if (process.platform !== "win32") {
 const gitSource = join(workspaceRoot, "git-source");
 const gitInit = spawnSync("git", ["init", "--bare", gitSource], { encoding: "utf8" });
 assert.equal(gitInit.status, 0, gitInit.stderr);
-const imported = store.createProject({ name: "Git import", type: "git", target: gitSource, files: [] });
+const imported = store.createProject({ name: "Git import", target: gitSource, files: [] });
 await cloneWorkspace(imported.id, gitSource);
 writeFileSync(join(imported.workspacePath, "crawler.py"), "editable clone");
 const importedSaved = store.getProject(imported.id)!;

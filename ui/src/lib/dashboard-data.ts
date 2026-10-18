@@ -1,7 +1,6 @@
 export type Project = {
   id: number;
   name: string;
-  type: "yaml" | "python" | "git";
   target: string;
   updatedAt: string;
   status: string;
@@ -35,16 +34,14 @@ export const projects: Project[] = [
   {
     id: 1,
     name: "Catalog crawler",
-    type: "git",
-    target: "https://github.com/example/catalog-task.git",
+    target: "https://example.com/catalog",
     updatedAt: "2026-06-03 14:20",
     status: "Ready",
   },
   {
     id: 2,
     name: "Pricing monitor",
-    type: "yaml",
-    target: "pricing-task.tar.gz",
+    target: "https://example.com/prices",
     updatedAt: "2026-06-02 18:05",
     status: "Needs review",
   },

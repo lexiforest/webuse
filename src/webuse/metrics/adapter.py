@@ -153,6 +153,7 @@ class Metrics:
         content = getattr(response, "content", None)
         if content is not None:
             self._gauge("response_bytes", len(content), status=status)
+            self._counter("downloaded_bytes", len(content))
 
     def parse_started(self, response: Any = None, **kwargs: Any) -> None:
         if response is not None:

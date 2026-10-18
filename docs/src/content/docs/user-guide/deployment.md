@@ -3,7 +3,7 @@ title: "Deployment"
 ---
 
 This guide describes current self-managed deployment of Webuse framework projects.
-The local Node orchestrator can manage schedules and runs, or a project can be
+The local Node orchestrator can manage schedules and executions, or a project can be
 packaged as a container and run as a batch command:
 
 ```bash
@@ -136,13 +136,13 @@ uv add webuse
 uv run webuse serve
 ```
 
-Node owns SQLite, schedules, and run state. It starts one Python crawler process
-per active run, so no long-running Python server is required.
-The launcher opens a browser and stores data in `~/.webuse/ui`. Use
+Node owns SQLite, schedules, and execution state. It starts one Python crawler process
+per active execution, so no long-running Python server is required.
+The launcher opens a browser and stores data in `~/.webuse`. Use
 `--no-open`, `--data-dir`, and `--port` to change these defaults.
 Working source lives in `workspaces/` beside the database; override this with
 `WEBUSE_WORKSPACE_DIR`. Jobs run directly from working files, with outputs in
-`runs/`; there are no source snapshots or copies per run. Use Git for code history
+`executions/`; there are no source snapshots or copies per execution. Use Git for code history
 and back up SQLite separately.
 See [Harness Internals](../../advanced/harness-internals/#source-development)
 for the source development workflow.
@@ -160,7 +160,7 @@ pm2 start ecosystem.config.cjs
 ```
 
 This PM2 setup manages the single SolidStart control-plane process. Python
-crawler children are started and stopped with each run. On SIGINT or SIGTERM,
+crawler children are started and stopped with each execution. On SIGINT or SIGTERM,
 the manager stops scheduling, forwards the signal to crawler process groups, and
 waits for cleanup, escalating to SIGKILL after 1.5 seconds if needed. The bundled
 Compose service uses an init process and a 15-second shutdown grace period.

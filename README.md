@@ -142,8 +142,8 @@ webuse serve
 ```
 
 The packaged UI opens at `http://127.0.0.1:2951/` and requires Node.js 22.19+.
-Configure a streaming, tool-capable OpenAI-compatible model in Settings to use
-Harness. Project files and run data stay on your machine; no Webuse Cloud account
+Harness discovers LM Studio and Ollama automatically, or you can configure a
+streaming, tool-capable OpenAI-compatible model through the global model indicator. Project files and execution data stay on your machine; no Webuse Cloud account
 is required. The CLI examples above require neither Node.js nor an LLM.
 
 ## Webuse Cloud

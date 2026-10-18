@@ -11,11 +11,42 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: 2951
-      WEBUSE_DB_PATH: /data/webuse-ui.sqlite
-      WEBUSE_WORK_DIR: /data/runs
+      WEBUSE_DB_PATH: /data/webuse.db
+      WEBUSE_WORK_DIR: /data/executions
       WEBUSE_PYTHON_COMMAND: /app/.venv/bin/python
+      WEBUSE_LOCAL_MODEL_HOST: host.docker.internal
+      WEBUSE_PROMETHEUS_URL: http://prometheus:9090
+      WEBUSE_STATSD_HOST: statsd-exporter
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - webuse-data:/data
 
+  statsd-exporter:
+    image: prom/statsd-exporter
+    ports:
+      - "127.0.0.1:8125:8125/udp"
+      - "127.0.0.1:9102:9102"
+    command:
+      - --statsd.mapping-config=/etc/statsd-exporter.yaml
+      - --statsd.listen-udp=:8125
+      - --no-statsd.parse-influxdb-tags
+      - --no-statsd.parse-librato-tags
+      - --no-statsd.parse-signalfx-tags
+    volumes:
+      - ./statsd-exporter.yaml:/etc/statsd-exporter.yaml:ro
+
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yaml
+      - --storage.tsdb.path=/prometheus
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - prometheus-data:/prometheus
+
 volumes:
   webuse-data:
+  prometheus-data:

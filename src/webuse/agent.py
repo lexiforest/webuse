@@ -1,4 +1,4 @@
-"""Public contracts for bounded, tool-driven crawler runs."""
+"""Public contracts for bounded, tool-driven crawler executions."""
 
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol

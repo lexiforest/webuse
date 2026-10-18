@@ -24,12 +24,14 @@ export function projectFiles(value: unknown): ProjectFile[] | undefined {
 }
 export function projectInput(value: Record<string, unknown> | undefined): { input?: ProjectInput; error?: string } {
   if (!value || typeof value.name !== "string" || !value.name.trim()) return { error: "Project name is required." };
-  if (!(value.type === "yaml" || value.type === "python" || value.type === "git")) return { error: "Project type must be yaml, python, or git." };
+  if ("type" in value) return { error: "Project type is no longer supported. Provide project files and a crawl command instead." };
   if (typeof value.target !== "string" || !value.target.trim()) return { error: "Project target is required." };
   const cron = typeof value.cron === "string" ? value.cron.trim() : "";
+  if (value.crawlCommand !== undefined && (typeof value.crawlCommand !== "string" || value.crawlCommand.length > 16_000 || value.crawlCommand.includes("\0"))) return { error: "Crawl command must be text under 16,000 characters without null bytes." };
+  const crawlCommand = typeof value.crawlCommand === "string" ? value.crawlCommand.trim() : "";
   if (cron && !validCron(cron)) return { error: "Project cron must be a valid five-field cron expression." };
   if (!Array.isArray(value.files)) return { error: "Project files must be an array." };
   const files = projectFiles(value.files);
   if (!files) return { error: "Project files contain an invalid or duplicate path." };
-  return { input: { name: value.name.trim(), type: value.type, target: value.target.trim(), cron, config: value.config && typeof value.config === "object" && !Array.isArray(value.config) ? value.config as Record<string, unknown> : undefined, files, revision: typeof value.revision === "string" ? value.revision : undefined } };
+  return { input: { name: value.name.trim(), target: value.target.trim(), cron, crawlCommand, config: value.config && typeof value.config === "object" && !Array.isArray(value.config) ? value.config as Record<string, unknown> : undefined, files, revision: typeof value.revision === "string" ? value.revision : undefined } };
 }

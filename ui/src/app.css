@@ -1,9 +1,40 @@
 @import "tailwindcss";
 
+/* SolidUI / shadcn semantic colors, using Webuse's dark palette. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--card);
+  --color-popover-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: #fff;
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--foreground);
+  --color-muted: var(--card);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--secondary);
+  --color-accent-foreground: var(--foreground);
+  --color-destructive: #dc2626;
+  --color-destructive-foreground: #fff;
+  --color-success: #059669;
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: #0ea5e9;
+}
+
 :root {
-  color-scheme: light;
-  background: #f8fafc;
-  color: #020617;
+  color-scheme: dark;
+  --background: #111827;
+  --foreground: #f9fafb;
+  --card: #1f2937;
+  --primary: #0284c7;
+  --secondary: #374151;
+  --muted-foreground: #9ca3af;
+  --border: #374151;
+  background: var(--background);
+  color: var(--foreground);
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -24,65 +55,6 @@ select,
 textarea {
   font: inherit;
   letter-spacing: 0;
-}
-
-.field {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 0.375rem;
-  font-size: 0.875rem;
-  color: #475569;
-}
-
-.field input,
-.field select,
-.field textarea {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid #cbd5e1;
-  border-radius: 0.25rem;
-  background: #fff;
-  color: #020617;
-  padding: 0.625rem 0.75rem;
-  outline: none;
-}
-
-.dark-field {
-  color: #9ca3af;
-}
-
-.dark-field input,
-.dark-field select,
-.dark-field textarea,
-.dark-select {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid #374151;
-  border-radius: 0.375rem;
-  background: #111827;
-  color: #f9fafb;
-  padding: 0.625rem 0.75rem;
-  outline: none;
-}
-
-.dark-field input:focus,
-.dark-field select:focus,
-.dark-field textarea:focus,
-.dark-select:focus {
-  border-color: #0ea5e9;
-  box-shadow: 0 0 0 2px rgb(14 165 233 / 0.18);
-}
-
-.field textarea {
-  resize: vertical;
-}
-
-.field input:focus,
-.field select:focus,
-.field textarea:focus {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px rgb(37 99 235 / 0.14);
 }
 
 .data-table {
@@ -706,6 +678,27 @@ textarea {
   padding-top: 0.5rem;
   color: #93c5fd;
   font-size: 0.75rem;
+}
+
+.llm-tool-activities {
+  margin: 0 0 0.75rem;
+  border-top: 0;
+  padding-top: 0;
+}
+
+.llm-tool-activities summary {
+  cursor: pointer;
+}
+
+.llm-tool-activity {
+  margin-top: 0.5rem;
+}
+
+.llm-tool-activity code {
+  display: block;
+  margin-top: 0.125rem;
+  color: #9ca3af;
+  overflow-wrap: anywhere;
 }
 
 .llm-composer {

@@ -1,0 +1,106 @@
+import assert from "node:assert/strict";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import type { APIEvent } from "@solidjs/start/server";
+import { store } from "../src/lib/server/store";
+import { sqlite } from "../src/lib/server/db";
+import { defaults, normalizedSettings } from "../src/lib/server/settings";
+import { defaultPanels, panelSelection, prometheusUrl } from "../src/lib/monitoring";
+import { clearMonitoringCache, executionPanel, executionRange, monitoringConnection, normalizeSeries, testMonitoringConnection } from "../src/lib/server/monitoring";
+import { GET } from "../src/routes/api/monitoring";
+import { PUT } from "../src/routes/api/monitoring-panels";
+
+const event = (path: string, body?: unknown) => ({ request: new Request(`http://localhost/api/${path}`, body ? { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : undefined) }) as APIEvent;
+const originalSettings = store.getSettings();
+const originalEnvironment = { ...process.env };
+const project = store.createProject({ name: "Monitoring fixture", target: "example.invalid", files: [] });
+const other = store.createProject({ name: "Independent panels", target: "example.invalid", files: [] });
+const job = store.createJob(project.id)!;
+store.finishJob(job.id, "succeeded");
+const directory = join(process.env.WEBUSE_WORK_DIR!, "monitoring-fixture");
+mkdirSync(directory, { recursive: true });
+try {
+  assert.deepEqual(store.monitoringPanels(project.id), defaultPanels);
+  assert.deepEqual(panelSelection(["errors", "errors", "progress"]), ["progress", "errors"]);
+  assert.throws(() => panelSelection(["unknown"]));
+  assert.throws(() => prometheusUrl("http://user:password@localhost"));
+  assert.throws(() => prometheusUrl("file:///tmp"));
+  assert.equal(normalizedSettings({}).monitoring.prometheusUrl, "");
+  assert.equal(prometheusUrl(" http://localhost:9090/ "), "http://localhost:9090");
+  const saved = await PUT(event(`monitoring-panels?project_id=${project.id}`, { enabledPanels: [] }));
+  assert.equal(saved.status, 200);
+  assert.deepEqual(store.monitoringPanels(project.id), []);
+  assert.deepEqual(store.monitoringPanels(other.id), defaultPanels);
+  assert.equal((await GET(event(`monitoring?execution_id=${job.id}&panel=throughput`))).status, 409);
+  assert.equal((await GET(event("monitoring?execution_id=999999"))).status, 404);
+  assert.equal((await PUT(event(`monitoring-panels?project_id=${project.id}`, { enabledPanels: ["bad"] }))).status, 400);
+  store.saveMonitoringPanels(project.id, defaultPanels);
+  assert.equal((await GET(event(`monitoring?execution_id=${job.id}&panel=bad`))).status, 400);
+  assert.equal((await GET(event(`monitoring?execution_id=${job.id}&panel=errors&start=NaN`))).status, 400);
+
+  const start = Date.now() - 100000;
+  sqlite.prepare("UPDATE jobs SET started_at = ?, finished_at = ? WHERE id = ?").run(start, start + 90000, job.id);
+  const execution = store.getJob(job.id)!;
+  const range = executionRange(execution);
+  assert.equal(range.start, start / 1000);
+  assert.ok(range.step >= 1);
+  assert.equal(executionRange({ ...execution, startedAtMs: Date.now() - 8000, finishedAtMs: null }).step, 1, "Short executions must not skip the last few scrapes");
+  assert.throws(() => executionRange(execution, range.end + 1));
+  assert.throws(() => executionRange(execution, undefined, undefined, NaN));
+  const normalized = normalizeSeries({ data: { resultType: "matrix", result: [{ metric: { status: "200" }, values: [[1, "NaN"], [2, "+Inf"], [3, "4.5"]] }] } }, "Responses", "/s");
+  assert.deepEqual(normalized[0].values, [[1000, null], [2000, null], [3000, 4.5]]);
+  for (let i = 0; i < 110; i++) store.insertDataItem(job.id, { title: i % 2 ? null : "Book", value: 1 });
+  const quality = await executionPanel(store.getJob(job.id)!, "quality", range);
+  assert.equal(quality.stats![0].value, 100);
+  assert.deepEqual(quality.rows!.find(row => row[0] === "title"), ["title", 50, 50]);
+  store.appendLog(job.id, "stderr", "fixture error");
+  sqlite.prepare("UPDATE logs SET created_at = ? WHERE job_id = ?").run(start + 50000, job.id);
+  const full = await executionPanel(execution, "errors", executionRange(execution));
+  assert.ok(full.rows!.length);
+  const filtered = await executionPanel(execution, "errors", executionRange(execution, range.start, range.start + 1));
+  assert.equal(filtered.rows!.length, 0);
+
+  if (process.platform !== "win32") {
+    const python = resolve("../.venv/bin/python");
+    const config = join(directory, ".webuserc.yaml");
+    const launch = join(directory, "nested", "ui"); mkdirSync(launch, { recursive: true });
+    writeFileSync(config, "monitoring:\n  prometheus_url: http://file.invalid:9090\n");
+    const wrapper = join(directory, "config-python");
+    writeFileSync(wrapper, `#!${python}\nimport runpy\nfrom pathlib import Path\nimport webuse.config as config\nconfig.USER_CONFIG_PATH = Path(${JSON.stringify(join(directory, "missing.yaml"))})\nrunpy.run_module('webuse.monitoring', run_name='__main__')\n`, { mode: 0o755 });
+    process.env.WEBUSE_PYTHON_COMMAND = wrapper;
+    process.env.WEBUSE_CONFIG_DIR = launch;
+    delete process.env.WEBUSE_PROMETHEUS_URL;
+    store.saveSettings({}); clearMonitoringCache();
+    assert.equal((await monitoringConnection()).prometheusUrl, "http://file.invalid:9090");
+    process.env.WEBUSE_PROMETHEUS_URL = "http://env.invalid:9090"; clearMonitoringCache();
+    assert.equal((await monitoringConnection()).source, "environment");
+    store.saveSettings({ ...defaults, monitoring: { prometheusUrl: "http://saved.invalid:9090" } });
+    writeFileSync(config, "monitoring: [broken"); clearMonitoringCache();
+    assert.equal((await monitoringConnection()).source, "database");
+    delete process.env.WEBUSE_PROMETHEUS_URL; store.saveSettings({}); clearMonitoringCache();
+    assert.ok((await monitoringConnection()).error);
+
+    const calls = join(directory, "queries.jsonl");
+    const probe = join(directory, "prometheus-probe");
+    writeFileSync(probe, `#!${process.execPath}\nconst fs = require('node:fs'); let input=''; process.stdin.on('data', c => input += c); process.stdin.on('end', () => { const value=JSON.parse(input); fs.appendFileSync(${JSON.stringify(calls)}, JSON.stringify(value)+'\\n'); console.log(JSON.stringify(value.queries.map(q => ({ data: { resultType: q.start === undefined ? 'vector' : 'matrix', result: [{metric:{}, ...(q.start === undefined ? {value:[q.time || 1,'7']} : {values:[[q.start,'1'],[q.end,'NaN']]})}] } })))); });\n`, { mode: 0o755 });
+    process.env.WEBUSE_PYTHON_COMMAND = probe;
+    store.saveSettings({ monitoring: { prometheusUrl: "http://fixture.invalid:9090" } });
+    assert.equal((await testMonitoringConnection()).connected, true);
+    const throughput = await executionPanel(execution, "throughput", range);
+    assert.equal(throughput.series.length, 2);
+    assert.equal(throughput.series[0].values.at(-1)![1], null);
+    const queries = JSON.parse(readFileSync(calls, "utf8").trim().split("\n").at(-1)!).queries;
+    assert.ok(queries.every((q: { query: string }) => q.query.includes(`execution_id="${job.id}"`) && q.query.includes(`project_id="${project.id}"`) && q.query.includes(store.monitoringInstance())));
+    const before = readFileSync(calls, "utf8");
+    store.updateJobMetadata(job.id, { monitoring: { totals: { request_finished: 13, request_error: 0 }, spiders: ["books"] } });
+    const final = await executionPanel(store.getJob(job.id)!, "progress", range);
+    assert.equal(final.stats![0].value, 13);
+    assert.equal(readFileSync(calls, "utf8"), before, "Final counts must not require Prometheus");
+  }
+  console.log("Monitoring passed: connection precedence, execution isolation, panel persistence, range filtering, missing data, and final counts.");
+} finally {
+  store.saveSettings(originalSettings);
+  for (const key of Object.keys(process.env)) if (!(key in originalEnvironment)) delete process.env[key];
+  Object.assign(process.env, originalEnvironment); clearMonitoringCache();
+  store.deleteProject(project.id); store.deleteProject(other.id);
+}

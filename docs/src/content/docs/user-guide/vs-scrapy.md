@@ -8,16 +8,17 @@ title: "Webuse vs Scrapy"
 spiders, generated spider files, item pipelines, feed-like output, and lifecycle
 signals. It does not try to clone Scrapy's full downloader middleware stack.
 
-With webuse, you don't need to battle with twisted anymore, it's only the standard lib.
+Webuse uses Python's asyncio for async execution and curl_cffi for HTTP transport.
 
 ### Configuration
 
 webuse uses `webuse.yaml` for project settings, and an explicit `spiders` section.
-Crawl-specific settings live inline under `spiders.<name>`, on the spider class,
-or in a per-spider YAML file referenced from the root config.
+Crawl-specific settings belong in `spiders/<name>.yaml`. The registered Python
+class loads that file through `spider_config_path` and holds custom parsers, item
+models, and hooks. Inline configuration and Python-only settings are supported
+alternatives, not the default for new projects.
 
-The CLI reads the root project config (`webuse.yaml`, or
-`webuse.toml`) from the supplied directory. It does not accept a config file
+The CLI reads the root project config from the supplied directory. It does not accept a config file
 as the crawl target or search upward through parent directories.
 
 ### settings.py
@@ -94,13 +95,15 @@ webuse gen books https://books.toscrape.com/
 ```
 
 Generation requires an existing project and registers the new spider there.
-YAML config with a Python module is the default output. Use `--python-only`
-for a Python-only spider:
+YAML config with a Python module is the default output, including when custom
+parsing is needed. Generate another spider in the same project:
 
 ```bash
-webuse gen quotes https://quotes.toscrape.com/ --python-only
+webuse gen quotes https://quotes.toscrape.com/
 webuse crawl --spider quotes -o quotes.jsonl
 ```
+
+Use `--python-only` only if you explicitly prefer all configuration in Python.
 
 #### crawl and runspider
 
@@ -125,14 +128,14 @@ If no directory is given, `webuse crawl` assumes the current directory. If
 
 Scrapy spiders use callback functions stored on request objects. webuse keeps
 `RequestOptions` pure data and serializable. A follow-up request can carry a
-`page_type`, and the spider maps that page type to a route:
+`page_type`, and the spider maps that page type to a route. In the generated
+`spiders/books.py`, keep `Item` and `CleanPipeline`, and replace the spider class
+with:
 
 ```python
-import webuse
-
-
 class BooksSpider(webuse.Spider):
-    start_urls = ["https://books.toscrape.com/"]
+    spider_config_path = "spiders/books.yaml"
+    item_model = Item
     routes = {"detail": "parse_detail"}
 
     def parse(self, response):
@@ -146,6 +149,11 @@ class BooksSpider(webuse.Spider):
 `Spider.parse` also has a default behavior: if the spider has an `extract`
 mapping, the base method extracts items from it. Override `parse` for custom
 logic.
+
+Keep seeds, scope, depth, and pipeline settings in `spiders/books.yaml`. For this
+callback example, remove the starter `pages.default` rules: `parse()` schedules
+the detail requests and `parse_detail()` extracts them. When navigation fits
+declarative rules, keep those rules in YAML instead of writing a callback.
 
 For no-code spiders, the same page type is serializable in YAML. `pages` is
 keyed by source page type, and follow rules set `page_type` for discovered
@@ -202,7 +210,7 @@ Scrapy persists scheduler state in `requests.queue`, `requests.seen`, and
 interfaces and lets the CLI store them in Redis through `--state`:
 
 ```bash
-webuse crawl books_project --spider books --state redis://localhost:6379/0
+webuse crawl --spider books --state redis://localhost:6379/0
 ```
 
 ## Signals and Metrics

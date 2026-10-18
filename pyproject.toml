@@ -50,7 +50,7 @@ where = ["src"]
 namespaces = false
 
 [tool.setuptools.package-data]
-webuse = ["_ui/**/*", "_ui/public/.vite/*"]
+webuse = ["_ui/**/*", "_ui/public/.vite/*", "_docs/**/*.md", "_docs/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

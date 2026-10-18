@@ -3,7 +3,7 @@ import { marked } from "marked";
 import { For, Show } from "solid-js";
 import { FiSend } from "solid-icons/fi";
 
-import Button from "~/components/Button";
+import { Button } from "~/components/ui/button";
 
 marked.setOptions({ async: false, breaks: true, gfm: true });
 
@@ -13,10 +13,19 @@ export type HarnessMessage = {
   metadata?: {
     changedFiles?: string[];
     toolResults?: ToolActivity[];
+    titleError?: string;
+    error?: string;
   };
 };
 
-export type ToolActivity = { id: string; name: string; status: "running" | "succeeded" | "failed" };
+export type ToolActivity = { id: string; name: string; status: "running" | "succeeded" | "failed"; preview?: string };
+
+function Activity(props: { tool: ToolActivity }) {
+  return <div class="llm-tool-activity">
+    <div>{props.tool.name}: {props.tool.status}</div>
+    <Show when={props.tool.preview}><code>{props.tool.preview}</code></Show>
+  </div>;
+}
 
 type HarnessProps = {
   messages?: HarnessMessage[];
@@ -90,17 +99,20 @@ export default function Harness(props: HarnessProps) {
                   <div class="llm-message-role">
                     {message.role === "user" ? userName() : assistantName()}
                   </div>
+                  <Show when={message.metadata?.toolResults?.length}>
+                    <details class="llm-message-meta llm-tool-activities">
+                      <summary>Tool activity ({message.metadata?.toolResults?.length})</summary>
+                      <For each={message.metadata?.toolResults}>{tool => <Activity tool={tool} />}</For>
+                    </details>
+                  </Show>
                   <div class="llm-message-body" innerHTML={renderMarkdown(message.content)} />
+                  <Show when={message.metadata?.titleError}>
+                    <div class="llm-message-meta">{message.metadata?.titleError}</div>
+                  </Show>
                   <Show when={message.metadata?.changedFiles?.length}>
                     <div class="llm-message-meta">
                       Changed: {message.metadata?.changedFiles?.join(", ")}
                     </div>
-                  </Show>
-                  <Show when={message.metadata?.toolResults?.length}>
-                    <details class="llm-message-meta">
-                      <summary>Tool activity ({message.metadata?.toolResults?.length})</summary>
-                      <For each={message.metadata?.toolResults}>{tool => <div>{tool.name}: {tool.status}</div>}</For>
-                    </details>
                   </Show>
                 </article>
               )}
@@ -108,13 +120,13 @@ export default function Harness(props: HarnessProps) {
             <Show when={props.pending}>
               <article class="llm-message assistant pending">
                 <div class="llm-message-role">{assistantName()}</div>
+                <div class="llm-message-meta llm-tool-activities" aria-live="polite">
+                  <For each={props.tools}>{tool => <Activity tool={tool} />}</For>
+                  <Show when={props.pendingText}><div>{props.pendingText}</div></Show>
+                </div>
                 <Show when={props.streamedText}>
                   <div class="llm-message-body" innerHTML={renderMarkdown(props.streamedText || "")} />
                 </Show>
-                <div class="llm-message-meta" aria-live="polite">
-                  <For each={props.tools}>{tool => <div>{tool.name}: {tool.status}</div>}</For>
-                  <Show when={props.pendingText}><div>{props.pendingText}</div></Show>
-                </div>
                 <div class="llm-thinking" aria-label={props.pendingText || "Thinking"}>
                   <span />
                   <span />
@@ -135,12 +147,12 @@ export default function Harness(props: HarnessProps) {
           disabled={props.disabled || props.pending || props.loading}
         />
         <Show when={props.pending && props.onCancel}>
-          <Button size="compact" type="button" onClick={() => props.onCancel?.()} aria-label="Stop assistant">Stop</Button>
+          <Button variant="outline" size="sm" type="button" onClick={() => props.onCancel?.()} aria-label="Stop assistant">Stop</Button>
         </Show>
-        <Button
+        <Button variant="outline"
           aria-label="Send LLM message"
           disabled={props.disabled || !props.value.trim() || props.pending || props.loading}
-          size="compact"
+          size="sm"
           type="button"
           onClick={props.onSubmit}
         >

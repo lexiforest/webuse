@@ -89,7 +89,7 @@ itself.
 
 ## What is an agentic crawler?
 
-[`AgenticSpider`](../../advanced/agentic/) uses an LLM during a run to choose links,
+[`AgenticSpider`](../../advanced/agentic/) uses an LLM during an execution to choose links,
 inspect pages, and assemble validated records. The engine stops when the request
 queue is empty and no request is active. You declare the goal, output model,
 and total token budget; tools are Python calls inside the

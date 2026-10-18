@@ -3,8 +3,8 @@ title: "Configuration"
 ---
 
 Webuse separates project defaults and spider registration from each spider's crawl,
-extraction, and item-processing settings. This reference describes YAML; TOML is
-also supported. See [Quick Start](../../user-guide/quick-start/) for a complete
+extraction, and item-processing settings. Use YAML for new project and spider
+configuration. See [Quick Start](../../user-guide/quick-start/) for a complete
 project walkthrough.
 
 ## Files and discovery
@@ -13,11 +13,11 @@ project walkthrough.
 | --- | --- | --- |
 | `webuse.yaml` | Project defaults and registered spiders | `webuse crawl DIRECTORY`, or Python `Spider.project_dir` / `Spider.config_path`. |
 | `spiders/books.yaml` | One spider's settings | A registry entry's `config`, or Python `Spider.spider_config_path`. The filename is arbitrary. |
-| `.webuserc.yaml` | Local model defaults | Current working directory. |
-| `~/.config/webuse/config.yaml` | User model defaults | Python model helpers. |
+| `.webuserc.yaml` | Local model and monitoring defaults | Nearest file from the current directory up through home or filesystem root. |
+| `~/.config/webuse/config.yaml` | User model and monitoring defaults | Framework configuration loader. |
 
-Project discovery checks `webuse.toml`, `webuse.yaml`, then `webuse.yml` in the
-specified directory. It does not search parent directories. Files must contain
+Keep one root project configuration in the specified directory; new projects use
+`webuse.yaml`. Project discovery does not search parent directories. Files must contain
 a mapping. Unknown top-level project and spider fields are rejected.
 
 `webuse crawl DIRECTORY --spider NAME` runs a registered spider. Omitting
@@ -34,7 +34,7 @@ The schema is `ProjectConfig` in `src/webuse/spider/config.py`.
 | `robots_txt` | Boolean | Unset | Default robots.txt policy. |
 | `concurrency` | Positive integer | Unset | Default maximum simultaneous page downloads per crawl. |
 | `per_domain` | Positive integer | Unset | Default maximum simultaneous page downloads per hostname and port. |
-| `llm` | Mapping | `{}` | Model settings scoped to each spider run. |
+| `llm` | Mapping | `{}` | Model settings scoped to each spider execution. |
 | `log` | Mapping | `{}` | Logging settings applied by `webuse crawl`. |
 | `spiders` | Mapping | `{}` | Registered spider names and targets; must be nonempty to crawl. |
 
@@ -54,8 +54,14 @@ log:
   append: true
 spiders:
   books:
-    config: spiders/books.yaml
+    path: spiders/books.py
 ```
+
+This is the default generated layout: `spiders/books.py` defines the model and
+custom code, and its class sets `spider_config_path = "spiders/books.yaml"`.
+Seeds, scope, depth, declarative `pages` rules, request defaults, and pipeline
+configuration belong in that YAML file even when parsing uses Python callbacks.
+See [custom parsing](../../user-guide/quick-start/#custom-parsing-with-python-and-yaml).
 
 ### `spiders`
 
@@ -64,13 +70,16 @@ a mapping identifying a target:
 
 | Entry | Meaning |
 | --- | --- |
-| `config: spiders/books.yaml` | Load a separate YAML or TOML spider configuration. |
+| `config: spiders/books.yaml` | Load a separate YAML spider configuration without a spider subclass. |
 | `path: spiders/books.py` | Load a Python file containing a spider. |
 | `module: spiders.books:BooksSpider` | Import a specific Python spider class. |
 | Inline spider fields | Validate as `SpiderConfig`; the registry key supplies `name` if omitted. |
 
 File paths resolve relative to the project root. Python targets may define
 `Spider` or `AsyncSpider`; specify a class when a module contains multiple spiders.
+Inline configurations and class-based settings remain supported, but they are
+not the default layout for new projects. Use Python-only configuration when the
+user explicitly prefers it; preserve existing project layouts.
 
 ### `concurrency` and `per_domain`
 
@@ -80,7 +89,7 @@ File paths resolve relative to the project root. Python targets may define
 | `per_domain` | Positive integer | No separate limit | Maximum simultaneous page downloads per hostname and port. |
 
 Both fields are top-level project settings, using the same names as spider
-settings. Spider settings and run arguments override these defaults. Robots lookups are
+settings. Spider settings and execution arguments override these defaults. Robots lookups are
 separate from page-download limits. Per-host override maps are not supported.
 
 ### `log`
@@ -105,20 +114,24 @@ through `configure_logger()`; running a spider does not reconfigure the logger.
 
 Project `llm` values override model defaults during `Spider.run()` and
 `AsyncSpider.run()`. Explicit extraction-call arguments take precedence.
-Concurrent async runs have separate settings; previous defaults are restored
-when a run exits.
+Concurrent async executions have separate settings; previous defaults are restored
+when an execution exits.
 
 Outside the project override, model defaults resolve from highest to lowest:
 
 1. Environment variables: `WEBUSE_LLM_MODEL`, `WEBUSE_LLM_BASE_URL`,
    `WEBUSE_LLM_API_KEY`, and `WEBUSE_LLM_PROVIDER`. Each falls back to its
    `OPENAI_MODEL`, `OPENAI_BASE_URL`, `OPENAI_API_KEY`, or `OPENAI_PROVIDER` equivalent.
-2. `.webuserc.yaml` in the current working directory, under `llm`.
+2. The nearest `.webuserc.yaml`, under `llm`: search the current directory and
+   its parents, including home, then stop. Outside home, search through the
+   filesystem root. Only the nearest file is loaded; ancestor files are not merged.
 3. `~/.config/webuse/config.yaml`, under `llm`.
 
 When explicit settings are absent, the Python CLI discovers local LM Studio and
 Ollama services through their OpenAI-compatible `/v1/models` endpoints.
-[Harness & UI](../../user-guide/harness/) uses its own saved/environment settings;
+[Harness & UI](../../user-guide/harness/) uses saved model settings from SQLite
+when configured, otherwise falling back to environment and model configuration
+files, then local discovery.
 
 ## Spider configuration
 
@@ -126,14 +139,14 @@ The schema is `SpiderConfig` in `src/webuse/spider/config.py`. These fields belo
 in a separate spider file or under an inline `spiders.<name>` entry.
 
 The fallback column describes a plain spider with no project, class, config, or
-run override. Omitted fields retain values supplied by those other sources.
+execution override. Omitted fields retain values supplied by those other sources.
 
 | Field | Type | Fallback | Purpose |
 | --- | --- | --- | --- |
 | `name` | String | Unset | Spider name. |
 | `start_urls` | URL string or list | Empty | Initial requests. Python may also supply `CrawlRequest` objects. |
-| `goal` | String | Required for agentic runs | Task and completion criteria; requires `AgenticSpider`. |
-| `limits` | Mapping | Required for agentic runs | Finite budgets validated as `AgentLimits`; requires `AgenticSpider`. |
+| `goal` | String | Required for agentic executions | Task and completion criteria; requires `AgenticSpider`. |
+| `limits` | Mapping | Required for agentic executions | Finite budgets validated as `AgentLimits`; requires `AgenticSpider`. |
 | `pages` | Mapping | Unset | Follow and extraction rules keyed by page type. |
 | `max_depth` | Integer | `0` | Maximum discovery depth; seeds have depth zero. |
 | `max_requests` | Integer | No limit | Maximum page requests. |
@@ -157,7 +170,7 @@ Crawl settings resolve from highest to lowest:
 4. Project defaults for `concurrency`, `per_domain`, `robots_txt`, and `user_agent`.
 5. Library fallback values.
 
-Resolution produces per-run settings without mutating the spider instance.
+Resolution produces per-execution settings without mutating the spider instance.
 Pipeline precedence is separate; see [Item pipelines](#item-pipelines).
 
 ### Agentic configuration
@@ -188,10 +201,10 @@ The schema is `AgentLimits` in `src/webuse/agent.py`.
 
 | Field | Type | Default | Purpose |
 | --- | --- | --- | --- |
-| `max_tokens` | Positive integer | Required | Total model token budget for the run. |
+| `max_tokens` | Positive integer | Required | Total model token budget for the execution. |
 | `max_requests` | Positive integer | Unset | Maximum crawl requests. |
 | `max_turns` | Positive integer | Unset | Maximum model turns. |
-| `max_seconds` | Positive number | Unset | Maximum run duration in seconds. |
+| `max_seconds` | Positive number | Unset | Maximum execution duration in seconds. |
 | `max_output_tokens` | Positive integer | Provider default | Output-token cap per model response. |
 | `max_page_bytes` | Positive integer | Unset | Maximum downloaded response size in bytes. |
 | `observation_chars` | Integer, at least 256 | `8000` | Character window for page observations. |
@@ -205,7 +218,7 @@ working-memory notes, not the number of retained pages.
 Token usage sums the provider's reported `usage.total_tokens`; no prompt-size
 estimate is reserved before requests. Omitting `max_output_tokens` or setting it
 to null uses the provider's default. A response can exceed the remaining total
-budget; the run then stops before executing its tool calls or requesting another
+budget; the execution then stops before executing its tool calls or requesting another
 model response.
 
 #### Crawl settings and state
@@ -289,7 +302,9 @@ fallback rules and cannot have URL patterns. Invalid patterns fail before the
 crawl starts. Python uses `re.search`; the Rust prototype uses its `regex` crate,
 which does not support lookaround or backreferences.
 
-Python spiders use the same mapping in `Spider.pages` or `AsyncSpider.pages`.
+Python spiders load the same `pages` mapping from their YAML through
+`spider_config_path`. Direct Python callers can also set `Spider.pages` or
+`AsyncSpider.pages`.
 Matching page types select `parse_<page_type>()` or `routes`, or use the page type's
 declarative extraction rules. `crawl(pages=...)` and `acrawl(pages=...)` also accept
 the full mapping, including extraction and follow rules. Explicit `extract=` and
@@ -494,3 +509,20 @@ spider configuration uses its own directory. Python `Spider.pipelines`
 specifications also use the project root when available; existing pipeline
 instances keep their own paths. Run-time specifications use the current working
 directory.
+
+## Monitoring connection
+
+Monitoring is control-plane configuration, separate from `webuse.yaml` and spider
+configuration. Set the fallback connection in `.webuserc.yaml`:
+
+```yaml
+monitoring:
+  prometheus_url: http://127.0.0.1:9090
+```
+
+A nonempty URL saved in **Settings → Monitoring** takes precedence, followed by
+`WEBUSE_PROMETHEUS_URL`, then the configuration file. The saved override lives in
+`~/.webuse/webuse.db` by default. Clear it to restore fallback discovery. Panel
+visibility is saved per project in the database and is not deployment configuration.
+See [Monitoring Architecture](../../advanced/monitoring/) for the exporter and
+crawler instrumentation settings.

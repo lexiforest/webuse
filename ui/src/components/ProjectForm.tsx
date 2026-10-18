@@ -1,4 +1,5 @@
-import { useBeforeLeave, useNavigate } from "@solidjs/router";
+import { TextField, TextFieldInput, TextFieldLabel } from "~/components/ui/text-field";
+import { A, useBeforeLeave, useNavigate } from "@solidjs/router";
 import cronstrue from "cronstrue";
 import { For, Show, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js";
 import {
@@ -18,9 +19,10 @@ import {
 } from "solid-icons/fi";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 
-import Button, { ButtonLink } from "~/components/Button";
+import { Button } from "~/components/ui/button";
 import Harness, { type HarnessMessage, type ToolActivity } from "~/components/Harness";
 import ProjectVisual from "~/components/ProjectVisual";
+import ModelIndicator from "~/components/ModelIndicator";
 import {
   Collapsible,
   CollapsibleContent,
@@ -33,13 +35,11 @@ export type ProjectFile = {
   content: string;
 };
 
-export type ProjectType = "yaml" | "python" | "git";
-
 export type ProjectFormValue = {
   name: string;
-  type: ProjectType;
   target: string;
   cron?: string;
+  crawlCommand?: string;
   config?: Record<string, unknown>;
   files?: ProjectFile[];
   revision?: string;
@@ -57,15 +57,13 @@ type ProjectFormProps = {
   tabBasePath?: string;
 };
 
-type ProjectFormTab = "settings" | "files" | "visual";
+type ProjectFormTab = "harness" | "settings" | "files" | "visual";
 
 type ProjectSaveResponse = {
   project?: ProjectFormValue & {
     id: number;
   };
 };
-
-const pendingPromptKey = (projectId: number) => `webuse:project:${projectId}:pending-prompt`;
 
 type FileTreeNode = {
   name: string;
@@ -76,85 +74,13 @@ type FileTreeNode = {
 };
 
 function normalizeTab(value: unknown): ProjectFormTab | undefined {
-  return value === "settings" || value === "files" || value === "visual" ? value : undefined;
+  return value === "harness" || value === "settings" || value === "files" || value === "visual" ? value : undefined;
 }
 
 function tabFromPath(pathname: string): ProjectFormTab | undefined {
   const segment = pathname.split("/").filter(Boolean).at(-1);
   return normalizeTab(segment);
 }
-
-export const booksToScrapeProject: ProjectFormValue = {
-  name: "Books to Scrape",
-  type: "yaml",
-  target: "https://books.toscrape.com/",
-  cron: "",
-  config: {
-    name: "Books to Scrape",
-    spiders: {
-      books: {
-        start_urls: ["https://books.toscrape.com/"],
-        allowed_domains: ["books.toscrape.com"],
-        max_depth: 1,
-        pages: {
-          default: {
-            follow: [{ css: ".next a", same_domain: true }],
-            extract: {
-              books: {
-                item_css: ".product_pod",
-                fields: {
-                  title: {
-                    css: "h3 a",
-                    attr: "title",
-                  },
-                  price: ".price_color",
-                  availability: ".availability",
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  },
-  files: [
-    {
-      path: "webuse.yaml",
-      content: `name: Books to Scrape
-spiders:
-  books:
-    start_urls:
-      - https://books.toscrape.com/
-    allowed_domains:
-      - books.toscrape.com
-    max_depth: 1
-    pages:
-      default:
-        follow:
-          - css: .next a
-            same_domain: true
-        extract:
-          books:
-            item_css: .product_pod
-            fields:
-              title:
-                css: h3 a
-                attr: title
-              price: .price_color
-              availability: .availability
-`,
-    },
-    {
-      path: "spiders/books.py",
-      content: `import webuse
-
-
-class BooksSpider(webuse.Spider):
-    name = "books"
-`,
-    },
-  ],
-};
 
 function isConfigObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -175,9 +101,9 @@ function initialFiles(value: ProjectFormValue): ProjectFile[] {
 function projectSnapshot(value: ProjectFormValue & { files: ProjectFile[] }) {
   return JSON.stringify({
     name: value.name,
-    type: value.type,
     target: value.target,
     cron: (value.cron ?? "").trim(),
+    crawlCommand: (value.crawlCommand ?? "").trim(),
     files: value.files
       .map(file => ({ path: file.path, content: file.content }))
       .sort((left, right) => left.path.localeCompare(right.path)),
@@ -363,9 +289,9 @@ export default function ProjectForm(props: ProjectFormProps) {
   const navigate = useNavigate();
   const initialFileState = initialFiles(props.initialValue);
   const [name, setName] = createSignal(props.initialValue.name);
-  const [type, setType] = createSignal<ProjectType>(props.initialValue.type);
   const [target, setTarget] = createSignal(props.initialValue.target);
   const [cron, setCron] = createSignal(props.initialValue.cron ?? "");
+  const [crawlCommand, setCrawlCommand] = createSignal(props.initialValue.crawlCommand ?? "");
   const [files, setFiles] = createSignal<ProjectFile[]>(initialFileState);
   const [revision, setRevision] = createSignal(props.initialValue.revision);
   const [omitted, setOmitted] = createSignal(props.initialValue.omitted ?? []);
@@ -387,7 +313,9 @@ export default function ProjectForm(props: ProjectFormProps) {
   const [harnessTools, setHarnessTools] = createSignal<ToolActivity[]>([]);
   const [harnessStatus, setHarnessStatus] = createSignal("");
   let harnessRequest: AbortController | undefined;
-  onCleanup(() => harnessRequest?.abort());
+  let harnessGeneration = 0;
+  let disposed = false;
+  onCleanup(() => { disposed = true; harnessRequest?.abort(); });
   const [activeTab, setActiveTab] = createSignal<ProjectFormTab>(
     props.defaultTab ?? "settings",
   );
@@ -399,9 +327,9 @@ export default function ProjectForm(props: ProjectFormProps) {
   const currentSnapshot = createMemo(() =>
     projectSnapshot({
       name: name(),
-      type: type(),
       target: target(),
       cron: cron(),
+      crawlCommand: crawlCommand(),
       files: files(),
     }),
   );
@@ -427,8 +355,9 @@ export default function ProjectForm(props: ProjectFormProps) {
         return;
       }
       if (!isDirty()) {
-        setName(data.project.name); setType(data.project.type);
+        setName(data.project.name);
         setTarget(data.project.target); setCron(data.project.cron ?? "");
+        setCrawlCommand(data.project.crawlCommand ?? "");
       }
       acceptWorkspace(data.project);
       if (explicit) setError(undefined);
@@ -445,12 +374,11 @@ export default function ProjectForm(props: ProjectFormProps) {
     } catch (err) { setError(err instanceof Error ? err.message : String(err)); }
     finally { setSaving(false); }
   };
-  const isGitProject = createMemo(() => type() === "git");
   const fileTree = createMemo(() => buildFileTree(files()));
   const cronDescription = createMemo(() => {
     const value = cron().trim();
     if (!value) {
-      return { text: "Runs manually unless started from the Runs page.", valid: true };
+      return { text: "Runs manually until a schedule is configured.", valid: true };
     }
 
     try {
@@ -472,18 +400,8 @@ export default function ProjectForm(props: ProjectFormProps) {
     window.confirm("You have unsaved project changes. Leave without saving?") &&
     window.confirm("Unsaved project changes will be lost. Leave anyway?");
 
-  const blockAssistantLeave = () => {
-    window.alert("The LLM is still thinking. Wait for it to finish before leaving this page.");
-  };
-
   useBeforeLeave(event => {
     if (event.defaultPrevented) {
-      return;
-    }
-
-    if (harnessSending()) {
-      event.preventDefault();
-      setTimeout(blockAssistantLeave, 0);
       return;
     }
 
@@ -500,7 +418,7 @@ export default function ProjectForm(props: ProjectFormProps) {
 
   onMount(() => {
     const syncTabFromPath = () => {
-      const nextTab = tabFromPath(window.location.pathname);
+      const nextTab = window.location.pathname.replace(/\/$/, "") === props.tabBasePath ? "harness" : tabFromPath(window.location.pathname);
       if (nextTab) {
         setActiveTab(nextTab);
       }
@@ -511,7 +429,7 @@ export default function ProjectForm(props: ProjectFormProps) {
     onCleanup(() => window.removeEventListener("popstate", syncTabFromPath));
 
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!isDirty() && !harnessSending()) {
+      if (!isDirty()) {
         return;
       }
       event.preventDefault();
@@ -527,30 +445,50 @@ export default function ProjectForm(props: ProjectFormProps) {
     const projectId = props.projectId;
     if (projectId) {
       setHarnessLoading(true);
-      void (async () => {
+      let historyLoading = false;
+      const syncHistory = async () => {
+        if (historyLoading || harnessRequest || disposed) return;
+        historyLoading = true;
+        const generation = harnessGeneration;
         try {
           const response = await fetch(`/api/assistant-project?project_id=${projectId}`);
           if (!response.ok) {
             throw new Error(await readError(response, `Failed to load assistant history (${response.status})`));
           }
           const data = await readJsonResponse<{
-            session?: { id: number };
+            session?: { id: number; title: string };
             messages?: HarnessMessage[];
+            pendingMessageId?: number;
+            running?: boolean;
+            progress?: { text: string; tools: ToolActivity[]; status: string };
           }>(response);
+          if (disposed || harnessRequest || generation !== harnessGeneration) return;
+          const wasRunning = harnessSending();
           setHarnessSessionId(data.session?.id);
           setHarnessMessages(data.messages ?? []);
-        } catch (err) {
-          setHarnessError(err instanceof Error ? err.message : "Failed to load assistant history");
-        } finally {
+          setHarnessSending(!!data.running);
+          setHarnessText(data.progress?.text ?? "");
+          setHarnessTools(data.progress?.tools ?? []);
+          setHarnessStatus(data.progress?.status ?? "");
+          setHarnessError(data.running ? undefined : data.messages?.at(-1)?.metadata?.error);
+          if (data.session?.title) applySessionTitle(data.session.title);
           setHarnessLoading(false);
+          if (wasRunning && !data.running) {
+            window.dispatchEvent(new Event("webuse:projects-changed"));
+            void reloadWorkspace();
+          }
+          if (data.pendingMessageId && !data.running) await sendHarnessMessage(data.pendingMessageId);
+        } catch (err) {
+          if (!disposed) setHarnessError(err instanceof Error ? err.message : "Failed to load assistant history");
+        } finally {
+          historyLoading = false;
+          if (!disposed) setHarnessLoading(false);
         }
-
-        const pendingPrompt = window.sessionStorage.getItem(pendingPromptKey(projectId));
-        if (pendingPrompt) {
-          window.sessionStorage.removeItem(pendingPromptKey(projectId));
-          await sendHarnessMessage(pendingPrompt);
-        }
-      })();
+      };
+      void syncHistory();
+      const historyPoll = setInterval(() => void syncHistory(), 2000);
+      window.addEventListener("focus", syncHistory);
+      onCleanup(() => { clearInterval(historyPoll); window.removeEventListener("focus", syncHistory); });
     }
   });
 
@@ -559,7 +497,7 @@ export default function ProjectForm(props: ProjectFormProps) {
     const nextTab = requestedTab;
     setActiveTab(nextTab);
     if (props.tabBasePath) {
-      window.history.pushState(null, "", `${props.tabBasePath}/${nextTab}`);
+      window.history.pushState(null, "", nextTab === "harness" ? props.tabBasePath : `${props.tabBasePath}/${nextTab}`);
     }
   };
 
@@ -692,10 +630,16 @@ export default function ProjectForm(props: ProjectFormProps) {
     setSelectedPath(next[0]?.path ?? "webuse.yaml");
   };
 
-  const sendHarnessMessage = async (initialPrompt?: string) => {
+  const applySessionTitle = (title: string) => {
+    const saved = JSON.parse(savedSnapshot()) as ProjectFormValue;
+    if (name() === saved.name) setName(title);
+    setSavedSnapshot(projectSnapshot({ ...saved, name: title, files: saved.files ?? [] }));
+  };
+
+  const sendHarnessMessage = async (pendingMessageId?: number) => {
     if (harnessSending() || saving()) return;
-    const prompt = (initialPrompt ?? harnessInput()).trim();
-    if (!prompt) {
+    const prompt = harnessInput().trim();
+    if (!prompt && !pendingMessageId) {
       return;
     }
     if (!props.projectId) {
@@ -703,12 +647,15 @@ export default function ProjectForm(props: ProjectFormProps) {
       return;
     }
 
+    harnessGeneration++;
     setHarnessError(undefined);
     setHarnessSending(true);
     setHarnessText(""); setHarnessTools([]); setHarnessStatus("");
     harnessRequest = new AbortController();
-    setHarnessMessages(current => [...current, { role: "user", content: prompt }]);
+    if (!pendingMessageId) setHarnessMessages(current => [...current, { role: "user", content: prompt }]);
     setHarnessInput("");
+    let accepted = false;
+    let completed = false;
 
     try {
       const response = await fetch("/api/assistant-project", {
@@ -719,6 +666,7 @@ export default function ProjectForm(props: ProjectFormProps) {
           projectId: props.projectId,
           sessionId: harnessSessionId(),
           message: prompt,
+          pendingMessageId,
           files: files(),
           revision: revision(),
           selectedPath: selectedPath(),
@@ -728,14 +676,19 @@ export default function ProjectForm(props: ProjectFormProps) {
       if (!response.ok) {
         throw new Error(await readError(response, `Assistant request failed (${response.status})`));
       }
+      accepted = true;
+
+      // The server saves submitted files before starting the background turn.
+      const saved = JSON.parse(savedSnapshot()) as ProjectFormValue;
+      setSavedSnapshot(projectSnapshot({ ...saved, files: files() }));
 
       if (!response.body) throw new Error("Assistant stream is unavailable.");
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let completed = false;
       const receive = (line: string) => {
-        const data = JSON.parse(line) as { type: string; text?: string; tool?: ToolActivity; error?: string; session?: { id: number }; messages?: HarnessMessage[]; files?: ProjectFile[]; selectedPath?: string; revision?: string; omitted?: string[] };
+        if (disposed) return;
+        const data = JSON.parse(line) as { type: string; text?: string; tool?: ToolActivity; error?: string; session?: { id: number }; sessionTitle?: string; messages?: HarnessMessage[]; files?: ProjectFile[]; selectedPath?: string; revision?: string; omitted?: string[] };
         if (data.type === "text") setHarnessText(current => current + (data.text || ""));
         if (data.type === "status") setHarnessStatus(data.text || "");
         if (data.type === "tool" && data.tool) {
@@ -749,6 +702,9 @@ export default function ProjectForm(props: ProjectFormProps) {
           if (data.session?.id) setHarnessSessionId(data.session.id);
           if (data.messages) setHarnessMessages(data.messages);
           if (data.error) setHarnessError(data.error);
+          if (data.sessionTitle) {
+            applySessionTitle(data.sessionTitle);
+          }
           if (data.files) {
             setFiles(data.files);
             setRevision(data.revision);
@@ -772,12 +728,15 @@ export default function ProjectForm(props: ProjectFormProps) {
         if (!completed) throw new Error("Assistant connection ended before the result arrived.");
       } finally { reader.releaseLock(); }
     } catch (err) {
-      setHarnessError(err instanceof Error ? err.message : "Assistant request failed");
+      if (!disposed) setHarnessError(err instanceof Error ? err.message : "Assistant request failed");
     } finally {
-      setHarnessSending(false);
       harnessRequest = undefined;
-      // Recover persistent edits even when the stream disconnected before its final event.
-      void reloadWorkspace();
+      if (!disposed) {
+        // History polling reconnects to the turn if only the stream was interrupted.
+        if (completed || !accepted) setHarnessSending(false);
+        window.dispatchEvent(new Event("webuse:projects-changed"));
+        void reloadWorkspace();
+      }
     }
   };
 
@@ -789,10 +748,37 @@ export default function ProjectForm(props: ProjectFormProps) {
     } catch (error) { setHarnessError(error instanceof Error ? error.message : String(error)); }
   };
 
+  const renderHarness = () => (
+    <>
+      <Harness
+        messages={harnessMessages()}
+        value={harnessInput()}
+        pending={harnessSending()}
+        streamedText={harnessText()}
+        tools={harnessTools()}
+        pendingText={harnessStatus()}
+        onCancel={stopHarness}
+        loading={harnessLoading()}
+        disabled={!props.projectId}
+        placeholder={props.projectId ? "Ask about this project" : "Save the project before using Harness"}
+        emptyTitle="No messages yet"
+        emptyDescription="Ask the assistant to inspect, edit, and test this crawler. Python tools run on this computer."
+        assistantName="webuse"
+        onValueChange={value => {
+          setHarnessInput(value);
+          setHarnessError(undefined);
+        }}
+        onSubmit={() => void sendHarnessMessage()}
+      />
+      <Show when={harnessError()}>
+        <div class="mt-2 rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+          {harnessError()}
+        </div>
+      </Show>
+    </>
+  );
+
   const deriveConfig = () => {
-    if (isGitProject()) {
-      return undefined;
-    }
     const webuseFile = files().find(file => file.path === "webuse.yaml" || file.path === "webuse.yml");
     if (!webuseFile || webuseFile.content.trim().length === 0) {
       return undefined;
@@ -827,7 +813,7 @@ export default function ProjectForm(props: ProjectFormProps) {
       >
         <FiFile size={14} stroke-width={2} aria-hidden="true" />
         <span>{node.name}</span>
-        <Button
+        <Button variant="outline"
           aria-label={`Rename ${node.path}`}
           class="project-tree-file-action opacity-0 focus:opacity-100 group-hover:opacity-100"
           size="icon"
@@ -843,7 +829,7 @@ export default function ProjectForm(props: ProjectFormProps) {
           aria-label={`Delete ${node.path}`}
           class="project-tree-file-action opacity-0 focus:opacity-100 group-hover:opacity-100"
           size="icon"
-          variant="danger"
+          variant="destructive"
           type="button"
           disabled={files().length <= 1}
           onClick={event => {
@@ -871,9 +857,9 @@ export default function ProjectForm(props: ProjectFormProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: name(),
-          type: type(),
           target: target(),
           cron: cron().trim(),
+          crawlCommand: crawlCommand().trim(),
           config: parsedConfig,
           files: files(),
           revision: revision(),
@@ -887,6 +873,7 @@ export default function ProjectForm(props: ProjectFormProps) {
 
       const data = (await response.json()) as ProjectSaveResponse;
       if (data.project) acceptWorkspace(data.project);
+      window.dispatchEvent(new Event("webuse:projects-changed"));
       if (props.method === "POST" && data.project?.id) {
         navigate(`/projects/${data.project.id}/files`);
       }
@@ -899,8 +886,8 @@ export default function ProjectForm(props: ProjectFormProps) {
 
   return (
     <form
-      class={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-gray-700 bg-gray-900 p-4 ${
-        expanded() ? "fixed inset-2 z-50 shadow-2xl" : ""
+      class={`flex min-h-0 flex-1 flex-col overflow-hidden ${
+        expanded() ? "fixed inset-2 z-50 rounded-lg border border-gray-700 bg-gray-900 p-4 shadow-2xl" : ""
       }`}
       onSubmit={submitProject}
     >
@@ -909,59 +896,60 @@ export default function ProjectForm(props: ProjectFormProps) {
           {error()}
         </div>
       )}
-      <Show when={props.projectId}>
-        <div class="mb-3 text-xs text-gray-400">
-          <div class="break-all">Workspace: {props.initialValue.workspacePath}</div>
-          <div>Runs use the current files on disk. Save edits before running; use Git to track and restore code.</div>
-          <Show when={externalChange()}><div class="text-amber-300">Files changed on disk. Reload before saving; your editor changes have been kept.</div></Show>
-          <Show when={omitted().length}><div>{omitted().length} binary or large files are available on disk but omitted from this editor.</div></Show>
-        </div>
-      </Show>
-
       <div class="flex min-h-0 flex-1 flex-col gap-4">
         <Tabs value={activeTab()} onChange={changeTab} class="min-h-0 flex-1">
           <Show when={!expanded()}>
             <TabsList>
-              <TabsTrigger value="settings">Settings</TabsTrigger>
+              <TabsTrigger value="harness">Harness</TabsTrigger>
               <TabsTrigger value="files">Files</TabsTrigger>
               <TabsTrigger value="visual">Visual</TabsTrigger>
+              <TabsTrigger value="settings">Settings</TabsTrigger>
             </TabsList>
           </Show>
 
+          <Show when={props.projectId && activeTab() !== "harness"}>
+            <div class="shrink-0 text-xs text-gray-400">
+              <div class="break-all">Workspace: {props.initialValue.workspacePath}</div>
+              <div>Executions use the current files on disk. Save edits before running; use Git to track and restore code.</div>
+              <Show when={externalChange()}><div class="text-amber-300">Files changed on disk. Reload before saving; your editor changes have been kept.</div></Show>
+              <Show when={omitted().length}><div>{omitted().length} binary or large files are available on disk but omitted from this editor.</div></Show>
+            </div>
+          </Show>
+
+          <TabsContent value="harness" class="flex min-h-0 flex-1 flex-col">
+            <div class="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col">
+              {renderHarness()}
+            </div>
+          </TabsContent>
+
           <TabsContent value="settings">
             <div class="grid gap-4">
-              <label class="field dark-field">
-                <span>Name</span>
-                <input value={name()} onInput={event => setName(event.currentTarget.value)} required />
-              </label>
+              <TextField value={name()} required onChange={value => setName(value)}>
+                <TextFieldLabel>Name</TextFieldLabel>
+                <TextFieldInput />
+              </TextField>
 
-              <label class="field dark-field">
-                <span>Type</span>
-                <select value={type()} onInput={event => setType(event.currentTarget.value as ProjectType)}>
-                  <option value="yaml">yaml</option>
-                  <option value="python">python</option>
-                  <option value="git">git</option>
-                </select>
-              </label>
+              <TextField value={target()} required onChange={value => setTarget(value)}>
+                <TextFieldLabel>Target</TextFieldLabel>
+                <TextFieldInput />
+              </TextField>
 
-              <label class="field dark-field">
-                <span>{type() === "git" ? "Git URL" : "Start URL"}</span>
-                <input value={target()} onInput={event => setTarget(event.currentTarget.value)} required />
-              </label>
+              <TextField value={crawlCommand()} onChange={value => setCrawlCommand(value)}>
+                <TextFieldLabel>Crawl command</TextFieldLabel>
+                <TextFieldInput placeholder="Default: Webuse crawl" />
+                <span class="text-xs text-gray-400">Run from this project's workspace. Leave empty for Webuse. For example: scrapy crawl books -o "$WEBUSE_OUTPUT_PATH"</span>
+                <span class="text-xs text-gray-400">Write JSONL to WEBUSE_OUTPUT_PATH for dashboard records. Sample commands receive WEBUSE_MAX_REQUESTS and must enforce that limit themselves.</span>
+              </TextField>
 
-              <label class="field dark-field">
-                <span>Cron schedule (UTC)</span>
-                <input
-                  placeholder="0 * * * *"
-                  value={cron()}
-                  onInput={event => setCron(event.currentTarget.value)}
-                />
+              <TextField value={cron()} onChange={value => setCron(value)}>
+                <TextFieldLabel>Cron schedule (UTC)</TextFieldLabel>
+                <TextFieldInput placeholder="0 * * * *" />
                 <span
                   class={`text-xs ${cronDescription().valid ? "text-gray-400" : "text-amber-300"}`}
                 >
                   {cronDescription().text}
                 </span>
-              </label>
+              </TextField>
             </div>
           </TabsContent>
 
@@ -969,7 +957,7 @@ export default function ProjectForm(props: ProjectFormProps) {
             <div class="flex min-h-0 flex-1 flex-col gap-3">
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <div class="flex min-w-0 items-center gap-2 text-sm text-gray-300">
-                  <Button
+                  <Button variant="outline"
                     aria-label={fileSidebarOpen() ? "Collapse file sidebar" : "Expand file sidebar"}
                     size="icon"
                     type="button"
@@ -989,18 +977,21 @@ export default function ProjectForm(props: ProjectFormProps) {
                     />
                   </Show>
                 </div>
-                <Button
-                  aria-label={expanded() ? "Collapse editor" : "Expand editor"}
-                  size="icon"
-                  type="button"
-                  onClick={toggleExpanded}
-                >
-                  {expanded() ? (
-                    <FiMinimize2 size={13} stroke-width={2} aria-hidden="true" />
-                  ) : (
-                    <FiMaximize2 size={13} stroke-width={2} aria-hidden="true" />
-                  )}
-                </Button>
+                <div class="ml-auto flex min-w-0 items-center gap-2">
+                  <Show when={expanded()}><div class="min-w-0 max-w-48"><ModelIndicator /></div></Show>
+                  <Button variant="outline"
+                    aria-label={expanded() ? "Collapse editor" : "Expand editor"}
+                    size="icon"
+                    type="button"
+                    onClick={toggleExpanded}
+                  >
+                    {expanded() ? (
+                      <FiMinimize2 size={13} stroke-width={2} aria-hidden="true" />
+                    ) : (
+                      <FiMaximize2 size={13} stroke-width={2} aria-hidden="true" />
+                    )}
+                  </Button>
+                </div>
               </div>
 
               <div
@@ -1012,7 +1003,7 @@ export default function ProjectForm(props: ProjectFormProps) {
                     <div class="mb-2 flex items-center justify-between gap-2">
                       <span class="text-xs font-medium uppercase text-gray-500">Files</span>
                       <div class="flex shrink-0 items-center gap-1.5">
-                        <Button
+                        <Button variant="outline"
                           aria-label="Add file"
                           size="icon"
                           type="button"
@@ -1020,7 +1011,7 @@ export default function ProjectForm(props: ProjectFormProps) {
                         >
                           <FiPlus size={13} stroke-width={2} aria-hidden="true" />
                         </Button>
-                        <Button
+                        <Button variant="outline"
                           aria-label="Collapse file sidebar"
                           size="icon"
                           type="button"
@@ -1039,7 +1030,7 @@ export default function ProjectForm(props: ProjectFormProps) {
                 </Show>
 
                 <Show when={!fileSidebarOpen()}>
-                  <Button
+                  <Button variant="outline"
                     aria-label="Expand file sidebar"
                     class="project-file-tree-rail"
                     size="icon"
@@ -1117,31 +1108,7 @@ export default function ProjectForm(props: ProjectFormProps) {
                     <span>Harness</span>
                   </div>
                   <div class="flex min-h-0 flex-1 flex-col p-3">
-                    <Harness
-                      messages={harnessMessages()}
-                      value={harnessInput()}
-                      pending={harnessSending()}
-                      streamedText={harnessText()}
-                      tools={harnessTools()}
-                      pendingText={harnessStatus()}
-                      onCancel={stopHarness}
-                      loading={harnessLoading()}
-                      disabled={!props.projectId}
-                      placeholder={props.projectId ? "Ask about this project" : "Save the project before using Harness"}
-                      emptyTitle="No messages yet"
-                      emptyDescription="Ask the assistant to inspect, edit, and test this crawler. Python tools run on this computer."
-                      assistantName="webuse"
-                      onValueChange={value => {
-                        setHarnessInput(value);
-                        setHarnessError(undefined);
-                      }}
-                      onSubmit={sendHarnessMessage}
-                    />
-                    <Show when={harnessError()}>
-                      <div class="mt-2 rounded border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-                        {harnessError()}
-                      </div>
-                    </Show>
+                    {renderHarness()}
                   </div>
                 </aside>
               </div>
@@ -1149,32 +1116,28 @@ export default function ProjectForm(props: ProjectFormProps) {
           </TabsContent>
 
           <TabsContent value="visual" class="flex min-h-0 flex-1 flex-col">
-            <ProjectVisual files={files()} target={target()} type={type()} />
+            <ProjectVisual files={files()} target={target()} />
           </TabsContent>
         </Tabs>
 
-        <div class="flex justify-end gap-2">
-          <Show when={props.projectId}>
-            <Button type="button" size="compact" disabled={saving() || harnessSending()} onClick={() => void reloadWorkspace(true)}>Reload files</Button>
-            <Button type="button" size="compact" disabled={saving() || harnessSending()} onClick={() => void saveFiles()}>Save files</Button>
-          </Show>
-          <ButtonLink
-            class="!text-xs !leading-4"
-            href="/projects"
-            size="compact"
-            onClick={event => {
-              if (harnessSending()) {
-                event.preventDefault();
-                blockAssistantLeave();
-              }
-            }}
-          >
-            Cancel
-          </ButtonLink>
-          <Button class="!text-xs !leading-4" variant="primary" size="compact" type="submit" disabled={saving() || harnessSending()}>
-            {saving() ? "Saving..." : props.submitLabel}
-          </Button>
-        </div>
+        <Show when={activeTab() !== "harness"}>
+          <div class="flex justify-end gap-2">
+            <Show when={props.projectId}>
+              <Button variant="outline" type="button" size="sm" disabled={saving() || harnessSending()} onClick={() => void reloadWorkspace(true)}>Reload files</Button>
+              <Button variant="outline" type="button" size="sm" disabled={saving() || harnessSending()} onClick={() => void saveFiles()}>Save files</Button>
+            </Show>
+            <Button variant="outline" as={A}
+              class="!text-xs !leading-4"
+              href="/projects"
+              size="sm"
+            >
+              Cancel
+            </Button>
+            <Button class="!text-xs !leading-4" variant="default" size="sm" type="submit" disabled={saving() || harnessSending()}>
+              {saving() ? "Saving..." : props.submitLabel}
+            </Button>
+          </div>
+        </Show>
       </div>
     </form>
   );

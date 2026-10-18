@@ -1,7 +1,6 @@
 import { useParams } from "@solidjs/router";
-import { Show, createSignal, onMount } from "solid-js";
+import { Show, createEffect, createSignal, onCleanup } from "solid-js";
 
-import { ButtonLink } from "~/components/Button";
 import ProjectForm, { type ProjectFormValue } from "~/components/ProjectForm";
 import Layout from "~/layout/dashboard";
 
@@ -10,7 +9,7 @@ type ProjectDetail = ProjectFormValue & {
 };
 
 type ProjectEditorPageProps = {
-  defaultTab: "settings" | "files" | "visual";
+  defaultTab: "harness" | "settings" | "files" | "visual";
 };
 
 export default function ProjectEditorPage(props: ProjectEditorPageProps) {
@@ -19,21 +18,27 @@ export default function ProjectEditorPage(props: ProjectEditorPageProps) {
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal<string>();
 
-  onMount(() => {
+  createEffect(() => {
+    const id = params.id;
+    const controller = new AbortController();
+    onCleanup(() => controller.abort());
+    setProject(undefined);
+    setLoading(true);
+    setError(undefined);
     void (async () => {
       try {
-        const response = await fetch(`/api/projects?id=${params.id}`);
+        const response = await fetch(`/api/projects?id=${id}`, { signal: controller.signal });
         if (!response.ok) {
           const data = (await response.json().catch(() => ({}))) as { error?: string };
           throw new Error(data.error || `Failed to load project (${response.status})`);
         }
 
         const data = (await response.json()) as { project: ProjectDetail };
-        setProject(data.project);
+        if (!controller.signal.aborted) setProject(data.project);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load project");
+        if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Failed to load project");
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     })();
   });
@@ -41,18 +46,9 @@ export default function ProjectEditorPage(props: ProjectEditorPageProps) {
   return (
     <Layout currentTab="projects">
       <div class="flex min-h-0 flex-1 flex-col">
-        <div class="mb-3 flex shrink-0 flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 class="text-3xl font-bold text-sky-400">Edit project</h1>
-            <p class="mt-1 text-sm text-gray-400">Update project source files</p>
-          </div>
-          <ButtonLink href="/projects" size="compact">
-            Back to projects
-          </ButtonLink>
-        </div>
-
         <Show
           when={project()}
+          keyed
           fallback={
             <div class="rounded-lg border border-gray-700 bg-gray-900 p-6 text-sm text-gray-400">
               {loading() ? "Loading project..." : error() || "Project not found."}
@@ -62,12 +58,12 @@ export default function ProjectEditorPage(props: ProjectEditorPageProps) {
           {value => (
             <ProjectForm
               defaultTab={props.defaultTab}
-              endpoint={`/api/projects?id=${value().id}`}
-              initialValue={value()}
+              endpoint={`/api/projects?id=${value.id}`}
+              initialValue={value}
               method="PUT"
-              projectId={value().id}
+              projectId={value.id}
               submitLabel="Save project"
-              tabBasePath={`/projects/${value().id}`}
+              tabBasePath={`/projects/${value.id}`}
             />
           )}
         </Show>

@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any
+import os
 
 from curl_cffi import requests
 
@@ -79,14 +80,17 @@ def create_openai_client(
     return OpenAI(**kwargs)
 
 
-def _model_id(payload: Any) -> str | None:
-    data = payload.get("data") if isinstance(payload, dict) else None
+def _model_ids(payload: Any) -> list[str]:
+    data = payload.get("data", []) if isinstance(payload, dict) else []
     if not isinstance(data, list):
-        return None
-    for item in data:
-        if isinstance(item, dict) and item.get("id"):
-            return str(item["id"])
-    return None
+        return []
+    return list(
+        dict.fromkeys(
+            item["id"]
+            for item in data
+            if isinstance(item, dict) and isinstance(item.get("id"), str) and item["id"]
+        )
+    )
 
 
 async def acompletion_content(
@@ -115,27 +119,49 @@ async def acompletion_content(
         return response.json()["choices"][0]["message"].get("content") or ""
 
 
-def detect_local_openai_settings(*, timeout: float = 0.2) -> OpenAISettings | None:
+def openai_model_ids(
+    base_url: str, api_key: str = "", *, timeout: float = 2
+) -> list[str]:
+    """List models without making an inference request."""
+    response = requests.get(
+        f"{base_url.rstrip('/')}/models",
+        headers={"Authorization": f"Bearer {api_key}"} if api_key else {},
+        timeout=timeout,
+        allow_redirects=False,
+    )
+    response.raise_for_status()
+    return _model_ids(response.json())
+
+
+def _local_openai_settings(*, timeout: float):
     for provider, base_url, api_key in _LOCAL_OPENAI_ENDPOINTS:
+        host = os.environ.get("WEBUSE_LOCAL_MODEL_HOST", "127.0.0.1")
+        base_url = base_url.replace("127.0.0.1", host)
         try:
-            response = requests.get(f"{base_url}/models", timeout=timeout)
+            response = requests.get(
+                f"{base_url}/models", timeout=timeout, allow_redirects=False
+            )
         except Exception:
             continue
         if getattr(response, "status_code", 0) >= 400:
             continue
         try:
-            model = _model_id(response.json())
+            models = _model_ids(response.json())
         except Exception:
-            model = None
-        if model is None:
-            continue
-        return OpenAISettings(
-            model=model,
-            api_key=api_key,
-            base_url=base_url,
-            provider=provider,
-        )
-    return None
+            models = []
+        for model in models:
+            yield OpenAISettings(
+                model=model, api_key=api_key, base_url=base_url, provider=provider
+            )
+
+
+def discover_local_openai_settings(*, timeout: float = 0.2) -> list[OpenAISettings]:
+    """Discover models in LM Studio, then Ollama, for local model selectors."""
+    return list(_local_openai_settings(timeout=timeout))
+
+
+def detect_local_openai_settings(*, timeout: float = 0.2) -> OpenAISettings | None:
+    return next(_local_openai_settings(timeout=timeout), None)
 
 
 def configure_openai_defaults(*, force: bool = False) -> OpenAISettings:
@@ -155,7 +181,7 @@ def openai_defaults() -> OpenAISettings:
 
 @contextmanager
 def use_openai_settings(config: dict[str, Any] | None):
-    """Apply project settings to this run without changing other async runs."""
+    """Apply project settings to this execution without changing other executions."""
     if not config:
         yield
         return

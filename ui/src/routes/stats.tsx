@@ -1,13 +1,14 @@
-import { For, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Show, createSignal, onCleanup, onMount } from "solid-js";
 
-import { ButtonLink } from "~/components/Button";
 import Layout from "~/layout/dashboard";
+import ValidationBadge from "~/components/ValidationBadge";
 
-type Run = {
+type Execution = {
   id: number;
   project: string;
   status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
   items: number;
+  metadata?: Record<string, unknown>;
 };
 
 type LogLine = {
@@ -19,16 +20,17 @@ type LogLine = {
 
 export default function Stats() {
   const [projectCount, setProjectCount] = createSignal(0);
-  const [runs, setRuns] = createSignal<Run[]>([]);
+  const [executions, setExecutions] = createSignal<Execution[]>([]);
   const [logs, setLogs] = createSignal<LogLine[]>([]);
   const [logCount, setLogCount] = createSignal(0);
-  const itemCount = () => runs().reduce((total, run) => total + run.items, 0);
+  const [error, setError] = createSignal("");
+  const itemCount = () => executions().reduce((total, execution) => total + execution.items, 0);
 
   const stats = () => [
     { label: "Projects", value: projectCount() },
     {
-      label: "Runs",
-      value: `${runs().filter(run => run.status === "queued" || run.status === "running").length}/${runs().length}`,
+      label: "Executions",
+      value: `${executions().filter(execution => execution.status === "queued" || execution.status === "running").length}/${executions().length}`,
     },
     { label: "Items", value: itemCount() },
     { label: "Log lines", value: logCount() },
@@ -36,30 +38,34 @@ export default function Stats() {
 
   const loadLogs = async () => {
     const response = await fetch("/api/logs");
-    if (!response.ok) return;
+    if (!response.ok) throw new Error("Could not load logs");
     const data = (await response.json()) as { logs: LogLine[]; total?: number };
     setLogs(data.logs.slice(0, 6));
     setLogCount(data.total ?? data.logs.length);
   };
 
   onMount(() => {
-    void (async () => {
-      const [projectsResponse, runsResponse] = await Promise.all([
-        fetch("/api/projects"),
-        fetch("/api/runs"),
-      ]);
-      if (projectsResponse.ok) {
-        const data = (await projectsResponse.json()) as { projects: unknown[] };
-        setProjectCount(data.projects.length);
-      }
-      if (runsResponse.ok) {
-        const data = (await runsResponse.json()) as { runs: Run[] };
-        setRuns(data.runs);
-      }
-    })();
-
-    void loadLogs();
-    const timer = window.setInterval(() => void loadLogs(), 2000);
+    let pending = false;
+    const refresh = async () => {
+      if (pending) return;
+      pending = true;
+      try {
+        const [projectsResponse, executionsResponse] = await Promise.all([
+          fetch("/api/projects"),
+          fetch("/api/executions"),
+        ]);
+        if (!projectsResponse.ok || !executionsResponse.ok) throw new Error();
+        const projects = await projectsResponse.json() as { projects: unknown[] };
+        const jobs = await executionsResponse.json() as { executions: Execution[] };
+        setProjectCount(projects.projects.length);
+        setExecutions(jobs.executions);
+        await loadLogs();
+        setError("");
+      } catch { setError("Could not refresh stats. Retrying…"); }
+      finally { pending = false; }
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 2000);
     onCleanup(() => window.clearInterval(timer));
   });
 
@@ -70,9 +76,9 @@ export default function Stats() {
           <h1 class="text-3xl font-bold text-sky-400">Stats</h1>
           <p class="mt-1 text-sm text-gray-400">webuse crawling task control plane</p>
         </div>
-        <ButtonLink href="/" variant="primary">New project</ButtonLink>
       </div>
 
+      <Show when={error()}><p role="status" class="mb-3 text-sm text-amber-300">{error()}</p></Show>
       <section class="grid gap-4 md:grid-cols-4">
         <For each={stats()}>
           {stat => (
@@ -87,20 +93,20 @@ export default function Stats() {
       <section class="mt-6 grid gap-4 lg:grid-cols-[1fr_0.8fr]">
         <div class="rounded-lg border border-gray-700 bg-gray-900 p-4">
           <div class="mb-3 flex items-center justify-between">
-            <h2 class="text-lg font-semibold text-white">Recent runs</h2>
-            <a href="/runs" class="text-sm text-sky-400 hover:text-sky-300">View all</a>
+            <h2 class="text-lg font-semibold text-white">Recent executions</h2>
+            <a href="/executions" class="text-sm text-sky-400 hover:text-sky-300">View all</a>
           </div>
           <div class="overflow-x-auto">
             <table class="data-table">
               <thead><tr><th>ID</th><th>Project</th><th>Status</th><th>Items</th></tr></thead>
               <tbody>
-                <For each={runs().slice(0, 3)} fallback={<tr><td colspan="4" class="py-6 text-center text-gray-500">No runs yet.</td></tr>}>
-                  {run => (
+                <For each={executions().slice(0, 3)} fallback={<tr><td colspan="4" class="py-6 text-center text-gray-500">No executions yet.</td></tr>}>
+                  {execution => (
                     <tr>
-                      <td>#{run.id}</td>
-                      <td>{run.project}</td>
-                      <td><Status value={run.status} /></td>
-                      <td>{run.items}</td>
+                      <td><span class="inline-flex items-center gap-2">#{execution.id}<ValidationBadge metadata={execution.metadata} /></span></td>
+                      <td>{execution.project}</td>
+                      <td><Status value={execution.status} /></td>
+                      <td>{execution.items}</td>
                     </tr>
                   )}
                 </For>

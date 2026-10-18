@@ -31,7 +31,9 @@ def _bundle_entrypoint() -> Path:
 def _node_command() -> str:
     command = shutil.which("node")
     if not command:
-        raise SystemExit("webuse serve requires Node.js 22.19+ on PATH. npm is not required to run the packaged UI.")
+        raise SystemExit(
+            "webuse serve requires Node.js 22.19+ on PATH. npm is not required to run the packaged UI."
+        )
     try:
         result = subprocess.run(
             [command, "--version"], capture_output=True, text=True, check=True
@@ -40,7 +42,9 @@ def _node_command() -> str:
         raise SystemExit(f"Could not run Node.js: {error}") from error
     version = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", result.stdout.strip())
     if version is None or tuple(map(int, version.groups())) < (22, 19, 0):
-        raise SystemExit(f"webuse serve requires Node.js 22.19+; found {result.stdout.strip()!r}.")
+        raise SystemExit(
+            f"webuse serve requires Node.js 22.19+; found {result.stdout.strip()!r}."
+        )
     return command
 
 
@@ -67,20 +71,26 @@ def _ensure_port_available(host: str, port: int) -> None:
             with socket.socket(family, kind, protocol) as probe:
                 probe.bind(address)
     except OSError as error:
-        raise SystemExit(f"Cannot listen on {host}:{port}: {error}. Choose another --port or --host.") from error
+        raise SystemExit(
+            f"Cannot listen on {host}:{port}: {error}. Choose another --port or --host."
+        ) from error
 
 
 def _wait_ready(process: subprocess.Popen, host: str, port: int) -> None:
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            raise SystemExit(f"The UI server exited during startup (status {process.returncode}).")
+            raise SystemExit(
+                f"The UI server exited during startup (status {process.returncode})."
+            )
         try:
             with socket.create_connection((host, port), timeout=0.2):
                 return
         except OSError:
             time.sleep(0.1)
-    raise SystemExit("The UI server did not start within 30 seconds. See the server output above.")
+    raise SystemExit(
+        "The UI server did not start within 30 seconds. See the server output above."
+    )
 
 
 def _stop(process: subprocess.Popen, signum: int = signal.SIGTERM) -> None:
@@ -115,15 +125,20 @@ def serve_command(args: argparse.Namespace) -> int:
     env = dict(os.environ)
     env.update(HOST=host, PORT=str(port), NITRO_HOST=host, NITRO_PORT=str(port))
     env.setdefault("WEBUSE_PYTHON_COMMAND", sys.executable)
+    env["WEBUSE_CONFIG_DIR"] = str(
+        Path(env.get("WEBUSE_CONFIG_DIR") or Path.cwd()).expanduser().resolve()
+    )
     for name, default in (
-        ("WEBUSE_DB_PATH", directory / "webuse-ui.sqlite"),
-        ("WEBUSE_WORK_DIR", directory / "runs"),
+        ("WEBUSE_DB_PATH", directory / "webuse.db"),
+        ("WEBUSE_WORK_DIR", directory / "executions"),
     ):
         env[name] = str(Path(env.get(name) or default).expanduser().resolve())
     connect_host, url = _url(host, port)
     try:
         process = subprocess.Popen(
-            [node, str(entrypoint)], cwd=directory, env=env,
+            [node, str(entrypoint)],
+            cwd=directory,
+            env=env,
             start_new_session=os.name == "posix",
         )
     except OSError as error:
@@ -139,12 +154,17 @@ def serve_command(args: argparse.Namespace) -> int:
     previous_term = signal.signal(signal.SIGTERM, terminate)
     try:
         _wait_ready(process, connect_host, port)
-        print(f"Webuse UI: {url}\nData directory: {directory}\nPress Ctrl+C to stop.", flush=True)
+        print(
+            f"Webuse UI: {url}\nData directory: {directory}\nPress Ctrl+C to stop.",
+            flush=True,
+        )
         if not args.no_open:
             try:
                 webbrowser.open(url)
             except webbrowser.Error:
-                print(f"Could not open a browser. Open {url} manually.", file=sys.stderr)
+                print(
+                    f"Could not open a browser. Open {url} manually.", file=sys.stderr
+                )
         return process.wait()
     except KeyboardInterrupt:
         stop_signal = signal.SIGINT
@@ -159,11 +179,16 @@ def serve_command(args: argparse.Namespace) -> int:
 def register(subparsers: argparse._SubParsersAction) -> None:
     description = "Start the local service: UI, Harness, scheduler, and crawler process management"
     parser = subparsers.add_parser("serve", help=description, description=description)
-    parser.add_argument("--host", default="127.0.0.1", help="Bind address (default: 127.0.0.1)")
-    parser.add_argument("--port", type=_port, default=DEFAULT_PORT, help="Listen port (default: 2951)")
+    parser.add_argument(
+        "--host", default="127.0.0.1", help="Bind address (default: 127.0.0.1)"
+    )
+    parser.add_argument(
+        "--port", type=_port, default=DEFAULT_PORT, help="Listen port (default: 2951)"
+    )
     parser.add_argument("--no-open", action="store_true", help="Do not open a browser")
     parser.add_argument(
-        "--data-dir", default=os.environ.get("WEBUSE_UI_DATA_DIR") or str(Path.home() / ".webuse" / "ui"),
-        help="Writable data directory (default: ~/.webuse/ui, or WEBUSE_UI_DATA_DIR)",
+        "--data-dir",
+        default=os.environ.get("WEBUSE_UI_DATA_DIR") or str(Path.home() / ".webuse"),
+        help="Writable data directory (default: ~/.webuse, or WEBUSE_UI_DATA_DIR)",
     )
     parser.set_defaults(func=serve_command)

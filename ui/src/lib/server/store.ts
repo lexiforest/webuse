@@ -1,49 +1,33 @@
 import { databasePath, sqlite, transaction } from "./db";
 import { nextCronTime } from "./cron";
+import { randomUUID } from "node:crypto";
+import { defaultPanels, panelSelection } from "../monitoring";
 import { assertWorkspaceIdle, initializeWorkspace, readWorkspace, writeWorkspace, type ProjectFile } from "./workspace";
 export type { ProjectFile } from "./workspace";
 
 type Row = Record<string, unknown>;
 export type ProjectInput = {
   name: string;
-  type: "yaml" | "python" | "git";
   target: string;
   cron?: string;
+  crawlCommand?: string;
   config?: Record<string, unknown>;
   files?: ProjectFile[];
   revision?: string;
 };
 
-const sampleFiles: ProjectFile[] = [{
-  path: "webuse.yaml",
-  content: `name: Books to Scrape
-spiders:
-  books:
-    start_urls:
-      - https://books.toscrape.com/
-    allowed_domains:
-      - books.toscrape.com
-    max_depth: 1
-    pages:
-      default:
-        follow:
-          - css: .next a
-            same_domain: true
-        extract:
-          books:
-            item_css: .product_pod
-            fields:
-              title:
-                css: h3 a
-                attr: title
-              price: .price_color
-              availability: .availability
-`,
-}];
-
 function parseJson<T>(value: unknown, fallback: T): T {
   if (typeof value !== "string" || !value) return fallback;
   try { return JSON.parse(value) as T; } catch { return fallback; }
+}
+
+function provisionalTitle(prompt: string) {
+  const title = prompt.split("\n", 1)[0].replace(/https?:\/\/\S+/gi, "").replace(/\s+/g, " ").trim() || "New crawler";
+  return title.length > 56 ? `${title.slice(0, 53).trimEnd()}...` : title;
+}
+
+function setTitlePending(sessionId: number, pending: boolean) {
+  sqlite.prepare("UPDATE assistant_messages SET metadata = json_set(COALESCE(metadata, '{}'), '$.titlePending', json(?)) WHERE id = (SELECT id FROM assistant_messages WHERE session_id = ? AND role = 'user' ORDER BY id LIMIT 1)").run(JSON.stringify(pending), sessionId);
 }
 
 function displayDate(value: unknown) {
@@ -60,10 +44,10 @@ function projectRow(row: Row) {
   return {
     id: row.id as number,
     name: row.name as string,
-    type: row.type as ProjectInput["type"],
-    target: (row.git_url as string) || "",
+    target: (row.target as string) || "",
     cron: (row.cron as string) || "",
-    nextRunAt: displayDate(row.next_run_at),
+    crawlCommand: (row.crawl_command as string) || "",
+    nextExecutionAt: displayDate(row.next_run_at),
     status: (row.status as string) || "Ready",
     updatedAt: displayDate(row.updated_at),
     workspacePath: row.workspace_path as string,
@@ -79,6 +63,8 @@ function jobRow(row: Row) {
     command: row.command as string,
     startedAt: displayDate((row.started_at as number) || row.created_at),
     finishedAt: displayDate(row.finished_at),
+    startedAtMs: Number(row.started_at || row.created_at),
+    finishedAtMs: row.finished_at ? Number(row.finished_at) : null,
     duration: displayDuration(row.started_at, row.finished_at),
     items: Number(row.items || 0),
     metadata: parseJson<Record<string, unknown>>(row.metadata, {}),
@@ -87,8 +73,21 @@ function jobRow(row: Row) {
 
 export const store = {
   databasePath,
+  monitoringInstance() {
+    sqlite.prepare("INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES ('monitoring-instance', ?, ?)").run(randomUUID(), Date.now());
+    return String((sqlite.prepare("SELECT value FROM settings WHERE key = 'monitoring-instance'").get() as Row).value);
+  },
+  monitoringPanels(projectId: number) {
+    const row = sqlite.prepare("SELECT panels FROM monitoring_preferences WHERE project_id = ?").get(projectId) as Row | undefined;
+    return row ? panelSelection(parseJson(row.panels, defaultPanels)) : [...defaultPanels];
+  },
+  saveMonitoringPanels(projectId: number, panels: unknown) {
+    const value = panelSelection(panels);
+    sqlite.prepare("INSERT INTO monitoring_preferences (project_id, panels) VALUES (?, ?) ON CONFLICT(project_id) DO UPDATE SET panels = excluded.panels").run(projectId, JSON.stringify(value));
+    return value;
+  },
   listProjects() {
-    return (sqlite.prepare(`SELECT p.*, COALESCE((SELECT status FROM jobs WHERE project_id = p.id ORDER BY created_at DESC LIMIT 1), 'Ready') status FROM projects p ORDER BY updated_at DESC`).all() as Row[]).map(projectRow);
+    return (sqlite.prepare(`SELECT p.*, COALESCE((SELECT status FROM jobs WHERE project_id = p.id ORDER BY created_at DESC LIMIT 1), 'Ready') status FROM projects p ORDER BY updated_at DESC, id DESC`).all() as Row[]).map(projectRow);
   },
   getProject(id: number) {
     const row = sqlite.prepare("SELECT * FROM projects WHERE id = ?").get(id) as Row | undefined;
@@ -96,14 +95,13 @@ export const store = {
     const project = projectRow(row);
     return { ...project, config: parseJson<Record<string, unknown> | undefined>(row.config, undefined), ...readWorkspace(project.workspacePath) };
   },
-  createProject(input?: ProjectInput) {
-    const value = input || { name: "Books to Scrape", type: "yaml" as const, target: "https://books.toscrape.com/", files: sampleFiles };
+  createProject(value: ProjectInput) {
     const now = Date.now();
     const cron = value.cron?.trim() || null;
     // Allocate the ID durably before filesystem work. A failed creation must not
     // reuse an ID whose directory might contain recoverable files.
-    const result = sqlite.prepare(`INSERT INTO projects (name, type, git_url, config, cron, next_run_at, created_at, updated_at, workspace_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '')`).run(
-      value.name, value.type, value.target, value.config ? JSON.stringify(value.config) : null, cron, cron ? nextCronTime(cron, now) : null, now, now,
+    const result = sqlite.prepare(`INSERT INTO projects (name, target, config, cron, next_run_at, created_at, updated_at, crawl_command, workspace_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, '')`).run(
+      value.name, value.target, value.config ? JSON.stringify(value.config) : null, cron, cron ? nextCronTime(cron, now) : null, now, now, value.crawlCommand?.trim() || "",
     );
     const id = Number(result.lastInsertRowid);
     try {
@@ -115,18 +113,29 @@ export const store = {
     }
     return this.getProject(id)!;
   },
+  createHarnessProject(prompt: string) {
+    const name = provisionalTitle(prompt);
+    const target = prompt.match(/https?:\/\/[^\s<>"')\]]+/i)?.[0]?.replace(/[.,;:!?]+$/, "") || "Generated from prompt";
+    const project = this.createProject({ name, target, files: [{ path: "webuse.yaml", content: `name: ${JSON.stringify(name)}\nspiders: {}\n` }] });
+    const session = this.getOrCreateSession(project.id)!;
+    this.appendMessage(session.id, "user", prompt, { pending: true });
+    return project;
+  },
   updateProject(id: number, input: ProjectInput) {
     assertWorkspaceIdle(id);
     const current = this.getProject(id);
     if (!current) return undefined;
-    if ((current.type === "git" || input.type === "git") && (input.type !== current.type || input.target !== current.target)) throw new Error("Create a new Git import to change repositories. Existing workspace files are kept.");
     writeWorkspace(current.workspacePath, input.files || [], input.revision || "");
     const now = Date.now();
     const cron = input.cron?.trim() || null;
-    const result = sqlite.prepare(`UPDATE projects SET name = ?, type = ?, git_url = ?, config = ?, cron = ?, next_run_at = ?, updated_at = ? WHERE id = ?`).run(
-      input.name, input.type, input.target, input.config ? JSON.stringify(input.config) : null, cron, cron ? nextCronTime(cron, now) : null, now, id,
+    const result = sqlite.prepare(`UPDATE projects SET name = ?, target = ?, config = ?, cron = ?, next_run_at = ?, updated_at = ?, crawl_command = ? WHERE id = ?`).run(
+      input.name, input.target, input.config ? JSON.stringify(input.config) : null, cron, cron ? nextCronTime(cron, now) : null, now, input.crawlCommand?.trim() || "", id,
     );
     if (!result.changes) return undefined;
+    if (input.name !== current.name) {
+      for (const session of sqlite.prepare("SELECT id FROM assistant_sessions WHERE project_id = ?").all(id) as { id: number }[]) setTitlePending(session.id, false);
+      sqlite.prepare("UPDATE assistant_sessions SET title = ? WHERE project_id = ?").run(input.name, id);
+    }
     return this.getProject(id);
   },
   saveWorkspace(id: number, files: ProjectFile[], revision: string) {
@@ -173,6 +182,7 @@ export const store = {
     })();
   },
   updateJobCommand(id: number, command: string) { sqlite.prepare("UPDATE jobs SET command = ?, updated_at = ? WHERE id = ?").run(command, Date.now(), id); },
+  updateJobMetadata(id: number, metadata: Record<string, unknown>) { sqlite.prepare("UPDATE jobs SET metadata = ? WHERE id = ?").run(JSON.stringify({ ...this.getJob(id)?.metadata, ...metadata }), id); },
   finishJob(id: number, status: string, metadata: Record<string, unknown> = {}) { const now = Date.now(); sqlite.prepare("UPDATE jobs SET status = ?, finished_at = ?, metadata = ?, updated_at = ? WHERE id = ?").run(status, now, JSON.stringify({ ...this.getJob(id)?.metadata, ...metadata }), now, id); },
   cancelQueuedJob(id: number) { const now = Date.now(); return sqlite.prepare("UPDATE jobs SET status = 'cancelled', finished_at = ?, updated_at = ? WHERE id = ? AND status = 'queued'").run(now, now, id).changes > 0; },
   appendLog(jobId: number, stream: "stdout" | "stderr", message: string) { sqlite.prepare("INSERT INTO logs (job_id, stream, message, created_at) VALUES (?, ?, ?, ?)").run(jobId, stream, message, Date.now()); },
@@ -220,6 +230,53 @@ export const store = {
     }
     return { id: row.id as number, projectId: row.project_id as number, title: row.title as string };
   },
+  sessionTitlePrompt(sessionId: number, expectedName: string) {
+    const first = sqlite.prepare("SELECT content, metadata FROM assistant_messages WHERE session_id = ? AND role = 'user' ORDER BY id LIMIT 1").get(sessionId) as Row | undefined;
+    if (!first) return undefined;
+    const pending = parseJson<Record<string, unknown>>(first.metadata, {}).titlePending;
+    const session = sqlite.prepare("SELECT title FROM assistant_sessions WHERE id = ?").get(sessionId) as Row | undefined;
+    if (pending === false || session?.title !== expectedName) return undefined;
+    // Older conversations have no marker. Retry only if they still have the initial prompt-derived name.
+    return pending === true || expectedName === provisionalTitle(first.content as string) ? first.content as string : undefined;
+  },
+  renameSession(sessionId: number, title: string, expectedName: string) {
+    return transaction(() => {
+      const now = Date.now();
+      const changed = sqlite.prepare("UPDATE projects SET name = ?, updated_at = ? WHERE id = (SELECT project_id FROM assistant_sessions WHERE id = ?) AND name = ?").run(title, now, sessionId, expectedName);
+      if (changed.changes) {
+        sqlite.prepare("UPDATE assistant_sessions SET title = ?, updated_at = ? WHERE id = ?").run(title, now, sessionId);
+        setTitlePending(sessionId, false);
+      }
+      return !!changed.changes;
+    })();
+  },
   listMessages(sessionId: number) { return (sqlite.prepare("SELECT * FROM assistant_messages WHERE session_id = ? ORDER BY created_at, id").all(sessionId) as Row[]).map(row => ({ id: row.id as number, sessionId: row.session_id as number, role: row.role as "user" | "assistant", content: row.content as string, metadata: parseJson<Record<string, unknown>>(row.metadata, {}) })); },
-  appendMessage(sessionId: number, role: "user" | "assistant", content: string, metadata: Record<string, unknown> = {}) { const now = Date.now(); sqlite.prepare("INSERT INTO assistant_messages (session_id, role, content, metadata, created_at) VALUES (?, ?, ?, ?, ?)").run(sessionId, role, content, JSON.stringify(metadata), now); sqlite.prepare("UPDATE assistant_sessions SET updated_at = ? WHERE id = ?").run(now, sessionId); },
+  assistantCompletions(after?: number) {
+    const latest = Number((sqlite.prepare("SELECT COALESCE(MAX(id), 0) id FROM assistant_messages").get() as Row).id);
+    if (after === undefined) return { cursor: latest, completions: [] };
+    const rows = sqlite.prepare(`SELECT m.id, m.metadata, p.id project_id, p.name project
+      FROM assistant_messages m JOIN assistant_sessions s ON s.id = m.session_id JOIN projects p ON p.id = s.project_id
+      WHERE m.id > ? AND m.role = 'assistant' AND json_extract(m.metadata, '$.backgroundTurn') = 1
+      ORDER BY m.id LIMIT 100`).all(after) as Row[];
+    const completions = rows.map(row => {
+      const metadata = parseJson<Record<string, unknown>>(row.metadata, {});
+      return { id: Number(row.id), projectId: Number(row.project_id), project: String(row.project), outcome: metadata.stopped ? "stopped" : metadata.error ? "failed" : "completed" };
+    });
+    return { cursor: rows.length === 100 ? Number(rows.at(-1)!.id) : latest, completions };
+  },
+  claimPendingMessage(sessionId: number, messageId: number) {
+    return transaction(() => {
+      const message = this.listMessages(sessionId).find(message => message.id === messageId && message.role === "user" && message.metadata.pending === true);
+      if (!message) return undefined;
+      sqlite.prepare("UPDATE assistant_messages SET metadata = ? WHERE id = ?").run(JSON.stringify({ ...message.metadata, pending: false }), messageId);
+      return message.content;
+    })();
+  },
+  appendMessage(sessionId: number, role: "user" | "assistant", content: string, metadata: Record<string, unknown> = {}) {
+    const now = Date.now();
+    if (role === "user" && !sqlite.prepare("SELECT 1 FROM assistant_messages WHERE session_id = ? AND role = 'user' LIMIT 1").get(sessionId)) metadata = { titlePending: true, ...metadata };
+    sqlite.prepare("INSERT INTO assistant_messages (session_id, role, content, metadata, created_at) VALUES (?, ?, ?, ?, ?)").run(sessionId, role, content, JSON.stringify(metadata), now);
+    sqlite.prepare("UPDATE assistant_sessions SET updated_at = ? WHERE id = ?").run(now, sessionId);
+    sqlite.prepare("UPDATE projects SET updated_at = ? WHERE id = (SELECT project_id FROM assistant_sessions WHERE id = ?)").run(now, sessionId);
+  },
 };

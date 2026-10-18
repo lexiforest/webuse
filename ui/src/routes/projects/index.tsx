@@ -1,15 +1,14 @@
 import { Show, createSignal, onMount } from "solid-js";
-import { useNavigate } from "@solidjs/router";
+import { A, useNavigate } from "@solidjs/router";
 import { FiBarChart2, FiEdit3, FiPlay } from "solid-icons/fi";
 
-import Button, { ButtonLink } from "~/components/Button";
+import { Button } from "~/components/ui/button";
 import TableView from "~/components/TableView";
 import Layout from "~/layout/dashboard";
 
 type ProjectRow = {
   id: number;
   name: string;
-  type: "yaml" | "python" | "git";
   target: string;
   cron: string;
   status: string;
@@ -40,24 +39,6 @@ export default function Projects() {
     }
   };
 
-  const generateExample = () => {
-    setError(undefined);
-
-    void (async () => {
-      try {
-        const response = await fetch("/api/projects", { method: "POST" });
-        if (!response.ok) {
-          throw new Error(`Failed to create project (${response.status})`);
-        }
-
-        const data = (await response.json()) as { project: ProjectRow };
-        setProjects(current => [data.project, ...current]);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to create project");
-      }
-    })();
-  };
-
   const deleteProject = (id: number) => {
     if (!window.confirm("Delete this project? This cannot be undone.")) {
       return;
@@ -73,6 +54,7 @@ export default function Projects() {
         }
 
         setProjects(current => current.filter(project => project.id !== id));
+        window.dispatchEvent(new Event("webuse:projects-changed"));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to delete project");
       }
@@ -84,19 +66,19 @@ export default function Projects() {
 
     void (async () => {
       try {
-        const response = await fetch("/api/runs", {
+        const response = await fetch("/api/executions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ projectId: id }),
         });
         if (!response.ok) {
           const data = (await response.json().catch(() => ({}))) as { error?: string };
-          throw new Error(data.error || `Failed to queue run (${response.status})`);
+          throw new Error(data.error || `Failed to queue execution (${response.status})`);
         }
 
-        navigate("/runs");
+        navigate("/executions");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to queue run");
+        setError(err instanceof Error ? err.message : "Failed to queue execution");
       }
     })();
   };
@@ -110,11 +92,11 @@ export default function Projects() {
       <div class="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 class="text-3xl font-bold text-sky-400">Projects</h1>
-          <p class="mt-1 text-sm text-gray-400">Project source files and local crawl runs</p>
+          <p class="mt-1 text-sm text-gray-400">Project source files and local crawl executions</p>
         </div>
-        <ButtonLink href="/projects/create" variant="primary">
+        <Button as={A} href="/projects/create" variant="default">
           Create project
-        </ButtonLink>
+        </Button>
       </div>
 
       <section class="rounded-lg border border-gray-700 bg-gray-900 p-4">
@@ -127,7 +109,7 @@ export default function Projects() {
         </Show>
         <TableView
           items={projects()}
-          columns={["ID", "Name", "Type", "Source", "Schedule", "Status", "Updated", "Actions"]}
+          columns={["ID", "Name", "Target", "Schedule", "Status", "Updated", "Actions"]}
           loading={loading()}
           loadingText="Loading projects..."
           emptyText="No projects yet."
@@ -136,7 +118,6 @@ export default function Projects() {
             <tr class="transition-colors hover:bg-gray-800/70">
               <td>#{project.id}</td>
               <td class="font-medium text-white">{project.name}</td>
-              <td>{project.type}</td>
               <td class="max-w-[420px] truncate">{project.target}</td>
               <td>{project.cron || "Manual"}</td>
               <td>{project.status}</td>
@@ -144,7 +125,7 @@ export default function Projects() {
               <td class="flex gap-2">
                 <Button
                   class="gap-1.5"
-                  size="compact"
+                  size="sm"
                   variant="success"
                   type="button"
                   onClick={() => runProject(project.id)}
@@ -152,27 +133,27 @@ export default function Projects() {
                   <FiPlay size={13} stroke-width={2} aria-hidden="true" />
                   Run
                 </Button>
-                <Button
+                <Button variant="outline"
                   class="gap-1.5"
-                  size="compact"
+                  size="sm"
                   type="button"
-                  onClick={() => navigate(`/runs?project_id=${project.id}`)}
+                  onClick={() => navigate(`/executions?project_id=${project.id}`)}
                 >
                   <FiBarChart2 size={13} stroke-width={2} aria-hidden="true" />
-                  Runs
+                  Executions
                 </Button>
-                <Button
+                <Button variant="outline"
                   class="gap-1.5"
-                  size="compact"
+                  size="sm"
                   type="button"
-                  onClick={() => navigate(`/projects/${project.id}/${project.type === "git" ? "settings" : "files"}`)}
+                  onClick={() => navigate(`/projects/${project.id}/files`)}
                 >
                   <FiEdit3 size={13} stroke-width={2} aria-hidden="true" />
                   Edit
                 </Button>
                 <Button
-                  size="compact"
-                  variant="danger"
+                  size="sm"
+                  variant="destructive"
                   type="button"
                   onClick={() => deleteProject(project.id)}
                 >
@@ -182,13 +163,6 @@ export default function Projects() {
             </tr>
           )}
         />
-        <Show when={!loading() && projects().length === 0}>
-          <div class="mt-4 flex justify-center border-t border-gray-800 pt-4">
-            <Button variant="primary" type="button" onClick={generateExample}>
-              Generate example project
-            </Button>
-          </div>
-        </Show>
       </section>
     </Layout>
   );

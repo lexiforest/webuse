@@ -174,7 +174,7 @@ The `webuse.yaml` contains project configurations:
 
 ```yaml
 name: books_project
-user_agent: chrome  # By default, the curl_cffi "chrome" impersonation is used
+user_agent: chrome  # Agent name used for robots.txt matching
 robots_txt: true    # Obey the robots.txt rule
 llm: {}             # LLM to use
 concurrency: 5
@@ -191,8 +191,9 @@ spiders:            # Registered spiders in this project
 `webuse gen` adds `spiders/books.yaml` and `spiders/books.py`, and registers the spider
 in project config file.
 
-The `books.py` are mostly placeholder to glue the crawling process together, if you
-don't need any custom logic:
+The Python module defines the item model, pipeline implementations, and spider
+class. Add custom parsing methods or hooks here when needed; keep the YAML
+configuration connected through `spider_config_path`:
 
 ```py
 import webuse
@@ -242,7 +243,7 @@ You can now run the spider with:
 
 
 ```bash
-webuse crawl books_project --spider books -o books.jsonl
+webuse crawl --spider books -o books.jsonl
 ```
 
 `-o` selects JSONL, CSV, or SQLite output by file extension. The generated
@@ -312,25 +313,43 @@ reached through the next listing page. Increase it to follow more pagination.
 Run the spider, again:
 
 ```bash
-webuse crawl books_project --spider books -o books.jsonl
+webuse crawl --spider books -o books.jsonl
 ```
 
 For a small sample, add `--max-requests 3`. Omitting `--spider` runs all
 registered spiders with a shared request budget.
 
-### Pure Python spider
+### Custom parsing with Python and YAML
 
-Maybe you don't like yaml config at all, then you can write the entire spider in python.
-
-For fully custom parsing, generate another spider in the same project:
+Custom parsing uses the same two-file layout. Generate another spider from the
+project directory:
 
 ```bash
-# Note the --python-only option
-
-webuse gen book_details https://books.toscrape.com/ --python-only
+webuse gen book_details https://books.toscrape.com/
 ```
 
-Replace `spiders/book_details.py` with:
+Put seeds, scope, depth, follow rules, and pipeline settings in
+`spiders/book_details.yaml`:
+
+```yaml
+name: book_details
+start_urls:
+  - https://books.toscrape.com/
+allowed_domains:
+  - books.toscrape.com
+max_depth: 49
+pages:
+  default:
+    follow:
+      - css: .next a
+        same_domain: true
+pipelines:
+  - class: spiders.book_details.CleanBookPipeline
+  - type: jsonl
+    path: output.jsonl
+```
+
+Replace `spiders/book_details.py` with the model and custom parser:
 
 ```python
 import webuse
@@ -348,16 +367,8 @@ class CleanBookPipeline(webuse.ItemPipeline):
 
 
 class BookDetailsSpider(webuse.Spider):
-    name = "book_details"
+    spider_config_path = "spiders/book_details.yaml"
     item_model = BookItem
-    pipelines = [
-        CleanBookPipeline(),
-        {"type": "jsonl", "path": "output.jsonl"},
-    ]
-    start_urls = ["https://books.toscrape.com/"]
-    allowed_domains = {"books.toscrape.com"}
-    max_depth = 49
-    follow = [webuse.FollowRule(css=".next a", same_domain=True)]
 
     def parse(self, response):
         for book in response.find_all(css=".product_pod"):
@@ -367,13 +378,16 @@ class BookDetailsSpider(webuse.Spider):
             }
 ```
 
-You can notice that it's basically yaml config inside the spider object, but this way
-you can customize it programatically.
+The custom `parse()` replaces the default extractor, so this YAML omits the
+starter `pages.default.extract` rules. YAML follow rules still discover the next
+page. For multiple page types, keep routing and follow rules in YAML and implement
+`parse_<page_type>()` methods in Python where needed. Custom parsing, JSON-LD
+fallbacks, hooks, and async methods do not require moving settings into Python.
 
 The same project command runs it:
 
 ```bash
-webuse crawl books_project --spider book_details -o books.jsonl
+webuse crawl --spider book_details -o books.jsonl
 ```
 
 The base `Spider.parse()` extracts items from `extract` when you do not need
@@ -382,6 +396,14 @@ requests. Generated spiders have no separate script entry point.
 
 Direct Python calls to `crawl()`, `acrawl()`, and `Spider.run()` are also
 available without creating a project.
+
+### Pure Python spider
+
+If you explicitly prefer all configuration in Python,
+`webuse gen NAME URL --python-only` generates that alternative. It still requires an existing project
+and registers the class in `webuse.yaml`. Use this option by preference, not as a
+requirement for custom parsing. New projects use the YAML/Python split by default;
+preserve an existing project's organization unless you intend to change it.
 
 ### Routing Follow-Up Requests
 
@@ -395,39 +417,73 @@ There are two ways to send a discovered URL to a parser:
 - **Let URL patterns choose (recommended):** follow the URL without a type and
   declare `url_patterns` under `pages.author`.
 
-For example, this spider finds author links and lets their URLs select
-`parse_author()`:
+For example, generate a spider from the current project:
+
+```bash
+webuse gen quotes https://quotes.toscrape.com/
+```
+
+Replace `spiders/quotes.yaml` with rules that find author links and let their
+URLs select `parse_author()`:
+
+```yaml
+name: quotes
+start_urls:
+  - https://quotes.toscrape.com/
+allowed_domains:
+  - quotes.toscrape.com
+max_depth: 1
+pages:
+  default:
+    follow:
+      - css: .author + a
+        same_domain: true
+        exclude: /author/unknown/?$
+  author:
+    url_patterns:
+      - /author/[^/]+/?$
+    exclude_patterns:
+      - /author/unknown/?$
+pipelines:
+  - type: jsonl
+    path: authors.jsonl
+```
+
+Then replace `spiders/quotes.py` with the custom handler:
 
 ```python
 import webuse
+from pydantic import BaseModel
+
+
+class Author(BaseModel):
+    name: str
 
 
 class QuotesSpider(webuse.Spider):
-    name = "quotes"
-    start_urls = ["https://quotes.toscrape.com/"]
-    max_depth = 1
-    pages = {
-        "author": {
-            "url_patterns": [r"/author/[^/]+/?$"],
-            "exclude_patterns": [r"/author/unknown/?$"],
-        }
-    }
+    spider_config_path = "spiders/quotes.yaml"
+    item_model = Author
 
     def parse(self, response):
-        for author in response.find_all(css=".author + a"):
-            yield response.follow(author.attr("href"))
+        # YAML follow rules handle the listing page.
+        return ()
 
     def parse_author(self, response):
-        yield {"name": response.find(css="h3.author-title").text()}
+        title = response.find(css="h3.author-title")
+        if title is not None:
+            yield Author(name=title.text().strip())
 ```
 
-The equivalent YAML follow rules are:
+If no custom parsing is needed, the `pages` section can also extract the author
+declaratively. Use this with a configuration-only registration
+(`config: spiders/quotes.yaml`) instead of the Python class above:
 
 ```yaml
 pages:
   default:
     follow:
       - css: .author + a
+        exclude: /author/unknown/?$
   author:
     url_patterns:
       - /author/[^/]+/?$
@@ -443,6 +499,9 @@ To assign the type explicitly, add `page_type: author` to that follow rule, or
 pass `page_type="author"` to `response.follow()`. The URL must still pass the
 author type's patterns; otherwise it is skipped without trying another type.
 With no `url_patterns`, explicit assignment is allowed, subject to exclusions.
+For untyped links, `exclude_patterns` only prevents assignment to that page type;
+an unmatched URL can still use default handling. Use a follow rule's `exclude`
+to prevent discovering those links, as the examples do for unknown authors.
 
 Automatic matching checks types in declaration order and chooses the first match
 without an exclusion. If none matches, the URL uses `default` handling. The spider
@@ -457,7 +516,7 @@ Generate an async spider with `--async`:
 
 ```bash
 webuse gen async_books https://books.toscrape.com/ --async
-webuse crawl . --spider async_books
+webuse crawl --spider async_books
 ```
 
 The generated class inherits from `AsyncSpider`, and `webuse crawl` awaits it automatically.
@@ -475,5 +534,5 @@ For Codex/Claude, simply say:
 Install the skills from: https://github.com/lexiforest/webuse
 ```
 
-For the built-in coding assistant, see [Harness](../harness/). To manage runs,
+For the built-in coding assistant, see [Harness](../harness/). To manage executions,
 logs, records, and schedules, see [Dashboard](../dashboard/).

@@ -1,9 +1,10 @@
 import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { homedir } from "node:os";
 import { runtime } from "./runtime";
 
-export const databasePath = resolve(process.env.WEBUSE_DB_PATH || "./webuse-ui.sqlite");
+export const databasePath = resolve(process.env.WEBUSE_DB_PATH || resolve(homedir(), ".webuse", "webuse.db"));
 mkdirSync(dirname(databasePath), { recursive: true });
 
 export const sqlite = runtime.database ??= new DatabaseSync(databasePath);
@@ -27,16 +28,15 @@ sqlite.exec(`
   CREATE TABLE IF NOT EXISTS projects (
     id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
     name text NOT NULL,
-    type text NOT NULL,
-    git_url text,
+    target text,
     config text,
     workspace_path text NOT NULL,
+    crawl_command text NOT NULL DEFAULT '',
     cron text,
     next_run_at integer,
     created_at integer NOT NULL,
     updated_at integer NOT NULL
   );
-  CREATE INDEX IF NOT EXISTS projects_type_idx ON projects (type);
   CREATE INDEX IF NOT EXISTS projects_created_at_idx ON projects (created_at);
 
   CREATE TABLE IF NOT EXISTS jobs (
@@ -79,6 +79,10 @@ sqlite.exec(`
     value text NOT NULL,
     updated_at integer NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS monitoring_preferences (
+    project_id integer PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+    panels text NOT NULL
+  );
 
   CREATE TABLE IF NOT EXISTS assistant_sessions (
     id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -101,3 +105,15 @@ sqlite.exec(`
     entries text NOT NULL
   );
 `);
+
+transaction(() => {
+  const columns = (sqlite.prepare("PRAGMA table_info(projects)").all() as { name: string }[]).map(column => column.name);
+  if (columns.includes("type")) {
+    sqlite.exec("DROP INDEX IF EXISTS projects_type_idx; ALTER TABLE projects DROP COLUMN type;");
+  }
+  if (columns.includes("git_url")) sqlite.exec("ALTER TABLE projects RENAME COLUMN git_url TO target;");
+})();
+
+if (!(sqlite.prepare("PRAGMA table_info(projects)").all() as { name: string }[]).some(column => column.name === "crawl_command")) {
+  sqlite.exec("ALTER TABLE projects ADD COLUMN crawl_command text NOT NULL DEFAULT ''");
+}

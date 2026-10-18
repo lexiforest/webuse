@@ -44,6 +44,10 @@ items, errors, responses, and stats in the result.
 `Spider`, with an awaitable `run()`. A parser that only reads downloaded HTML
 can be a regular function:
 
+This is a standalone library example. In a crawler project, keep seeds and crawl
+settings in `spiders/<name>.yaml`, set `spider_config_path` on the class, and put
+the parsing methods in Python. Async parsing uses the same layout as sync parsing.
+
 ```python
 from pydantic import BaseModel
 from webuse import AsyncSpider
@@ -164,6 +168,9 @@ To generate a new async spider in the current project, use:
 webuse gen pages https://example.com/ --async
 ```
 
+This generates both `spiders/pages.py` and `spiders/pages.yaml`. Keep configuration
+in YAML even when the Python parser awaits I/O.
+
 For Python spiders, the base class determines execution: `Spider` is synchronous
 and `AsyncSpider` is asynchronous, regardless of the `crawl --async` flag.
 
@@ -185,6 +192,6 @@ can be processed concurrently. Do not rely on a fixed overall item order.
 Async memory and Redis backends are available; CLI `--state` also works with async
 execution. See [Crawl State](../../advanced/state/) for configuration.
 
-Use a separate spider instance for each concurrent run. Async execution still
+Use a separate spider instance for each concurrent execution. Async execution still
 accumulates items and responses in the final result, and cancellation does not
 save a checkpoint for resuming later.

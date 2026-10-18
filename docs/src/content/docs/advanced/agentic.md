@@ -161,7 +161,7 @@ Watch the action logs while it runs. A possible sequence is:
 
 The log names are runtime tools: `queue_push` adds links, `queue_pop` advances to
 the next page, and `emit_record` submits a validated record. The model also keeps
-working notes during the run. See [Agentic Runtime](../../references/agentic/)
+working notes during the execution. See [Agentic Runtime](../../references/agentic/)
 for the tool contract and memory behavior.
 
 ## Check the data
@@ -181,7 +181,7 @@ product URLs. Review the action logs and follow the output URLs to check that:
 - The brand and material match the product's Features table.
 
 The schema validates record shape, not site coverage or the model's interpretation.
-Even a `finished` run can miss products if the model skipped a pagination link.
+Even a `finished` execution can miss products if the model skipped a pagination link.
 Check coverage against the site; the sample values above may change.
 
 ## If the crawl stops early
@@ -194,9 +194,9 @@ Check the final reason and preceding action logs:
 | `model_error` | Check the endpoint, model identifier, and tool-call support. |
 | `token_limit` | Review the model's progress before increasing `limits.max_tokens`. |
 
-These runs return a nonzero CLI exit status, but emitted records remain in the
+These executions return a nonzero CLI exit status, but emitted records remain in the
 output file. Drafts are not written as complete items. Use a new output filename
-when rerunning to preserve partial results. Restarting starts a new run; durable
+when rerunning to preserve partial results. Restarting starts a new execution; durable
 resume is not implemented.
 
 See [Agentic Runtime](../../references/agentic/#limits-and-outcomes) for token
@@ -214,5 +214,5 @@ Run it again with a new output file:
 webuse crawl --spider apparel -o apparel-under-50.jsonl
 ```
 
-Compare the records and action logs with the first run. The higher threshold
+Compare the records and action logs with the first execution. The higher threshold
 should admit additional products if the catalog contains them.

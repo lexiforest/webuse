@@ -16,6 +16,7 @@ dist/
 .eggs/
 pip-wheel-metadata/
 src/webuse/_ui/
+src/webuse/_docs/
 /target/
 
 # Test and coverage output

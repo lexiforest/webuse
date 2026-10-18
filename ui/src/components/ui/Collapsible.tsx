@@ -1,43 +1,17 @@
-import type { ComponentProps, ValidComponent } from "solid-js";
+import type { ValidComponent } from "solid-js";
 import { splitProps } from "solid-js";
-import { Collapsible as CollapsiblePrimitive } from "@kobalte/core/collapsible";
+import type { PolymorphicProps } from "@kobalte/core/polymorphic";
+import * as Primitive from "@kobalte/core/collapsible";
+import { cn } from "~/lib/utils";
 
-function cx(...classes: Array<string | undefined | false>) {
-  return classes.filter(Boolean).join(" ");
+const Collapsible = Primitive.Root;
+const CollapsibleTrigger = Primitive.Trigger;
+
+function CollapsibleContent<T extends ValidComponent = "div">(
+  props: PolymorphicProps<T, Primitive.CollapsibleContentProps<T> & { class?: string }>,
+) {
+  const [local, others] = splitProps(props as Primitive.CollapsibleContentProps & { class?: string }, ["class"]);
+  return <Primitive.Content class={cn("overflow-hidden", local.class)} {...others} />;
 }
 
-export type CollapsibleProps<T extends ValidComponent = "div"> = ComponentProps<
-  typeof CollapsiblePrimitive<T>
->;
-
-export const Collapsible = <T extends ValidComponent = "div">(props: CollapsibleProps<T>) => {
-  return <CollapsiblePrimitive data-slot="collapsible" {...props} />;
-};
-
-export type CollapsibleTriggerProps<T extends ValidComponent = "button"> = ComponentProps<
-  typeof CollapsiblePrimitive.Trigger<T>
->;
-
-export const CollapsibleTrigger = <T extends ValidComponent = "button">(
-  props: CollapsibleTriggerProps<T>,
-) => {
-  return <CollapsiblePrimitive.Trigger data-slot="collapsible-trigger" {...props} />;
-};
-
-export type CollapsibleContentProps<T extends ValidComponent = "div"> = ComponentProps<
-  typeof CollapsiblePrimitive.Content<T>
->;
-
-export const CollapsibleContent = <T extends ValidComponent = "div">(
-  props: CollapsibleContentProps<T>,
-) => {
-  const [, rest] = splitProps(props as CollapsibleContentProps, ["class"]);
-
-  return (
-    <CollapsiblePrimitive.Content
-      data-slot="collapsible-content"
-      class={cx("overflow-hidden", props.class)}
-      {...rest}
-    />
-  );
-};
+export { Collapsible, CollapsibleTrigger, CollapsibleContent };

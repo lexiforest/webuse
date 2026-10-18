@@ -1,4 +1,4 @@
-import Button from "~/components/Button";
+import { Button } from "~/components/ui/button";
 
 type PaginationProps = {
   page: number;
@@ -20,8 +20,8 @@ export default function Pagination(props: PaginationProps) {
         Showing {startItem()}-{endItem()} of {props.totalItems} {itemLabel()}
       </div>
       <div class="flex items-center gap-2">
-        <Button
-          size="compact"
+        <Button variant="outline"
+          size="sm"
           type="button"
           disabled={props.page <= 1}
           onClick={() => props.onPageChange(Math.max(1, props.page - 1))}
@@ -31,8 +31,8 @@ export default function Pagination(props: PaginationProps) {
         <span class="min-w-16 text-center text-gray-300">
           {props.page} / {totalPages()}
         </span>
-        <Button
-          size="compact"
+        <Button variant="outline"
+          size="sm"
           type="button"
           disabled={props.page >= totalPages()}
           onClick={() => props.onPageChange(Math.min(totalPages(), props.page + 1))}

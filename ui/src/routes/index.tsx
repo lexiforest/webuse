@@ -6,24 +6,6 @@ import Layout from "~/layout/dashboard";
 
 type CreatedProject = { id: number };
 
-const pendingPromptKey = (projectId: number) => `webuse:project:${projectId}:pending-prompt`;
-
-function projectName(prompt: string) {
-  const firstLine = prompt.split("\n", 1)[0].trim();
-  const withoutUrl = firstLine.replace(/https?:\/\/\S+/gi, "").replace(/\s+/g, " ").trim();
-  const title = withoutUrl || "New crawler";
-  return title.length > 56 ? `${title.slice(0, 53).trimEnd()}...` : title;
-}
-
-function projectTarget(prompt: string) {
-  const match = prompt.match(/https?:\/\/[^\s<>"')\]]+/i)?.[0];
-  return match?.replace(/[.,;:!?]+$/, "") || "Generated from prompt";
-}
-
-function starterYaml(name: string) {
-  return `name: ${JSON.stringify(name)}\nspiders:\n  crawler:\n    start_urls: []\n`;
-}
-
 export default function NewProject() {
   const navigate = useNavigate();
   const [prompt, setPrompt] = createSignal("");
@@ -43,24 +25,18 @@ export default function NewProject() {
     setCreating(true);
     setError(undefined);
     try {
-      const name = projectName(message);
       const response = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          type: "yaml",
-          target: projectTarget(message),
-          files: [{ path: "webuse.yaml", content: starterYaml(name) }],
-        }),
+        body: JSON.stringify({ prompt: message }),
       });
       const data = (await response.json().catch(() => ({}))) as { project?: CreatedProject; error?: string };
       if (!response.ok || !data.project) {
         throw new Error(data.error || `Failed to create project (${response.status})`);
       }
 
-      window.sessionStorage.setItem(pendingPromptKey(data.project.id), message);
-      navigate(`/projects/${data.project.id}/files`);
+      window.dispatchEvent(new Event("webuse:projects-changed"));
+      navigate(`/projects/${data.project.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create project");
       setCreating(false);
@@ -68,7 +44,7 @@ export default function NewProject() {
   }
 
   return (
-    <Layout currentTab="new project">
+    <Layout currentTab="new">
       <div class="grid min-h-full flex-1 place-items-center px-3 py-12">
         <section class="w-full max-w-3xl -translate-y-[8vh]">
           <div class="mb-8 text-center">
@@ -86,6 +62,7 @@ export default function NewProject() {
               disabled={creating()}
               placeholder="Build a crawler for https://example.com that extracts..."
               rows={3}
+              maxLength={32_000}
               value={prompt()}
               onInput={event => {
                 setPrompt(event.currentTarget.value);

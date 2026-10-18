@@ -28,6 +28,7 @@ from ..pipelines import (
 )
 from ..pipelines.utils import _apipeline_lifecycle
 from ..signals import SignalBus
+from ..metrics.execution import execution_metrics
 from ..spider import AgenticSpider, AsyncSpider, Spider
 from ..spider.config import SpiderConfig
 from ..log import configure_logger
@@ -357,6 +358,14 @@ async def _arun_single_spider(
         attributes or {},
     )
     async with AsyncExitStack() as stack:
+        stack.enter_context(
+            execution_metrics(
+                spider,
+                target.name
+                if isinstance(target, _InlineSpiderTarget)
+                else Path(target).name,
+            )
+        )
         options = _state_options(
             state,
             target=target.name if isinstance(target, _InlineSpiderTarget) else target,
@@ -384,7 +393,9 @@ def crawl_command(args: argparse.Namespace) -> int:
 
 
 async def acrawl_command(
-    args: argparse.Namespace, *, spider_class: type[Spider] | type[AsyncSpider] = AsyncSpider
+    args: argparse.Namespace,
+    *,
+    spider_class: type[Spider] | type[AsyncSpider] = AsyncSpider,
 ) -> int:
     if args.max_requests is not None and args.max_requests < 1:
         raise SystemExit("--max-requests must be positive")

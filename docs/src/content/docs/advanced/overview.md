@@ -9,7 +9,7 @@ Harness, project files, schedules, and the dashboard.
 
 <figure>
   <a href="../../diagrams/architecture-overview.png">
-    <img src="../../diagrams/architecture-overview.png" width="1536" height="1024" loading="lazy" decoding="async" alt="The UI communicates with the Node control plane, which launches Python crawlers and receives logs and records. Project files hold code; SQLite stores metadata and run records." />
+    <img src="../../diagrams/architecture-overview.png" width="1536" height="1024" loading="lazy" decoding="async" alt="The UI communicates with the Node control plane, which launches Python crawlers and receives logs and records. Project files hold code; SQLite stores metadata and execution records." />
   </a>
   <figcaption>The local control plane and crawler runtime share project files on disk.</figcaption>
 </figure>
@@ -46,11 +46,11 @@ recovery of in-flight work.
 
 The Node server serves the UI and APIs and runs the orchestrator in the same
 process. The orchestrator owns fixed cron schedules and the job queue, launching
-a Python subprocess through `webuse crawl` for each run.
+a Python subprocess through `webuse crawl` for each execution.
 
 Harness, the editor, and crawler jobs share project files on disk. Manual, scheduled,
 and sample jobs execute those working files directly; users manage code history
-with Git. SQLite stores project metadata, run records, and Pi conversation
+with Git. SQLite stores project metadata, execution records, and Pi conversation
 entries. Pi owns the coding-agent loop; Webuse supplies project tools and the UI.
 
 See [Harness Internals](../harness-internals/) for development, process management,
@@ -66,7 +66,7 @@ requests and assembles records through Python tools. The engine reuses the queue
 seen set, and request hasher, and stops when the queue is empty with no active
 request.
 
-This controls work within a crawl. LLM scheduling of future runs is a separate,
+This controls work within a crawl. LLM scheduling of future executions is a separate,
 unimplemented capability. Start with the [agentic spider tutorial](../agentic/);
 see [Agentic Runtime](../../references/agentic/) for tools, memory, and limits.
 

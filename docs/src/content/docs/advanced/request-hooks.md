@@ -15,17 +15,33 @@ arguments directly.
 
 ## Add a signing header
 
-Create a project and a Python spider:
+Create a project and a spider with the default YAML/Python layout:
 
 ```bash
 webuse create signed_project
 cd signed_project
-webuse gen protected https://api.example.com/items --python-only
+webuse gen protected https://api.example.com/items
+```
+
+Replace `spiders/protected.yaml` with these settings. Signing uses a Python hook;
+it does not require a Python-only spider.
+
+```yaml
+name: protected
+start_urls:
+  - https://api.example.com/items
+allowed_domains:
+  - api.example.com
+max_depth: 0
+pipelines:
+  - type: jsonl
+    path: output.jsonl
 ```
 
 Replace `spiders/protected.py` with the following example. The URL, header names,
 and signing algorithm are illustrative: use the target API's actual contract.
-This example signs a GET request without a body or separate `params` options.
+This example signs a GET request without a body or separate `params` options,
+and wraps the returned JSON object in a Pydantic item for the output pipeline.
 
 ```python
 import hashlib
@@ -34,7 +50,12 @@ import os
 import time
 from urllib.parse import urlsplit
 
+from pydantic import BaseModel
 from webuse import SignalBus, Spider
+
+
+class ApiItem(BaseModel):
+    data: dict
 
 
 def sign_request(request):
@@ -60,9 +81,8 @@ def sign_request(request):
 
 
 class ProtectedSpider(Spider):
-    name = "protected"
-    start_urls = ["https://api.example.com/items"]
-    allowed_domains = {"api.example.com"}
+    spider_config_path = "spiders/protected.yaml"
+    item_model = ApiItem
 
     def __init__(self, **overrides):
         super().__init__(**overrides)
@@ -72,7 +92,7 @@ class ProtectedSpider(Spider):
 
     def parse(self, response):
         response.raise_for_status()
-        return response.json()
+        return ApiItem(data=response.json())
 ```
 
 Supply `TARGET_SIGNING_KEY` in the crawler process's environment, then run from
@@ -113,9 +133,14 @@ from runtime configuration, and bound polling time and paid attempts.
 import os
 from urllib.parse import urlsplit
 
+from pydantic import BaseModel
 from webuse import AsyncSpider, SignalBus
 
 from captcha_service import solve_token
+
+
+class ApiItem(BaseModel):
+    data: dict
 
 
 async def attach_captcha(request):
@@ -142,9 +167,8 @@ async def attach_captcha(request):
 
 
 class ProtectedSpider(AsyncSpider):
-    name = "protected"
-    start_urls = ["https://protected.example.com/items"]
-    allowed_domains = {"protected.example.com"}
+    spider_config_path = "spiders/protected.yaml"
+    item_model = ApiItem
 
     def __init__(self, **overrides):
         super().__init__(**overrides)
@@ -154,10 +178,13 @@ class ProtectedSpider(AsyncSpider):
 
     def parse(self, response):
         response.raise_for_status()
-        return response.json()
+        return ApiItem(data=response.json())
 ```
 
-Use this as an alternative `spiders/protected.py` in the project above. The same
+Use this as an alternative `spiders/protected.py` in the project above, and update
+`start_urls` in `spiders/protected.yaml` to `https://protected.example.com/items`
+and `allowed_domains` to `[protected.example.com]`. Keep pipeline configuration
+in YAML. The same
 `webuse crawl --spider protected` command detects and awaits the async spider.
 For the function API, connect the handler to a `SignalBus` and pass it as
 `signals=signals` to `await acrawl(...)`.

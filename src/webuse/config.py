@@ -36,7 +36,16 @@ def user_config_path() -> Path:
 
 
 def local_config_path(directory: Path | None = None) -> Path:
-    return (directory or Path.cwd()) / LOCAL_CONFIG_NAME
+    """Find the nearest local config, searching through home or filesystem root."""
+    start = (directory or Path.cwd()).expanduser().resolve()
+    home = Path.home().resolve()
+    for parent in (start, *start.parents):
+        candidate = parent / LOCAL_CONFIG_NAME
+        if candidate.is_file():
+            return candidate
+        if parent == home:
+            break
+    return start / LOCAL_CONFIG_NAME
 
 
 def _read_yaml(path: Path) -> dict[str, Any]:

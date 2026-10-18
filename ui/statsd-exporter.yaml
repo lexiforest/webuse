@@ -1,0 +1,15 @@
+# Adapted from ../ustats/deploy/statsd-exporter.yaml.
+defaults:
+  observer_type: histogram
+  match_type: glob
+  ttl: 1h
+
+mappings:
+  - match: "webuse.*"
+    match_metric_type: counter
+    name: "webuse_${1}_total"
+  - match: "*.summary"
+    name: "${1}_summary"
+    observer_type: summary
+  - match: "webuse.*"
+    name: "webuse_${1}"

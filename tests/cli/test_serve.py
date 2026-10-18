@@ -10,15 +10,22 @@ from webuse.cli import serve
 
 
 def test_missing_bundle_has_source_build_instructions(monkeypatch, tmp_path):
-    monkeypatch.setattr(serve, "__file__", str(tmp_path / "webuse" / "cli" / "serve.py"))
+    monkeypatch.setattr(
+        serve, "__file__", str(tmp_path / "webuse" / "cli" / "serve.py")
+    )
     with pytest.raises(SystemExit, match="uv build"):
         serve._bundle_entrypoint()
 
 
-@pytest.mark.parametrize("version", ["v18.20.0", "v22.15.0", "v22.18.0", "v22.19", "v22.19.0-rc.1", "unexpected"])
+@pytest.mark.parametrize(
+    "version",
+    ["v18.20.0", "v22.15.0", "v22.18.0", "v22.19", "v22.19.0-rc.1", "unexpected"],
+)
 def test_reject_unsupported_node(monkeypatch, version):
     monkeypatch.setattr(serve.shutil, "which", lambda _: "/bin/node")
-    monkeypatch.setattr(serve.subprocess, "run", lambda *a, **kw: SimpleNamespace(stdout=version))
+    monkeypatch.setattr(
+        serve.subprocess, "run", lambda *a, **kw: SimpleNamespace(stdout=version)
+    )
     with pytest.raises(SystemExit, match=r"Node.js 22\.19\+"):
         serve._node_command()
 
@@ -26,7 +33,9 @@ def test_reject_unsupported_node(monkeypatch, version):
 @pytest.mark.parametrize("version", ["v22.19.0", "v22.20.0", "v24.0.0", "v26.0.0"])
 def test_accept_supported_node(monkeypatch, version):
     monkeypatch.setattr(serve.shutil, "which", lambda _: "/bin/node")
-    monkeypatch.setattr(serve.subprocess, "run", lambda *a, **kw: SimpleNamespace(stdout=version))
+    monkeypatch.setattr(
+        serve.subprocess, "run", lambda *a, **kw: SimpleNamespace(stdout=version)
+    )
     assert serve._node_command() == "/bin/node"
 
 
@@ -69,16 +78,30 @@ def fake_server(monkeypatch, tmp_path):
         return process
 
     monkeypatch.chdir(tmp_path)
-    for key in ("WEBUSE_PYTHON_COMMAND", "WEBUSE_DB_PATH", "WEBUSE_WORK_DIR", "WEBUSE_UI_DATA_DIR"):
+    for key in (
+        "WEBUSE_PYTHON_COMMAND",
+        "WEBUSE_DB_PATH",
+        "WEBUSE_WORK_DIR",
+        "WEBUSE_UI_DATA_DIR",
+        "WEBUSE_CONFIG_DIR",
+    ):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setenv("NITRO_PORT", "9999")
     monkeypatch.setenv("NITRO_HOST", "0.0.0.0")
-    monkeypatch.setattr(serve, "_bundle_entrypoint", lambda: tmp_path / "installed" / "server" / "index.mjs")
+    monkeypatch.setattr(
+        serve,
+        "_bundle_entrypoint",
+        lambda: tmp_path / "installed" / "server" / "index.mjs",
+    )
     monkeypatch.setattr(serve, "_node_command", lambda: "/bin/node")
     monkeypatch.setattr(serve, "_ensure_port_available", lambda *a: None)
     monkeypatch.setattr(serve.subprocess, "Popen", popen)
     monkeypatch.setattr(serve, "_wait_ready", lambda *a: captured.update(ready=True))
-    monkeypatch.setattr(serve, "_stop", lambda p, sig: captured.update(stopped=p is process, stop_signal=sig))
+    monkeypatch.setattr(
+        serve,
+        "_stop",
+        lambda p, sig: captured.update(stopped=p is process, stop_signal=sig),
+    )
 
     def open_browser(url):
         assert captured.get("ready"), "Only open the browser after startup"
@@ -95,22 +118,54 @@ def test_launch_uses_installed_python_and_writable_data(fake_server, tmp_path):
     assert env["WEBUSE_PYTHON_COMMAND"] == sys.executable
     assert env["PORT"] == env["NITRO_PORT"] == "2951"
     assert env["HOST"] == env["NITRO_HOST"] == "127.0.0.1"
-    assert Path(env["WEBUSE_DB_PATH"]) == tmp_path / "user data" / "webuse-ui.sqlite"
-    assert Path(env["WEBUSE_WORK_DIR"]) == tmp_path / "user data" / "runs"
+    assert Path(env["WEBUSE_DB_PATH"]) == tmp_path / "user data" / "webuse.db"
+    assert Path(env["WEBUSE_CONFIG_DIR"]) == tmp_path
+    assert Path(env["WEBUSE_WORK_DIR"]) == tmp_path / "user data" / "executions"
     assert fake_server["cwd"] == tmp_path / "user data"
     assert fake_server["url"] == "http://127.0.0.1:2951/"
     assert fake_server["stopped"]
 
 
+def test_default_database_is_in_webuse_home(fake_server, monkeypatch, tmp_path):
+    monkeypatch.setattr(serve.Path, "home", lambda: tmp_path / "home")
+    args = build_parser().parse_args(["serve", "--no-open"])
+    serve.serve_command(args)
+    assert fake_server["env"]["WEBUSE_DB_PATH"] == str(
+        tmp_path / "home" / ".webuse" / "webuse.db"
+    )
+
+
+def test_config_directory_override_is_preserved(fake_server, monkeypatch, tmp_path):
+    monkeypatch.setenv("WEBUSE_CONFIG_DIR", "config")
+    args = build_parser().parse_args(["serve", "--data-dir", "state", "--no-open"])
+    serve.serve_command(args)
+    assert fake_server["env"]["WEBUSE_CONFIG_DIR"] == str(tmp_path / "config")
+
+
 def test_custom_paths_and_no_browser(fake_server, monkeypatch, tmp_path):
     monkeypatch.setenv("WEBUSE_DB_PATH", "custom/db.sqlite")
-    monkeypatch.setenv("WEBUSE_WORK_DIR", "custom/runs")
+    monkeypatch.setenv("WEBUSE_WORK_DIR", "custom/executions")
     monkeypatch.setenv("WEBUSE_PYTHON_COMMAND", "/custom/python")
-    args = build_parser().parse_args(["serve", "--data-dir", "state", "--host", "0.0.0.0", "--port", "4010", "--no-open"])
+    args = build_parser().parse_args(
+        [
+            "serve",
+            "--data-dir",
+            "state",
+            "--host",
+            "0.0.0.0",
+            "--port",
+            "4010",
+            "--no-open",
+        ]
+    )
     serve.serve_command(args)
     assert "url" not in fake_server
-    assert fake_server["env"]["WEBUSE_DB_PATH"] == str(tmp_path / "custom" / "db.sqlite")
-    assert fake_server["env"]["WEBUSE_WORK_DIR"] == str(tmp_path / "custom" / "runs")
+    assert fake_server["env"]["WEBUSE_DB_PATH"] == str(
+        tmp_path / "custom" / "db.sqlite"
+    )
+    assert fake_server["env"]["WEBUSE_WORK_DIR"] == str(
+        tmp_path / "custom" / "executions"
+    )
     assert fake_server["env"]["WEBUSE_PYTHON_COMMAND"] == "/custom/python"
     assert fake_server["env"]["PORT"] == "4010"
 

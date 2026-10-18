@@ -21,7 +21,7 @@ from .state import (
 
 
 class ToolError(ValueError):
-    """An actionable error returned to the model without ending the run."""
+    """An actionable error returned to the model without ending the execution."""
 
 
 class LimitReached(Exception):

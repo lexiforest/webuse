@@ -1,9 +1,9 @@
 import { useNavigate, useSearchParams } from "@solidjs/router";
 import { For, createSignal, onCleanup, onMount } from "solid-js";
 
-import RunViewerLayout, { type RunViewerRun } from "~/components/RunViewerLayout";
+import ExecutionViewerLayout, { type ExecutionSummary } from "~/components/ExecutionViewerLayout";
 
-type Run = RunViewerRun;
+type Execution = ExecutionSummary;
 
 type LogLine = {
   id: number;
@@ -19,30 +19,30 @@ const MAX_LOADED_LOGS = 1000;
 export default function Logs() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [runs, setRuns] = createSignal<Run[]>([]);
+  const [executions, setExecutions] = createSignal<Execution[]>([]);
   const [logs, setLogs] = createSignal<LogLine[]>([]);
   const [nextLogOffset, setNextLogOffset] = createSignal(0);
   const [totalLogs, setTotalLogs] = createSignal(0);
   const [loadingLogs, setLoadingLogs] = createSignal(false);
-  const selectedRunId = () => String(searchParams.run_id ?? "");
-  const selectedRun = () => runs().find(run => String(run.id) === selectedRunId());
+  const selectedExecutionId = () => String(searchParams.execution_id ?? "");
+  const selectedExecution = () => executions().find(execution => String(execution.id) === selectedExecutionId());
   const hasMoreLogs = () => nextLogOffset() < totalLogs();
   let logRequestSeq = 0;
 
-  const loadRuns = async () => {
-    const response = await fetch("/api/runs");
+  const loadExecutions = async () => {
+    const response = await fetch("/api/executions");
     if (!response.ok) {
       return;
     }
-    const data = (await response.json()) as { runs: Run[] };
-    setRuns(data.runs);
+    const data = (await response.json()) as { executions: Execution[] };
+    setExecutions(data.executions);
   };
 
   const loadLogs = async (
-    runId = selectedRunId(),
+    executionId = selectedExecutionId(),
     { reset = false }: { reset?: boolean } = {},
   ) => {
-    if (!runId) {
+    if (!executionId) {
       setLogs([]);
       setNextLogOffset(0);
       setTotalLogs(0);
@@ -55,7 +55,7 @@ export default function Logs() {
     const requestSeq = reset ? ++logRequestSeq : logRequestSeq;
     setLoadingLogs(true);
     try {
-      const response = await fetch(`/api/logs?run_id=${runId}&limit=${LOG_CHUNK_SIZE}&offset=${offset}`);
+      const response = await fetch(`/api/logs?execution_id=${executionId}&limit=${LOG_CHUNK_SIZE}&offset=${offset}`);
       if (!response.ok || requestSeq !== logRequestSeq) {
         return;
       }
@@ -84,26 +84,26 @@ export default function Logs() {
   };
 
   onMount(() => {
-    void loadRuns().then(() => loadLogs(selectedRunId(), { reset: true }));
+    void loadExecutions().then(() => loadLogs(selectedExecutionId(), { reset: true }));
     const timer = window.setInterval(() => {
-      void loadRuns();
+      void loadExecutions();
     }, 2000);
     onCleanup(() => window.clearInterval(timer));
   });
 
   return (
-    <RunViewerLayout
+    <ExecutionViewerLayout
       currentTab="logs"
       title="Logs"
-      description="Stdout and stderr from active runs"
-      runs={runs}
-      selectedRunId={selectedRunId}
-      selectedRun={selectedRun}
+      description="Stdout and stderr from active executions"
+      executions={executions}
+      selectedExecutionId={selectedExecutionId}
+      selectedExecution={selectedExecution}
       emptyContentTitle="Log output"
-      emptySelectionText="Select a run to view logs."
-      onSelectRun={run => {
-        navigate(`/logs?run_id=${run.id}`);
-        void loadLogs(String(run.id), { reset: true });
+      emptySelectionText="Select an execution to view logs."
+      onSelectExecution={execution => {
+        navigate(`/logs?execution_id=${execution.id}`);
+        void loadLogs(String(execution.id), { reset: true });
       }}
       onContentEnd={loadNextLogs}
     >
@@ -120,6 +120,6 @@ export default function Logs() {
         {loadingLogs() && <div class="text-sm text-gray-500">Loading logs...</div>}
         {!loadingLogs() && hasMoreLogs() && <div class="text-sm text-gray-500">Scroll to load more logs.</div>}
       </div>
-    </RunViewerLayout>
+    </ExecutionViewerLayout>
   );
 }

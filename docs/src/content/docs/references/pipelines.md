@@ -39,10 +39,23 @@ contract from `base.py`.
   <figcaption>Each item passes through the configured chain. Pipelines can transform or save it at each step.</figcaption>
 </figure>
 
-Pipelines are usually added via `Spider.run(pipelines=...)`, stored in `Spider.pipelines`.
-The factory recognizes built-in names such as `jsonl`,
-mappings with `type` or `class`, and Python pipeline objects. 
+For crawler projects, configure the chain in `spiders/<name>.yaml` and keep
+custom pipeline implementations in Python. For example:
 
+```yaml
+pipelines:
+  - class: spiders.books.CleanPipeline
+  - type: jsonl
+    path: output.jsonl
+```
+
+This references the `CleanPipeline` generated in `spiders/books.py`. Project-level
+defaults do not supply pipelines. For direct library use or explicitly Python-only
+projects, set `Spider.pipelines`; `run(pipelines=...)` overrides the chain for that
+execution without changing the stored attribute. The factory recognizes built-in
+names such as `jsonl`, mappings with `type` or `class`, and Python pipeline objects.
+
+The following examples demonstrate direct library use without a project:
 
 ```python
 from pydantic import BaseModel

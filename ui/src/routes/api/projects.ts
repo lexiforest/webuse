@@ -2,7 +2,7 @@ import type { APIEvent } from "@solidjs/start/server";
 import { body, json, projectFiles, projectInput, queryInt } from "~/lib/server/http";
 import { ensureOrchestrator } from "~/lib/server/orchestrator";
 import { store } from "~/lib/server/store";
-import { cloneWorkspace, WorkspaceConflict } from "~/lib/server/workspace";
+import { WorkspaceConflict } from "~/lib/server/workspace";
 
 function failure(error: unknown) { return json({ error: error instanceof Error ? error.message : String(error) }, error instanceof WorkspaceConflict ? 409 : 400); }
 
@@ -13,17 +13,17 @@ export function GET(event: APIEvent) {
 }
 export async function POST(event: APIEvent) {
   ensureOrchestrator();
-  if (!event.request.headers.get("content-type")?.includes("application/json")) return json({ project: store.createProject() }, 201);
-  const result = projectInput(await body(event));
+  const value = await body(event);
+  if (value && "prompt" in value) {
+    const prompt = typeof value.prompt === "string" ? value.prompt.trim() : "";
+    if (!prompt || prompt.length > 32_000) return json({ error: "A prompt is required and must be under 32,000 characters." }, 400);
+    try { return json({ project: store.createHarnessProject(prompt) }, 201); }
+    catch (error) { return failure(error); }
+  }
+  const result = projectInput(value);
   if (!result.input) return json({ error: result.error }, 400);
   try {
-    let project = store.createProject(result.input);
-    if (project.type === "git") {
-      try {
-        await cloneWorkspace(project.id, project.target);
-        project = store.getProject(project.id)!;
-      } catch (error) { store.deleteProject(project.id); throw error; }
-    }
+    const project = store.createProject(result.input);
     return json({ project }, 201);
   } catch (error) { return failure(error); }
 }

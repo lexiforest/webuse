@@ -45,11 +45,13 @@ Support three sources of crawler code:
 3. **Built-in Harness:** describe a crawler and generate inspectable project files
    in Webuse's local or cloud environment.
 
-## Coding
+## Coding & Chatting
 
 - Ask the user whether backwards compatibility should be maintained, do NOT make
   assumption by yourself.
 - Prefer concise, minimal, consistent implementation.
+- All the responses to the user MUST be concise, unless explicitly requested.
+- If the README.md needs to be updated, ask the user.
 
 ## Repository map
 
@@ -64,8 +66,8 @@ Their API is still not public yet. (CHANGE THIS WHEN ITS EXPLICTLY PROVIDED)
 
 Built-in Harness embeds Pi's coding-agent SDK with native filesystem and shell tools
 in persistent project directories, plus Webuse HTTP inspection, Python, sample
-crawl, and run inspection tools. Working source is stored on disk; SQLite owns
-metadata and run records.
+crawl, and execution inspection tools. Working source is stored on disk; SQLite owns
+metadata and execution records.
 
 Pi owns the agent loop, streaming, session context, retries, and compaction; keep this integration
 small instead of rebuilding those mechanisms.
@@ -91,7 +93,7 @@ entries persist in SQLite.
   LLM value extraction, and element resolution.
 - `src/webuse/llm.py`: model configuration and client helpers.
 - `src/webuse/engine/`: function-based sync/async crawl engines and crawl state.
-- `src/webuse/spider/`: shared configuration, per-run state, and sync/async Spider classes.
+- `src/webuse/spider/`: shared configuration, per-execution state, and sync/async Spider classes.
 - `src/webuse/pipelines/`: ItemPipeline, internal execution helpers, and built-in item destinations.
 - `src/webuse/cli/`: project creation, generation, fetch, crawl, WebSocket commands,
   and the `webuse serve` launcher for the packaged Node control plane.
@@ -100,14 +102,14 @@ entries persist in SQLite.
   and public exceptions.
 - `src/webuse/signals.py`, `metrics/`: events, metrics integration, and StatsD-style emission.
 - `ui/`: SolidStart UI and Node control plane; owns SQLite, APIs, scheduling,
-  the run queue, and Python crawler subprocesses.
+  the execution queue, and Python crawler subprocesses.
 - `tests/`, `ui/tests/`: Python tests and control-plane smoke tests.
 - `docs/`: Astro/Starlight documentation site with Markdown pages in
   `docs/src/content/docs/`: The docs raw content
 - `examples/`: crawler examples.
-- Keep Harness, Code, and Dashboard connected to the same project and run model.
+- Keep Harness, Code, and Dashboard connected to the same project and execution model.
   Harness creates and operates crawlers; code defines their behavior; the dashboard
-  exposes runs, records, failures, schedules, and usage without requiring a Harness session.
+  exposes executions, records, failures, schedules, and usage without requiring a Harness session.
 - Keep the CLI as a client of the Python APIs; do not duplicate crawl logic there.
   Keep control-plane orchestration separate from the crawler runtime.
 - Preserve the current Node/Python ownership boundary unless an approved task

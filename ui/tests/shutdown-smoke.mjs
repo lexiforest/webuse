@@ -9,10 +9,10 @@ export async function testShutdown(entrypoint) {
   if (process.platform === "win32") return;
   for (const signal of ["SIGINT", "SIGTERM"]) {
     const directory = await mkdtemp(join(tmpdir(), "webuse-shutdown-"));
-    const runs = join(directory, "runs");
-    await mkdir(runs);
+    const executions = join(directory, "executions");
+    await mkdir(executions);
     const manager = spawn(process.execPath, [entrypoint], {
-      env: { ...process.env, WEBUSE_DB_PATH: join(directory, "db.sqlite"), WEBUSE_WORK_DIR: runs, WEBUSE_WORKSPACE_DIR: join(directory, "workspaces"), WEBUSE_CONCURRENCY: "1" },
+      env: { ...process.env, WEBUSE_DB_PATH: join(directory, "db.sqlite"), WEBUSE_WORK_DIR: executions, WEBUSE_WORKSPACE_DIR: join(directory, "workspaces"), WEBUSE_CONCURRENCY: "1" },
       stdio: ["ignore", "pipe", "pipe", "ipc"],
     });
     let output = "", pids;
@@ -28,8 +28,8 @@ export async function testShutdown(entrypoint) {
       });
       manager.kill(signal);
       assert.deepEqual(await exited, { code: 0, signal: null }, output);
-      assert.equal(await readFile(join(runs, "stopped"), "utf8"), "clean");
-      const signals = await readFile(join(runs, "signals"), "utf8");
+      assert.equal(await readFile(join(executions, "stopped"), "utf8"), "clean");
+      const signals = await readFile(join(executions, "signals"), "utf8");
       assert.ok(signals.includes(`worker:${signal}`), signals);
       assert.ok(signals.includes(`descendant:${signal}`), signals);
       for (const pid of Object.values(pids)) {

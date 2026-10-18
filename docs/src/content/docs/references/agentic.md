@@ -91,5 +91,5 @@ When set, the requested cap is the smaller of that value and the remaining total
 token budget. Optional request, turn, duration, and depth limits are described in
 the [configuration reference](../config/#agentic-configuration).
 
-Incomplete runs return a nonzero CLI exit status. Records already emitted remain
+Incomplete executions return a nonzero CLI exit status. Records already emitted remain
 in the output file; unfinished drafts are not written as complete items.

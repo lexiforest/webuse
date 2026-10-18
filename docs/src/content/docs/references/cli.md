@@ -27,26 +27,28 @@ generated spider module, alongside the spider class. The starter extracts page
 titles and follows same-domain links from the supplied URL; generation does not
 inspect the target site. Customize the model and extraction rules for your data.
 The pipeline runs before the built-in JSONL
-writer through the spider's `pipelines`, or its Python `pipelines`
-attribute. YAML/TOML configs reference it as `spiders.<name>.CleanPipeline`.
+writer through `pipelines` in the spider's YAML. Reference the implementation as
+`spiders.<name>.CleanPipeline`. Python pipeline overrides are also available for
+direct library use and Python-only projects.
 
 Run commands from the project directory, which must contain a root
-`webuse.yaml`, `webuse.yml`, or `webuse.toml`. Generation sanitizes the name
+`webuse.yaml` or `webuse.yml`. Generation sanitizes the name
 and refuses to overwrite files or an existing registration unless `--force`
 is passed.
 
 YAML is the default. Generation writes `spiders/<name>.yaml` plus a Python
-wrapper with a project-relative config path, then registers the Python file in
-the root `spiders` section. Use `--toml` for TOML instead, or `--python-only`
-for a Python-only spider. Generated Python files define spider classes without
-a separate `main()` entry point.
+module with a project-relative `spider_config_path`, then registers the Python
+file in the root `spiders` section. Keep crawl settings and declarative rules in
+YAML, and custom parsers, models, hooks, and pipeline implementations in Python.
+Custom logic does not require a different layout. Use `--python-only` only when
+you explicitly prefer all-Python configuration. Generated Python files define
+spider classes without a separate `main()` entry point.
 
-Add `--async` to generate an `AsyncSpider` instead of `Spider`. It works with
-the default YAML output, `--toml`, and `--python-only`:
+Add `--async` to generate an `AsyncSpider` instead of `Spider`, keeping the same
+YAML/Python split:
 
 ```bash
 webuse gen async_books https://books.toscrape.com/ --async
-webuse gen book_details https://books.toscrape.com/ --async --python-only
 ```
 
 Run the generated async spider with the ordinary `webuse crawl` command; the
@@ -84,7 +86,7 @@ or robots.txt fetches), and is not a sandbox for arbitrary Python code.
 
 Use `--state redis://localhost:6379/0` for Redis queue and seen-hash state in
 sync or async crawls. Async spiders use async Redis clients, which the CLI closes
-after the run. This persists scheduler state, not a full process checkpoint.
+after the execution. This persists scheduler state, not a full process checkpoint.
 
 Set extraction/follow rules in spider config and request options in
 `request_defaults`. Use `fetch` for one-page inspection.
@@ -96,20 +98,20 @@ packages include the compiled UI and control plane:
 
 ```bash
 webuse serve
-webuse serve --no-open --port 2951 --data-dir ~/.webuse/ui
+webuse serve --no-open --port 2951 --data-dir ~/.webuse
 ```
 
 Node.js 22.19+ must be on PATH; npm is not needed. The command opens a browser at
 `http://127.0.0.1:2951/` and stays running until Ctrl+C. `--no-open` skips the
 browser, `--host` changes the bind address (default `127.0.0.1`), and
-`--port` changes the port. Data defaults to `~/.webuse/ui`; override it with
+`--port` changes the port. Data defaults to `~/.webuse`; override it with
 `--data-dir` or `WEBUSE_UI_DATA_DIR`.
 
 Crawlers use the same Python interpreter as the launcher unless
 `WEBUSE_PYTHON_COMMAND` is set. `WEBUSE_DB_PATH` and `WEBUSE_WORK_DIR`
-override the database and run paths. This command does not probe Python model
+override the database and execution paths. This command does not probe Python model
 providers; configure Harness in the UI Settings. See [Harness](../../user-guide/harness/)
-for Harness, [Dashboard](../../user-guide/dashboard/) for runs and schedules, and
+for Harness, [Dashboard](../../user-guide/dashboard/) for executions and schedules, and
 [Harness Internals](../../advanced/harness-internals/#source-development) for
 source development.
 
